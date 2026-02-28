@@ -6,65 +6,42 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const messages = body.messages || [];
     const lastMsg = messages[messages.length - 1]?.content || body.message || "";
-    
-    // ניקוי טקסט: הסרת רווחים מיותרים והפיכה לאותיות קטנות
     const query = lastMsg.trim().toLowerCase();
 
-    if (!query) {
-      return NextResponse.json({ text: "שלום ראמי! איך אוכל לעזור היום בסבן חומרי בניין?" });
-    }
+    if (!query) return NextResponse.json({ text: "שלום ראמי, במה אוכל לעזור?" });
 
-    // חיפוש חכם: מוצא את המוצר גם אם כתבת רק חלק מהשם (למשל רק "107")
+    // חיפוש גמיש (Fuzzy Search)
     const { data: product, error: pError } = await supabase
       .from('products')
       .select('*')
-      .or(`name.ilike.%${query}%,sku.ilike.%${query}%`) // מחפש גם בשם וגם במק"ט
-      .limit(1)
+      .or(`name.ilike.%${query}%,sku.ilike.%${query}%`)
       .maybeSingle();
 
-    if (pError) {
-      console.error("Supabase Error:", pError);
-      throw pError;
-    }
+    if (pError) throw pError;
 
     if (product) {
       return NextResponse.json({
-        text: `מצאתי את ${product.name}!`,
+        text: `מצאתי את ${product.name}! המחיר הוא ₪${product.price}.`,
         uiBlueprint: {
           type: "product_card",
           data: {
             title: product.name,
-            price: product.price || "צרו קשר",
+            price: product.price,
             image: product.image_url,
             video: product.video_url,
             specs: {
-              coverage: product.coverage_per_sqm || "לפי דרישה",
-              drying: product.drying_time || "בבדיקה",
+              coverage: product.coverage_per_sqm,
+              drying: product.drying_time,
               method: product.application_method
-            }
+            },
+            features: product.features || []
           }
-        },
-        status: "success"
+        }
       });
     }
 
-    // אם לא נמצא - המלשינון בודק אם יש מוצרים דומים
-    const { data: suggestions } = await supabase
-      .from('products')
-      .select('name')
-      .limit(3);
-
-    const suggestionText = suggestions?.map(s => s.name).join(", ");
-
-    return NextResponse.json({ 
-      text: `לא מצאתי בדיוק את "${lastMsg}".\nאולי התכוונת ל: ${suggestionText || 'מוצר אחר'}?`,
-      status: "not_found"
-    });
-
+    return NextResponse.json({ text: `לא מצאתי את "${lastMsg}", תרצה שאבדוק במחסן?` });
   } catch (error: any) {
-    return NextResponse.json({ 
-      text: `⚠️ **מלשינון סבן זיהה נתק:** ${error.message}`,
-      status: "error"
-    }, { status: 200 });
+    return NextResponse.json({ text: "שגיאה בחיבור למסד הנתונים", error: error.message }, { status: 200 });
   }
 }
