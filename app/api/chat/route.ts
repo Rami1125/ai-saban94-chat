@@ -1,14 +1,22 @@
+// app/api/chat/route.ts
 import { google } from "@ai-sdk/google"
-import { generateText, tool } from "ai"
+import { generateText } from "ai"
 import { createClient } from "@supabase/supabase-js"
-import { z } from "zod"
 
 export const dynamic = 'force-dynamic';
 
-const supabaseUrl = "https://sqslrnbduxtxsvwqryxq.supabase.co";
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+export async function POST(req: Request) {
+  // בדיקה ידנית של המפתחות לפני השימוש
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE;
+  const geminiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GEMINI_API_KEY;
 
-const supabase = (supabaseUrl && supabaseKey) 
+  if (!supabaseUrl || !supabaseKey || !geminiKey) {
+    console.error("Missing environment variables!");
+    return new Response(JSON.stringify({ error: "Server Configuration Missing" }), { status: 500 });
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseKey); 
   ? createClient(supabaseUrl, supabaseKey)
   : null;
 
