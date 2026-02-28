@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { MessageSquareDashed } from "lucide-react"
 import { MessageList } from "./message-list"
-import { Composer, type AIModel } from "./composer"
+import { Composer } from "./composer"
 import { Button } from "@/components/ui/button"
 
 export interface Message {
@@ -12,7 +12,7 @@ export interface Message {
   content: string
   createdAt: Date
   imageData?: string
-  uiBlueprint?: any
+  uiBlueprint?: any // כאן נשמרים נתוני המוצר (תמונה/סרטון)
 }
 
 const STORAGE_KEY = "saban-chat-messages"
@@ -23,6 +23,7 @@ export function ChatShell() {
   const [error, setError] = useState<string | null>(null)
   const [isLoaded, setIsLoaded] = useState(false)
 
+  // טעינת היסטוריה
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY)
     if (stored) {
@@ -31,6 +32,7 @@ export function ChatShell() {
     setIsLoaded(true)
   }, [])
 
+  // שמירת היסטוריה
   useEffect(() => {
     if (isLoaded) localStorage.setItem(STORAGE_KEY, JSON.stringify(messages))
   }, [messages, isLoaded])
@@ -57,19 +59,18 @@ export function ChatShell() {
         body: JSON.stringify({ messages: [...messages, userMessage] })
       })
 
-      if (!response.ok) {
-        const errData = await response.json()
-        throw new Error(errData.error || `שגיאה ${response.status}`)
-      }
+      if (!response.ok) throw new Error("תקלה בתקשורת עם השרת")
 
       const data = await response.json()
+      
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
         content: data.text || "מצאתי את המידע הבא:",
-        uiBlueprint: data,
+        uiBlueprint: data.uiBlueprint, // הנתונים המלאים של המוצר
         createdAt: new Date()
       }
+      
       setMessages(prev => [...prev, assistantMessage])
     } catch (e: any) {
       setError(e.message)
@@ -79,12 +80,29 @@ export function ChatShell() {
   }, [messages, isStreaming])
 
   return (
-    <div className="relative h-dvh bg-stone-50 overflow-hidden">
-      <Button onClick={() => setMessages([])} variant="ghost" className="absolute top-4 left-4 z-20 h-10 w-10 rounded-full bg-white shadow-sm border">
-        <MessageSquareDashed className="w-5 h-5" />
+    <div className="relative h-dvh bg-stone-50 overflow-hidden" dir="rtl">
+      <Button 
+        onClick={() => setMessages([])} 
+        variant="ghost" 
+        className="absolute top-4 left-4 z-20 h-10 w-10 rounded-full bg-white shadow-sm border"
+      >
+        <MessageSquareDashed className="w-5 h-5 text-slate-400" />
       </Button>
-      <MessageList messages={messages} isStreaming={isStreaming} error={error} isLoaded={isLoaded} onRetry={() => {}} />
-      <Composer onSend={sendMessage} isStreaming={isStreaming} disabled={isStreaming} onStop={() => setIsStreaming(false)} />
+      
+      <MessageList 
+        messages={messages} 
+        isStreaming={isStreaming} 
+        error={error} 
+        isLoaded={isLoaded} 
+        onRetry={() => {}} 
+      />
+      
+      <Composer 
+        onSend={sendMessage} 
+        isStreaming={isStreaming} 
+        disabled={isStreaming} 
+        onStop={() => setIsStreaming(false)} 
+      />
     </div>
   )
 }
