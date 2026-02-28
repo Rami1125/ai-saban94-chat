@@ -13,8 +13,9 @@ interface MessageBubbleProps {
   isStreaming?: boolean
 }
 
+// פורמט זמן להצגה
 function formatTime(date: Date): string {
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  return new Date(date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 }
 
 export function MessageBubble({ message, isStreaming = false }: MessageBubbleProps) {
@@ -29,56 +30,91 @@ export function MessageBubble({ message, isStreaming = false }: MessageBubblePro
           : "mr-auto animate-in fade-in slide-in-from-bottom-2 duration-500 items-end",
       )}
     >
+      {/* Avatar - Orb לסבן, User למשתמש */}
       <div
         className={cn(
           "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-lg",
-          isUser ? "bg-white border border-stone-200" : "bg-[#0B2C63] border border-[#10B981]/30",
-          !isUser && isStreaming && "animate-pulse",
+          isUser 
+            ? "bg-white border border-stone-200" 
+            : "bg-[#0B2C63] border border-[#10B981]/30",
+          !isUser && isStreaming && "animate-pulse shadow-[#10B981]/20",
         )}
       >
-        {isUser ? <User className="w-5 h-5 text-stone-800" /> : <AnimatedOrb className="w-9 h-9 shrink-0" />}
+        {isUser ? (
+          <User className="w-5 h-5 text-stone-800" />
+        ) : (
+          <AnimatedOrb className="w-9 h-9 shrink-0" />
+        )}
       </div>
 
+      {/* Message content */}
       <div className={cn("flex flex-col space-y-1.5", isUser ? "items-end" : "items-start")}>
         <span className="text-[10px] font-black uppercase tracking-widest text-stone-400 px-1">
           {isUser ? "Rami" : "Saban AI"}
         </span>
 
+        {/* Bubble - עיצוב מותאם אישית */}
         <div
           className={cn(
             "rounded-[1.5rem] overflow-hidden transition-all duration-500",
             isUser
-              ? "bg-[#0B2C63] text-white rounded-tr-sm shadow-md px-5 py-3"
+              ? "bg-[#0B2C63] text-white rounded-tr-sm shadow-md"
               : "bg-white/5 backdrop-blur-xl border border-white/10 rounded-tl-sm shadow-2xl",
           )}
+          style={{
+            minWidth: isUser ? "auto" : "280px",
+          }}
         >
-          {isUser ? (
-            <div className="flex flex-col gap-2">
-              {message.imageData && (
-                <div className="w-32 h-32 rounded-lg overflow-hidden">
-                  <Image src={message.imageData} alt="User upload" width={128} height={128} className="object-cover" />
-                </div>
-              )}
-              <p className="text-sm font-medium leading-relaxed italic">{message.content}</p>
-            </div>
-          ) : (
-            <div className="flex flex-col">
-              {message.content && (
-                <div className="px-4 py-3 text-white/90">
-                  <MarkdownRenderer content={message.content} isStreaming={isStreaming} />
-                </div>
-              )}
-              {message.uiBlueprint && (
-                <div className="p-1 animate-in zoom-in duration-500">
-                  <CanvasRenderer data={message.uiBlueprint} />
-                </div>
-              )}
+          <div className={cn("flex flex-col gap-3", isUser ? "px-5 py-3" : "px-1 py-1")}>
+            {isUser ? (
+              <div className="flex flex-col gap-2">
+                {message.imageData && (
+                  <div className="w-32 h-32 rounded-lg overflow-hidden border border-white/10">
+                    <Image
+                      src={message.imageData || "/placeholder.svg"}
+                      alt="Uploaded image"
+                      width={128}
+                      height={128}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                )}
+                <p className="text-sm font-medium leading-relaxed whitespace-pre-wrap break-words italic">
+                  {message.content}
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col space-y-4">
+                {/* טקסט חופשי (Markdown) */}
+                {message.content && (
+                  <div className="px-4 py-3 text-white/90">
+                    <MarkdownRenderer content={message.content} isStreaming={isStreaming} />
+                  </div>
+                )}
+
+                {/* Generative UI - כרטיסים חכמים מה-API */}
+                {message.uiBlueprint && (
+                  <div className="animate-in fade-in zoom-in duration-700">
+                    <CanvasRenderer data={message.uiBlueprint} />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Timestamp & Verification */}
+        <div className="flex items-center gap-2 px-2">
+          <span className="text-[9px] font-bold text-stone-500/60 uppercase tracking-tighter">
+            {formatTime(message.createdAt)}
+          </span>
+          {!isUser && message.uiBlueprint && (
+            <div className="flex items-center gap-1 text-[9px] font-black text-[#10B981] uppercase">
+              <div className="w-1 h-1 bg-[#10B981] rounded-full animate-pulse" />
+              Verified Saban Data
             </div>
           )}
         </div>
-        <span className="text-[9px] font-bold text-stone-500/60 px-2 uppercase">
-          {formatTime(new Date(message.createdAt))}
-        </span>
       </div>
     </div>
   )
