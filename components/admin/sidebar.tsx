@@ -3,11 +3,14 @@ import { LayoutDashboard, Users, Package, ShoppingCart, Truck, Database, Setting
 
 const studioMenu = [
   { name: "דשבורד ראשי", icon: LayoutDashboard, path: "/admin" },
-  { name: "ניהול לקוחות", icon: Users, table: "customers" },
-  { name: "מלאי מוצרים", icon: Package, table: "inventory" },
-  { name: "הזמנות פתוחות", icon: ShoppingCart, table: "orders" },
-  { name: "ניהול נהגים", icon: Truck, table: "drivers" },
+  { name: "זיכרון לקוחות", icon: Users, table: "customer_memory" }, // תיקון מ-customers
+  { name: "מלאי (Inventory)", icon: Package, table: "inventory" },
+  { name: "הזמנות", icon: ShoppingCart, table: "orders" },
+  { name: "נהגים", icon: Truck, table: "drivers" },
+  { name: "ניהול משימות", icon: ListChecks, table: "tasks" }, // טבלה חדשה מהרשימה
+  { name: "מוצרים (Raw)", icon: Tag, table: "products" },      // טבלה חדשה מהרשימה
   { name: "קאש תשובות AI", icon: Database, table: "answers_cache" },
+  { name: "ידע מאוחד", icon: Brain, table: "saban_unified_knowledge" },
 ]
 
 export function Sidebar() {
