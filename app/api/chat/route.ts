@@ -1,95 +1,41 @@
-import { google } from "@ai-sdk/google"
-import { generateText, tool } from "ai"
-import { createClient } from "@supabase/supabase-js"
-import { z } from "zod"
+import { NextRequest, NextResponse } from "next/server";
+import { supabase } from "@/lib/supabase";
 
-export const dynamic = 'force-dynamic';
-
-export async function POST(req: Request) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE!;
-  const geminiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GEMINI_API_KEY;
-  const googleSearchKey = process.env.GOOGLE_CSE_API_KEY;
-  const googleSearchCX = "1340c66f5e73a4076";
-
-  if (!supabaseUrl || !supabaseKey || !geminiKey) {
-    return new Response(JSON.stringify({ error: "Missing Environment Variables" }), { status: 500 });
-  }
-
-  const supabase = createClient(supabaseUrl, supabaseKey);
-
+export async function POST(req: NextRequest) {
   try {
-    const { messages } = await req.json();
-    const lastMessage = messages[messages.length - 1]?.content || "";
-    const cacheKey = `chat:v1:${lastMessage.toLowerCase().trim()}`;
+    const { message } = await req.json();
 
-    // 1. בדיקה מהירה בקאש (Verified Data)
-    const { data: cached } = await supabase
-      .from('answers_cache')
-      .select('payload')
-      .eq('key', cacheKey)
-      .maybeSingle();
+    // 1. חיפוש חכם במוצרים לפי שם (למשל "סיקה 107")
+    const { data: products, error: productError } = await supabase
+      .from('products')
+      .select('name, price, image_url, video_url, coverage_per_sqm, drying_time, application_method')
+      .ilike('name', `%${message}%`)
+      .limit(1);
 
-    let blueprint = cached?.payload;
+    if (productError) throw productError;
 
-    // 2. אם אין קאש או שחסרה תמונה במוצר - נפעיל את Gemini עם חיפוש
-    const needsImage = blueprint?.components?.some((c: any) => c.type === "productCard" && !c.props.image);
+    // 2. בניית התשובה של ה-AI (הלוגיקה של סבן)
+    let aiResponse = "";
+    let productData = null;
 
-    if (!blueprint || needsImage) {
-      const { text, toolResults } = await generateText({
-        model: google("gemini-1.5-pro-latest"),
-        apiKey: geminiKey,
-        system: `אתה המומחה הטכני של ח. סבן. עליך להחזיר תמיד JSON תקין למבנה UIBlueprint.
-                 אם מצאת מוצר במידע המאומת אך חסרה לו תמונה או סרטון הדרכה, השתמש בכלי ה-webSearch למצוא לינקים מיוטיוב או גוגל תמונות.`,
-        messages: messages.map((m: any) => ({ role: m.role, content: m.content })),
-        tools: {
-          webSearch: tool({
-            description: "חיפוש תמונות מוצר וסרטוני הדרכה",
-            inputSchema: z.object({ q: z.string() }),
-            execute: async ({ q }) => {
-              const res = await fetch(`https://www.googleapis.com/customsearch/v1?key=${googleSearchKey}&cx=${googleSearchCX}&q=${encodeURIComponent(q)}`);
-              return res.json();
-            },
-          }),
-        },
-        maxSteps: 3,
-      });
-
-      // חילוץ JSON מהטקסט של Gemini
-      if (!blueprint) {
-        try {
-          const cleanJson = text.replace(/```json/g, "").replace(/```/g, "").trim();
-          blueprint = JSON.parse(cleanJson);
-        } catch (e) {
-          blueprint = { text, source: "Saban AI", components: [] };
-        }
-      }
-
-      // הזרקת מדיה מתוצאות החיפוש
-      if (toolResults && toolResults.length > 0) {
-        const searchItems = toolResults[0].result?.items || [];
-        const foundImage = searchItems.find((i: any) => i.pagemap?.cse_image)?.[0]?.link || searchItems[0]?.link;
-        
-        if (foundImage && blueprint.components) {
-          blueprint.components = blueprint.components.map((comp: any) => {
-            if (comp.type === "productCard" && !comp.props.image) {
-              return { ...comp, props: { ...comp.props, image: foundImage } };
-            }
-            return comp;
-          });
-          
-          // שמירה חוזרת לקאש לשימוש עתידי
-          await supabase.from('answers_cache').upsert({ key: cacheKey, payload: blueprint });
-        }
-      }
+    if (products && products.length > 0) {
+      const p = products[0];
+      productData = p;
+      aiResponse = `מצאתי עבורך את ${p.name}. המחיר הוא ₪${p.price}. 
+      הצריכה הממוצעת היא ${p.coverage_per_sqm} ק"ג למ"ר וזמן הייבוש הוא ${p.drying_time}. 
+      שיטת היישום המומלצת: ${p.application_method}`;
+    } else {
+      aiResponse = "אני מצטער, לא מצאתי מוצר כזה בקטלוג של סבן. תרצה שאבדוק במלאי הכללי?";
     }
 
-    return new Response(JSON.stringify(blueprint), {
-      headers: { "Content-Type": "application/json" }
+    // 3. החזרת תשובה תקינה (מונע את שגיאה 500)
+    return NextResponse.json({ 
+      text: aiResponse,
+      product: productData // הנתונים האלו יזינו את האייפון סימולטור
     });
 
   } catch (error: any) {
-    console.error("API Error:", error);
-    return new Response(JSON.stringify({ error: "Internal Server Error", details: error.message }), { status: 500 });
+    console.error("Chat API Error:", error);
+    return NextResponse.json({ error: "שגיאה בשרת הצ'אט", details: error.message }, { status: 500 });
   }
 }
