@@ -1,116 +1,90 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import { PlayCircle, Calculator, Clock, Package, ExternalLink } from "lucide-react"
-import { Message } from "./chat-shell" // וודא שהטייפ Message מיובא נכון
+import { PlayCircle, Calculator, Clock, CheckCircle2 } from "lucide-react"
 
-interface MessageListProps {
-  messages: Message[]
-  isStreaming: boolean
-  error: string | null
-  isLoaded: boolean
-  onRetry: () => void
-}
-
-export function MessageList({ messages, isStreaming, error, isLoaded }: MessageListProps) {
+export function MessageList({ messages, isStreaming, isLoaded }: any) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // גלילה אוטומטית להודעה האחרונה
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
   }, [messages, isStreaming])
 
-  if (!isLoaded) return <div className="flex-1 flex items-center justify-center text-slate-400">טוען צ'אט...</div>
+  if (!isLoaded) return <div className="flex-1 flex items-center justify-center font-bold text-slate-300">SabanOS נטען...</div>
 
   return (
-    <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-6 pb-32 custom-scrollbar">
-      {messages.map((message) => (
-        <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
-          <div className={`max-w-[85%] space-y-2 ${message.role === "user" ? "items-end" : "items-start"}`}>
+    <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-8 pb-40 scroll-smooth">
+      {messages.map((message: any) => (
+        <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-4 duration-500`}>
+          <div className="max-w-[85%] flex flex-col space-y-3">
             
-            {/* בועת הטקסט הרגילה */}
-            <div className={`p-4 rounded-[24px] text-sm font-bold shadow-sm ${
+            {/* בועת טקסט מקורית ונקייה */}
+            <div className={`p-4 rounded-[26px] text-[15px] font-bold shadow-sm leading-snug ${
               message.role === "user" 
               ? "bg-[#0B2C63] text-white rounded-tr-none" 
-              : "bg-white text-slate-800 border border-slate-100 rounded-tl-none"
+              : "bg-white text-slate-800 border border-slate-50 rounded-tl-none"
             }`}>
               {message.content}
             </div>
 
-            {/* כרטיס מוצר חכם - מופיע רק אם יש uiBlueprint מהשרת */}
+            {/* כרטיס מוצר - עיצוב יוקרתי ונושם */}
             {message.uiBlueprint?.type === "product_card" && (
-              <div className="mt-3 w-[280px] bg-white rounded-[32px] overflow-hidden shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-500">
+              <div className="w-[300px] bg-white rounded-[40px] overflow-hidden shadow-[0_30px_60px_-15px_rgba(0,0,0,0.1)] border border-slate-50 transition-all hover:shadow-2xl">
                 
-                {/* תמונת המוצר מהסטודיו */}
-                {message.uiBlueprint.data.image ? (
-                  <div className="relative h-40 w-full">
-                    <img 
-                      src={message.uiBlueprint.data.image} 
-                      alt={message.uiBlueprint.data.title}
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black text-[#0B2C63] shadow-sm">
-                       ₪{message.uiBlueprint.data.price}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="h-32 bg-slate-100 flex items-center justify-center text-slate-300">
-                    <Package size={32} />
-                  </div>
-                )}
-
-                <div className="p-4 text-right space-y-3">
-                  <h3 className="font-black text-[#0B2C63] text-base leading-tight">
-                    {message.uiBlueprint.data.title}
-                  </h3>
-
-                  {/* נתונים טכניים (הצלבה מה-Database) */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="bg-blue-50/50 p-2 rounded-xl border border-blue-100/50 flex flex-col items-center justify-center">
-                      <Calculator size={14} className="text-blue-600 mb-1" />
-                      <span className="text-[9px] font-bold text-blue-900">{message.uiBlueprint.data.specs.coverage || 'לפי דרישה'}</span>
-                    </div>
-                    <div className="bg-orange-50/50 p-2 rounded-xl border border-orange-100/50 flex flex-col items-center justify-center">
-                      <Clock size={14} className="text-orange-600 mb-1" />
-                      <span className="text-[9px] font-bold text-orange-900">{message.uiBlueprint.data.specs.drying || 'משתנה'}</span>
-                    </div>
-                  </div>
-
-                  {/* כפתור וידאו אם קיים לינק בסטודיו */}
-                  {message.uiBlueprint.data.video && (
-                    <a 
-                      href={message.uiBlueprint.data.video} 
-                      target="_blank" 
-                      className="flex items-center justify-center gap-2 w-full py-2.5 bg-red-50 text-red-600 rounded-xl text-[11px] font-black border border-red-100 hover:bg-red-100 transition-colors"
-                    >
-                      <PlayCircle size={14} />
-                      צפה בסרטון הדרכה
-                    </a>
+                {/* אזור מדיה */}
+                <div className="relative h-48 w-full group">
+                  {message.uiBlueprint.data.image ? (
+                    <img src={message.uiBlueprint.data.image} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+                  ) : (
+                    <div className="w-full h-full bg-slate-50 flex items-center justify-center text-slate-200">מוצר סבן</div>
                   )}
+                  <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-md px-4 py-1.5 rounded-2xl text-[16px] font-black text-[#0B2C63] shadow-sm">
+                    ₪{message.uiBlueprint.data.price}
+                  </div>
+                </div>
 
-                  <button className="w-full py-3 bg-[#0B2C63] text-white rounded-xl text-xs font-black shadow-lg shadow-blue-100 active:scale-95 transition-all">
-                    הוסף להזמנה מהירה
-                  </button>
+                <div className="p-6 text-right space-y-4">
+                  <h3 className="font-black text-[#0B2C63] text-xl tracking-tight">{message.uiBlueprint.data.title}</h3>
+                  
+                  {/* תכונות מוצר (התוספת החדשה לגימני) */}
+                  <div className="flex flex-wrap gap-2 justify-end">
+                    {message.uiBlueprint.data.features?.map((f: string, i: number) => (
+                      <span key={i} className="bg-green-50 text-green-700 text-[9px] px-2 py-1 rounded-full font-bold flex items-center gap-1">
+                        <CheckCircle2 size={10} /> {f}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* נתונים טכניים בעיצוב נקי */}
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <div className="bg-slate-50 p-3 rounded-3xl text-center border border-slate-100/50">
+                      <Calculator size={16} className="mx-auto text-blue-500 mb-1" />
+                      <div className="text-[10px] font-black text-slate-700">{message.uiBlueprint.data.specs.coverage}</div>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-3xl text-center border border-slate-100/50">
+                      <Clock size={16} className="mx-auto text-orange-500 mb-1" />
+                      <div className="text-[10px] font-black text-slate-700">{message.uiBlueprint.data.specs.drying}</div>
+                    </div>
+                  </div>
+
+                  {/* כפתורי פעולה */}
+                  <div className="pt-2 space-y-2">
+                    {message.uiBlueprint.data.video && (
+                      <button className="w-full py-3 rounded-2xl bg-red-50 text-red-600 text-[11px] font-black flex items-center justify-center gap-2 hover:bg-red-100 transition-all">
+                        <PlayCircle size={16} /> לצפייה בהדרכה
+                      </button>
+                    )}
+                    <button className="w-full py-4 rounded-[22px] bg-[#0B2C63] text-white text-xs font-black shadow-lg shadow-blue-100 hover:scale-[1.02] active:scale-95 transition-all">
+                      הוספה לסל הקניות
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
           </div>
         </div>
       ))}
-      
-      {isStreaming && (
-        <div className="flex justify-start animate-pulse">
-          <div className="bg-slate-100 h-10 w-24 rounded-2xl rounded-tl-none" />
-        </div>
-      )}
-
-      {error && (
-        <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs font-bold border border-red-100 text-center">
-          {error}
-        </div>
-      )}
+      {isStreaming && <div className="w-8 h-8 bg-slate-100 rounded-full animate-pulse ml-2" />}
     </div>
   )
 }
