@@ -3,41 +3,29 @@ import { supabase } from "@/lib/supabase";
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. קריאת הנתונים עם "מלשינון פנימי" למבנה ה-JSON
+    // קריאת הנתונים מה-ChatShell (תומך במערך הודעות)
     const body = await req.json().catch(() => ({}));
-    
-    // שליפת התוכן: תמיכה גם בהודעה בודדת (message) וגם במערך (messages) מה-ChatShell
-    let userContent = "";
+    const messages = body.messages || [];
+    const lastMsg = messages[messages.length - 1];
+    const userContent = lastMsg?.content || body.message || "";
 
-    if (body.messages && Array.isArray(body.messages)) {
-      // לוקחים את התוכן מההודעה האחרונה במערך
-      const lastMsg = body.messages[body.messages.length - 1];
-      userContent = lastMsg?.content || "";
-    } else {
-      // תמיכה בפורמט ישן או פשוט
-      userContent = body.message || body.text || body.input || body.content || "";
-    }
-
-    // 2. בדיקה אם המלשינון זיהה הודעה ריקה
-    if (!userContent || typeof userContent !== 'string' || userContent.trim() === "") {
-      return NextResponse.json({ 
-        text: "אהלן ראמי! אני כאן בסבן חומרי בניין. שלח לי שם של מוצר או שאלה על משלוח.",
-        status: "waiting_for_input"
-      });
+    if (!userContent) {
+      return NextResponse.json({ text: "אהלן ראמי! איך אוכל לעזור לך היום בסבן חומרי בניין?" });
     }
 
     const query = userContent.toLowerCase().trim();
 
-    // 3. חיפוש במוצרים (כולל השדות הטכניים שסגרנו ב-SQL)
+    // 1. חיפוש חכם במוצרים (חיפוש גמיש בשם או במק"ט)
     const { data: product, error: pError } = await supabase
       .from('products')
-      .select('*') // שולף את כל העמודות כולל image_url, coverage, drying_time
-      .ilike('name', `%${query}%`)
+      .select('*')
+      .or(`name.ilike.%${query}%,sku.ilike.%${query}%`)
+      .limit(1)
       .maybeSingle();
 
     if (pError) throw pError;
 
-    // 4. בדיקת נהגים זמינים בטייבה
+    // 2. בדיקת נהגים פעילים בטייבה
     const { data: drivers } = await supabase
       .from('drivers')
       .select('full_name')
@@ -48,48 +36,43 @@ export async function POST(req: NextRequest) {
     let uiBlueprint = null;
 
     if (product) {
-      // תשובה מקצועית מבוססת נתונים מהסטודיו
-      responseText = `מצאתי את ${product.name}.\n` +
-                     `💰 מחיר: ₪${product.price}\n` +
-                     `📏 צריכה: ${product.coverage_per_sqm || '0'} ק"ג למ"ר\n` +
-                     `⏱️ ייבוש: ${product.drying_time || 'בבדיקה'}\n` +
-                     `🛠️ יישום: ${product.application_method || 'פנה לייעוץ טכני'}`;
+      // אם נמצא מוצר - בונים את הכרטיס עם המדיה
+      responseText = `מצאתי את ${product.name}! המחיר: ₪${product.price}.\n` +
+                     `📏 צריכה: ${product.coverage_per_sqm || '0'} ק"ג/מ"ר | ⏱️ ייבוש: ${product.drying_time || 'בבדיקה'}`;
       
-      // אובייקט הנתונים עבור ה-Frontend (uiBlueprint)
+      // הנתונים שהאייפון שלך יציג ויזואלית
       uiBlueprint = {
-        type: "product_display",
+        type: "product_card",
         data: {
-          ...product,
-          is_available: true
+          title: product.name,
+          price: product.price,
+          image: product.image_url, // הלינק לתמונה מהסטודיו
+          video: product.video_url, // הלינק לסרטון מהסטודיו
+          description: product.application_method,
+          specs: {
+            coverage: product.coverage_per_sqm,
+            drying: product.drying_time,
+            sku: product.sku
+          }
         }
       };
     } else {
-      // תשובה חכמה כשלא נמצא מוצר
+      // אם לא נמצא מוצר
       const driverList = drivers?.map(d => d.full_name).join(", ");
-      responseText = `לא מצאתי מוצר בשם "${userContent}" בקטלוג סבן.\n\n` +
-                     (driverList 
-                       ? `אבל הנהגים שלנו (${driverList}) פעילים כרגע ויכולים לעזור בהובלה של חומרים דומים!` 
-                       : "תרצה שאעביר אותך לנציג אנושי שיבדוק במחסן?");
+      responseText = `לא מצאתי מוצר בשם "${userContent}" בקטלוג, אבל ${driverList || 'צוות סבן'} זמינים למשלוח מהיר!`;
     }
 
-    // 5. החזרת התשובה המסונכרנת ל-ChatShell
     return NextResponse.json({
       text: responseText,
-      uiBlueprint: uiBlueprint, // ה-Frontend שלך משתמש בזה להצגת כרטיסים
+      uiBlueprint: uiBlueprint, // ה-Frontend ישתמש בזה להצגת הכרטיס
       status: "success"
     });
 
   } catch (error: any) {
-    // "המלשינון החריף" - הדפסה לטרמינל והחזרה לצ'אט
-    console.error("🚨 כשל במערכת סבן:", error);
-
-    let errorMessage = "חלה שגיאה לא צפויה";
-    if (error.code === '42P01') errorMessage = "טבלת המוצרים (products) חסרה במסד הנתונים";
-    if (error.code === '42703') errorMessage = "חסרה עמודה ב-SQL (וודא שהרצת את פקודות ה-ALTER)";
-
+    console.error("SABAN_OS_DEBUG:", error);
     return NextResponse.json({ 
-      text: `⚠️ **מלשינון סבן זיהה כשל:**\n${errorMessage}\n\n*פרטים:* ${error.message}`,
-      status: "error_debug"
+      text: `⚠️ **מלשינון סבן זיהה כשל:** ${error.message}`,
+      status: "error"
     }, { status: 200 });
   }
 }
