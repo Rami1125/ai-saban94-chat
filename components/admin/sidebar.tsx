@@ -2,17 +2,16 @@ import Link from "next/link"
 import { LayoutDashboard, Users, Package, ShoppingCart, Truck, Database, Settings } from "lucide-react"
 
 const studioMenu = [
-  { name: "דשבורד ראשי", icon: LayoutDashboard, path: "/admin" },
-  { name: "זיכרון לקוחות", icon: Users, table: "customer_memory" }, // תיקון מ-customers
+  { name: "דשבורד בקרה", icon: LayoutDashboard, path: "/admin" },
+  { name: "זיכרון לקוחות", icon: Users, table: "customer_memory" },
   { name: "מלאי (Inventory)", icon: Package, table: "inventory" },
   { name: "הזמנות", icon: ShoppingCart, table: "orders" },
   { name: "נהגים", icon: Truck, table: "drivers" },
-  { name: "ניהול משימות", icon: ListChecks, table: "tasks" }, // טבלה חדשה מהרשימה
-  { name: "מוצרים (Raw)", icon: Tag, table: "products" },      // טבלה חדשה מהרשימה
+  { name: "משימות", icon: ListChecks, table: "tasks" },
+  { name: "קטלוג מוצרים", icon: Tag, table: "products" },
   { name: "קאש תשובות AI", icon: Database, table: "answers_cache" },
-  { name: "ידע מאוחד", icon: Brain, table: "saban_unified_knowledge" },
+  { name: "ידע מאוחד (Brain)", icon: Brain, table: "saban_unified_knowledge" },
 ]
-
 export function Sidebar() {
   return (
     <aside className="w-64 bg-[#0B2C63] text-white h-screen sticky top-0 flex flex-col p-4 shadow-2xl">
