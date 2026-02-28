@@ -1,120 +1,64 @@
 "use client"
 
-import { cn } from "@/lib/utils"
-import type { Message } from "./chat-shell"
-import { User } from "lucide-react"
-import { MarkdownRenderer } from "./markdown-renderer"
-import Image from "next/image"
-import { AnimatedOrb } from "./animated-orb"
-import { CanvasRenderer } from "./canvas-renderer"
+import { Message } from "./chat-shell"
+import { CheckCircle2, PlayCircle } from "lucide-react"
 
-interface MessageBubbleProps {
-  message: Message & { uiBlueprint?: any }
-  isStreaming?: boolean
-}
-
-// פורמט זמן להצגה
-function formatTime(date: Date): string {
-  return new Date(date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-}
-
-export function MessageBubble({ message, isStreaming = false }: MessageBubbleProps) {
-  const isUser = message.role === "user"
+export function MessageBubble({ message }: { message: Message }) {
+  const isAssistant = message.role === "assistant"
+  const blueprint = message.uiBlueprint
 
   return (
-    <div
-      className={cn(
-        "flex max-w-[95%] md:max-w-[85%] gap-3 mb-6",
-        isUser
-          ? "ml-auto flex-row-reverse user-message-enter"
-          : "mr-auto animate-in fade-in slide-in-from-bottom-2 duration-500 items-end",
-      )}
-    >
-      {/* Avatar - Orb לסבן, User למשתמש */}
-      <div
-        className={cn(
-          "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-lg",
-          isUser 
-            ? "bg-white border border-stone-200" 
-            : "bg-[#0B2C63] border border-[#10B981]/30",
-          !isUser && isStreaming && "animate-pulse shadow-[#10B981]/20",
-        )}
-      >
-        {isUser ? (
-          <User className="w-5 h-5 text-stone-800" />
-        ) : (
-          <AnimatedOrb className="w-9 h-9 shrink-0" />
-        )}
-      </div>
+    <div className={`flex ${isAssistant ? "justify-start" : "justify-end"} mb-6`}>
+      <div className={`max-w-[85%] ${isAssistant ? "bg-white text-stone-800" : "bg-[#0B2C63] text-white"} rounded-2xl p-4 shadow-sm border border-stone-100`}>
+        
+        {/* טקסט ההודעה */}
+        <p className="text-sm leading-relaxed mb-3">{message.content}</p>
 
-      {/* Message content */}
-      <div className={cn("flex flex-col space-y-1.5", isUser ? "items-end" : "items-start")}>
-        <span className="text-[10px] font-black uppercase tracking-widest text-stone-400 px-1">
-          {isUser ? "Rami" : "Saban AI"}
-        </span>
-
-        {/* Bubble - עיצוב מותאם אישית */}
-        <div
-          className={cn(
-            "rounded-[1.5rem] overflow-hidden transition-all duration-500",
-            isUser
-              ? "bg-[#0B2C63] text-white rounded-tr-sm shadow-md"
-              : "bg-white/5 backdrop-blur-xl border border-white/10 rounded-tl-sm shadow-2xl",
-          )}
-          style={{
-            minWidth: isUser ? "auto" : "280px",
-          }}
-        >
-          <div className={cn("flex flex-col gap-3", isUser ? "px-5 py-3" : "px-1 py-1")}>
-            {isUser ? (
+        {/* רכיבי Blueprint (כרטיסי מוצר, חישובים, וידאו) */}
+        {blueprint?.components?.map((comp: any, i: number) => (
+          <div key={i} className="mt-3 border-t pt-3">
+            
+            {/* כרטיס מוצר עם תמונה */}
+            {comp.type === "productCard" && (
               <div className="flex flex-col gap-2">
-                {message.imageData && (
-                  <div className="w-32 h-32 rounded-lg overflow-hidden border border-white/10">
-                    <Image
-                      src={message.imageData || "/placeholder.svg"}
-                      alt="Uploaded image"
-                      width={128}
-                      height={128}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
+                {comp.props.image && (
+                  <img src={comp.props.image} alt={comp.props.name} className="rounded-lg w-full h-32 object-cover" />
                 )}
-                <p className="text-sm font-medium leading-relaxed whitespace-pre-wrap break-words italic">
-                  {message.content}
-                </p>
-              </div>
-            ) : (
-              <div className="flex flex-col space-y-4">
-                {/* טקסט חופשי (Markdown) */}
-                {message.content && (
-                  <div className="px-4 py-3 text-white/90">
-                    <MarkdownRenderer content={message.content} isStreaming={isStreaming} />
-                  </div>
-                )}
-
-                {/* Generative UI - כרטיסים חכמים מה-API */}
-                {message.uiBlueprint && (
-                  <div className="animate-in fade-in zoom-in duration-700">
-                    <CanvasRenderer data={message.uiBlueprint} />
-                  </div>
+                <div className="font-bold text-[#0B2C63]">{comp.props.name}</div>
+                <div className="text-xs text-stone-500">מק"ט: {comp.props.sku}</div>
+                <div className="text-lg font-bold">₪{comp.props.price}</div>
+                
+                {/* כפתור וידאו אם קיים */}
+                {comp.props.videoUrl && (
+                  <a 
+                    href={comp.props.videoUrl} 
+                    target="_blank" 
+                    className="flex items-center gap-2 p-2 bg-red-50 text-red-600 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors"
+                  >
+                    <PlayCircle size={16} />
+                    צפה במדריך יישום (YouTube)
+                  </a>
                 )}
               </div>
             )}
-          </div>
-        </div>
 
-        {/* Timestamp & Verification */}
-        <div className="flex items-center gap-2 px-2">
-          <span className="text-[9px] font-bold text-stone-500/60 uppercase tracking-tighter">
-            {formatTime(message.createdAt)}
-          </span>
-          {!isUser && message.uiBlueprint && (
-            <div className="flex items-center gap-1 text-[9px] font-black text-[#10B981] uppercase">
-              <div className="w-1 h-1 bg-[#10B981] rounded-full animate-pulse" />
-              Verified Saban Data
-            </div>
-          )}
-        </div>
+            {/* כרטיס חישוב */}
+            {comp.type === "calcCard" && (
+              <div className="bg-green-50 p-2 rounded-lg border border-green-100">
+                <div className="text-[10px] text-green-600 font-bold uppercase">תוצאת חישוב</div>
+                <div className="text-sm font-bold text-green-800">{comp.props.boxes}</div>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {/* חותמת אימות נתונים */}
+        {isAssistant && blueprint?.source === "Saban AI - Verified" && (
+          <div className="mt-3 flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 w-fit px-2 py-0.5 rounded-full">
+            <CheckCircle2 size={10} />
+            Verified Saban Data
+          </div>
+        )}
       </div>
     </div>
   )
