@@ -1,34 +1,31 @@
-// app/api/chat/route.ts
 import { google } from "@ai-sdk/google"
-import { generateText } from "ai"
+import { generateText, tool } from "ai"
 import { createClient } from "@supabase/supabase-js"
+import { z } from "zod"
 
+// מבטיח שה-API יעבוד רק בזמן אמת ולא יקרוס ב-Build
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: Request) {
-  // בדיקה ידנית של המפתחות לפני השימוש
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE;
-  const geminiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GEMINI_API_KEY;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://sqslrnbduxtxsvwqryxq.supabase.co";
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const geminiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GEMINI_API_KEY;
 
-  if (!supabaseUrl || !supabaseKey || !geminiKey) {
-    console.error("Missing environment variables!");
-    return new Response(JSON.stringify({ error: "Server Configuration Missing" }), { status: 500 });
-  }
-
-  const supabase = createClient(supabaseUrl, supabaseKey); 
-  ? createClient(supabaseUrl, supabaseKey)
+// יצירת לקוח בצורה תקינה
+const supabase = (supabaseUrl && supabaseKey) 
+  ? createClient(supabaseUrl, supabaseKey) 
   : null;
 
 export async function POST(req: Request) {
-  if (!supabase) return new Response("Supabase Config Missing", { status: 500 });
+  if (!supabase) {
+    return new Response(JSON.stringify({ error: "Missing Supabase configuration" }), { status: 500 });
+  }
 
   try {
     const { messages } = await req.json();
     const lastMessage = messages[messages.length - 1].content;
     const cacheKey = `chat:v1:${lastMessage.toLowerCase().trim()}`;
 
-    // 1. שליפה מהקאש ב-Supabase
+    // 1. בדיקה ב-Cache
     const { data: cached } = await supabase
       .from('answers_cache')
       .select('payload')
@@ -37,19 +34,18 @@ export async function POST(req: Request) {
 
     if (cached) return new Response(JSON.stringify(cached.payload));
 
-    // 2. יצירת תשובה עם Gemini וכלים
+    // 2. הפעלת Gemini
     const { text } = await generateText({
       model: google("gemini-1.5-pro-latest"),
-      system: "אתה המומחה של ח. סבן. עליך להחזיר תמיד JSON מובנה עבור UIBlueprint. השתמש בכלי החיפוש למידע טכני.",
+      apiKey: geminiKey,
+      system: "אתה המומחה של ח. סבן. עליך להחזיר תמיד JSON מובנה עבור UIBlueprint.",
       messages,
       tools: {
         webSearch: tool({
-          description: "חיפוש מפרטים ומדיה בגוגל",
+          description: "חיפוש מפרטים בגוגל",
           inputSchema: z.object({ q: z.string() }),
           execute: async ({ q }) => {
-            const apiKey = process.env.GOOGLE_CSE_API_KEY;
-            const cx = "1340c66f5e73a4076";
-            const res = await fetch(`https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${cx}&q=${encodeURIComponent(q)}`);
+            const res = await fetch(`https://www.googleapis.com/customsearch/v1?key=${process.env.GOOGLE_CSE_API_KEY}&cx=1340c66f5e73a4076&q=${encodeURIComponent(q)}`);
             return res.json();
           },
         }),
@@ -57,6 +53,7 @@ export async function POST(req: Request) {
       maxSteps: 5,
     });
 
+    // 3. עיבוד ושמירה
     let blueprint;
     try {
       const cleanJson = text.replace(/```json/g, "").replace(/```/g, "").trim();
@@ -65,11 +62,12 @@ export async function POST(req: Request) {
       blueprint = { text: text, source: "Gemini AI", type: "fallback", components: [] };
     }
 
-    // 3. שמירה בקאש
-    await supabase.from('answers_cache').upsert({ key: cacheKey, payload: blueprint, ttl: 2592000000 });
+    await supabase.from('answers_cache').upsert({ key: cacheKey, payload: blueprint });
 
     return new Response(JSON.stringify(blueprint));
+
   } catch (error: any) {
+    console.error("Chat API Error:", error);
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 }
