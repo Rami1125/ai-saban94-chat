@@ -72,13 +72,20 @@ export async function POST(req: NextRequest) {
       timestamp: new Date().toISOString(),
       status: "success"
     });
+} 
+  catch (error: any) {
+    console.error("DEBUG_SABAN_OS:", error);
 
-  } catch (error: any) {
-    console.error("Critical Chat Error:", error);
-    // החזרת שגיאה מובנית במקום קריסת שרת
+    // המלשינון החריף - יגיד לנו בדיוק מה הבעיה במסך הצ'אט
+    let errorDetail = "שגיאה לא ידועה";
+    
+    if (error.code === 'PGRST116') errorDetail = "הטבלה ריקה או שהחיפוש לא החזיר תוצאה מדויקת";
+    if (error.code === '42P01') errorDetail = "הטבלה 'products' לא קיימת במסד הנתונים!";
+    if (error.code === '42703') errorDetail = `חסרה עמודה בטבלה! הודעה: ${error.message}`;
+    if (error.message.includes("fetch")) errorDetail = "אין חיבור אינטרנט ל-Supabase או ש-API KEY שגוי";
+
     return NextResponse.json({ 
-      text: "מצטער ראמי, יש לי תקלה קטנה בחיבור למסד הנתונים. אני בודק את זה.",
-      error: error.message 
-    }, { status: 200 }); // מחזירים 200 כדי שהצ'אט לא יקרוס ויציג את הודעת השגיאה בבועה
+      text: `⚠️ **מלשינון סבן זיהה כשל:**\n\n${errorDetail}\n\n*פרטים טכניים:* ${error.message}`,
+      status: "error_debug"
+    }, { status: 200 }); 
   }
-}
