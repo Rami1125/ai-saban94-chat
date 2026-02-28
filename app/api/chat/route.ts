@@ -3,62 +3,40 @@ import { supabase } from "@/lib/supabase";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => ({}));
+    const body = await req.json();
     const messages = body.messages || [];
-    const lastMsg = messages[messages.length - 1];
-    const userContent = lastMsg?.content || body.message || "";
+    const lastMsg = messages[messages.length - 1]?.content || "";
+    const query = lastMsg.toLowerCase().trim();
 
-    if (!userContent) {
-      return NextResponse.json({ text: "אהלן ראמי, במה אוכל לעזור היום בסבן חומרי בניין?" });
-    }
-
-    const query = userContent.toLowerCase().trim();
-
-    // חיפוש גמיש בשם או במק"ט
-    const { data: product, error: pError } = await supabase
+    const { data: product } = await supabase
       .from('products')
       .select('*')
       .or(`name.ilike.%${query}%,sku.ilike.%${query}%`)
-      .limit(1)
       .maybeSingle();
 
-    if (pError) throw pError;
-
     if (product) {
-      const priceVal = product.price ? `₪${product.price}` : "צרו קשר למחיר";
-      const responseText = `מצאתי את ${product.name}! המחיר: ${priceVal}.\n` +
-                           `📏 צריכה: ${product.coverage_per_sqm || '0'} ק"ג/מ"ר | ⏱️ ייבוש: ${product.drying_time || 'בבדיקה'}`;
-      
       return NextResponse.json({
-        text: responseText,
+        text: `מצאתי את ${product.name}!`,
+        // זה החלק שגורם לכרטיס להופיע!
         uiBlueprint: {
-          type: "product_card",
+          type: "product_card", 
           data: {
             title: product.name,
-            price: product.price || 0,
-            image: product.image_url || product.image,
+            price: product.price,
+            image: product.image_url,
             video: product.video_url,
-            description: product.application_method,
             specs: {
               coverage: product.coverage_per_sqm,
-              drying: product.drying_time
+              drying: product.drying_time,
+              method: product.application_method
             }
           }
-        },
-        status: "success"
+        }
       });
     }
 
-    return NextResponse.json({
-      text: `לא מצאתי מוצר בשם "${userContent}" בקטלוג סבן. תרצה שאבדוק זמינות במחסן?`,
-      status: "not_found"
-    });
-
-  } catch (error: any) {
-    console.error("CHAT_API_ERROR:", error);
-    return NextResponse.json({ 
-      text: `⚠️ **מלשינון סבן זיהה כשל:** ${error.message}`,
-      status: "error"
-    }, { status: 200 });
+    return NextResponse.json({ text: "לא מצאתי את המוצר, תרצה שאבדוק במלאי?" });
+  } catch (e: any) {
+    return NextResponse.json({ text: "שגיאה: " + e.message }, { status: 500 });
   }
 }
