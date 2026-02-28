@@ -3,14 +3,13 @@ import { generateText, tool } from "ai"
 import { createClient } from "@supabase/supabase-js"
 import { z } from "zod"
 
-// מבטיח שה-API יעבוד רק בזמן אמת ולא יקרוס ב-Build
 export const dynamic = 'force-dynamic';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://sqslrnbduxtxsvwqryxq.supabase.co";
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const geminiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GEMINI_API_KEY;
 
-// יצירת לקוח בצורה תקינה
+// יצירה נקייה של הלקוח
 const supabase = (supabaseUrl && supabaseKey) 
   ? createClient(supabaseUrl, supabaseKey) 
   : null;
@@ -53,7 +52,6 @@ export async function POST(req: Request) {
       maxSteps: 5,
     });
 
-    // 3. עיבוד ושמירה
     let blueprint;
     try {
       const cleanJson = text.replace(/```json/g, "").replace(/```/g, "").trim();
@@ -62,6 +60,7 @@ export async function POST(req: Request) {
       blueprint = { text: text, source: "Gemini AI", type: "fallback", components: [] };
     }
 
+    // 3. שמירה ב-Cache
     await supabase.from('answers_cache').upsert({ key: cacheKey, payload: blueprint });
 
     return new Response(JSON.stringify(blueprint));
