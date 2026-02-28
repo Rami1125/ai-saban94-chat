@@ -1,5 +1,16 @@
-import Link from "next/link"
-import { LayoutDashboard, Users, Package, ShoppingCart, Truck, Database, Settings } from "lucide-react"
+// תוודא ששורת ה-Import נראית בדיוק ככה:
+import { 
+  LayoutDashboard, 
+  Users, 
+  Package, 
+  ShoppingCart, 
+  Truck, 
+  Database, 
+  Settings, 
+  ListChecks, // האייקון שהיה חסר וגרם לשגיאה
+  Tag, 
+  Brain 
+} from "lucide-react"
 
 const studioMenu = [
   { name: "דשבורד בקרה", icon: LayoutDashboard, path: "/admin" },
@@ -7,7 +18,7 @@ const studioMenu = [
   { name: "מלאי (Inventory)", icon: Package, table: "inventory" },
   { name: "הזמנות", icon: ShoppingCart, table: "orders" },
   { name: "נהגים", icon: Truck, table: "drivers" },
-  { name: "משימות", icon: ListChecks, table: "tasks" },
+  { name: "ניהול משימות", icon: ListChecks, table: "tasks" },
   { name: "קטלוג מוצרים", icon: Tag, table: "products" },
   { name: "קאש תשובות AI", icon: Database, table: "answers_cache" },
   { name: "ידע מאוחד (Brain)", icon: Brain, table: "saban_unified_knowledge" },
