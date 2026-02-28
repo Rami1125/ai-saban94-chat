@@ -1,4 +1,4 @@
-// תוודא ששורת ה-Import נראית בדיוק ככה:
+import Link from "next/link"
 import { 
   LayoutDashboard, 
   Users, 
@@ -7,7 +7,7 @@ import {
   Truck, 
   Database, 
   Settings, 
-  ListChecks, // האייקון שהיה חסר וגרם לשגיאה
+  ListChecks, 
   Tag, 
   Brain 
 } from "lucide-react"
