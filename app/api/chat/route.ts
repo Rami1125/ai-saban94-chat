@@ -5,12 +5,12 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const messages = body.messages || [];
-    const lastMsg = messages[messages.length - 1]?.content || body.message || "";
+    const lastMsg = messages[messages.length - 1]?.content || "";
     const query = lastMsg.trim().toLowerCase();
 
-    if (!query) return NextResponse.json({ text: "אהלן ראמי, במה אוכל לעזור היום?" });
+    if (!query) return NextResponse.json({ text: "אהלן ראמי, איך אפשר לעזור?" });
 
-    // חיפוש חכם בטבלת inventory לפי השדות המדויקים שלך
+    // חיבור ישיר לטבלת inventory לפי המבנה ששלחת
     const { data: item, error: pError } = await supabase
       .from('inventory')
       .select('*')
@@ -30,7 +30,6 @@ export async function POST(req: NextRequest) {
             price: item.price || 0,
             image: item.image_url,
             video: item.video_url,
-            sku: item.sku,
             specs: {
               coverage: item.coverage_per_sqm || "לפי דרישה",
               drying: item.drying_time || "בבדיקה",
@@ -47,6 +46,6 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (error: any) {
-    return NextResponse.json({ text: "שגיאה בחיבור למסד הנתונים" }, { status: 200 });
+    return NextResponse.json({ text: "שגיאת חיבור למסד הנתונים" }, { status: 200 });
   }
 }
