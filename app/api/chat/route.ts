@@ -3,45 +3,39 @@ import { supabase } from "@/lib/supabase";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => ({}));
+    const body = await req.json();
     const messages = body.messages || [];
-    const lastMsg = messages[messages.length - 1]?.content || body.message || "";
-    const query = lastMsg.trim().toLowerCase();
+    const query = (messages[messages.length - 1]?.content || "").toLowerCase().trim();
 
-    if (!query) return NextResponse.json({ text: "שלום ראמי, במה אוכל לעזור?" });
-
-    // חיפוש גמיש (Fuzzy Search)
-    const { data: product, error: pError } = await supabase
-      .from('products')
+    // חיפוש בטבלת inventory לפי שם המוצר
+    const { data: item, error } = await supabase
+      .from('inventory')
       .select('*')
-      .or(`name.ilike.%${query}%,sku.ilike.%${query}%`)
+      .ilike('product_name', `%${query}%`)
       .maybeSingle();
 
-    if (pError) throw pError;
-
-    if (product) {
+    if (item) {
       return NextResponse.json({
-        text: `מצאתי את ${product.name}! המחיר הוא ₪${product.price}.`,
+        text: `מצאתי את ${item.product_name}! מחיר: ₪${item.price}. צריכה ממוצעת: ${item.coverage_per_sqm}.`,
         uiBlueprint: {
           type: "product_card",
           data: {
-            title: product.name,
-            price: product.price,
-            image: product.image_url,
-            video: product.video_url,
+            title: item.product_name,
+            price: item.price,
+            image: item.image_url,
+            video: item.video_url,
             specs: {
-              coverage: product.coverage_per_sqm,
-              drying: product.drying_time,
-              method: product.application_method
-            },
-            features: product.features || []
+              coverage: item.coverage_per_sqm,
+              drying: item.drying_time,
+              method: item.application_method
+            }
           }
         }
       });
     }
 
-    return NextResponse.json({ text: `לא מצאתי את "${lastMsg}", תרצה שאבדוק במחסן?` });
-  } catch (error: any) {
-    return NextResponse.json({ text: "שגיאה בחיבור למסד הנתונים", error: error.message }, { status: 200 });
+    return NextResponse.json({ text: `לא מצאתי את "${query}" במלאי כרגע.` });
+  } catch (err: any) {
+    return NextResponse.json({ text: "תקלה במוח המערכת." }, { status: 200 });
   }
 }
