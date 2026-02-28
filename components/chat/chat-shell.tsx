@@ -27,7 +27,7 @@ export function ChatShell() {
   const [messages, setMessages] = useState<Message[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [selectedModel, setSelectedModel] = useState<AIModel>("google/gemini-2.0-flash-001")
+  const [selectedModel, setSelectedModel] = useState<AIModel>("gemini-3-flash-preview")
   const [isLoaded, setIsLoaded] = useState(false)
 
   // טעינה מה-localStorage
