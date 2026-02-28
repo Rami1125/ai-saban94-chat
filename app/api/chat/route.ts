@@ -39,9 +39,10 @@ export async function POST(req: Request) {
     }
 
     // 2. קריאה ל-Gemini
-    const { text } = await generateText({
-      model: google("gemini-1.5-pro-latest"),
-      apiKey: geminiKey,
+const { text } = await generateText({
+  // במקום gemini-1.5-pro-latest, השתמש בזה:
+  model: google("gemini-3-flash-preview"), 
+  apiKey: geminiKey,
       system: `אתה המומחה של ח. סבן חומרי בניין. 
                עליך להחזיר תמיד JSON מובנה הכולל:
                { "text": "תשובה מילולית", "components": [], "type": "product/calc/info", "source": "Saban AI" }
