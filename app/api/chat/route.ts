@@ -6,86 +6,62 @@ export async function POST(req: NextRequest) {
     const { message } = await req.json();
     const query = message.toLowerCase();
 
-    // 1. חיפוש בטבלת מוצרים (כולל השדות הטכניים החדשים)
+    // 1. חיפוש במוצרים
     const { data: product, error: pError } = await supabase
       .from('products')
       .select('name, price, image_url, video_url, coverage_per_sqm, drying_time, application_method, sku')
       .ilike('name', `%${query}%`)
-      .single();
+      .maybeSingle(); // maybeSingle מונע שגיאה אם לא נמצא כלום
 
-    // 2. בדיקת מלאי זמין (מטבלת inventory)
+    if (pError) throw pError;
+
+    // 2. בדיקת מלאי
     const { data: stock } = await supabase
       .from('inventory')
-      .select('product_name, category, supplier_name')
+      .select('product_name')
       .ilike('product_name', `%${query}%`)
-      .single();
+      .maybeSingle();
 
-    // 3. בדיקת נהגים זמינים למשלוח (מטבלת drivers)
+    // 3. בדיקת נהגים
     const { data: activeDrivers } = await supabase
       .from('drivers')
-      .select('full_name, vehicle_type, location')
+      .select('full_name')
       .eq('status', 'active');
 
-    // 4. בדיקת זיכרון AI (מטבלת answers_cache - השורה של סיקה 107 שראינו קודם)
-    const { data: cachedAnswer } = await supabase
-      .from('answers_cache')
-      .select('payload')
-      .ilike('key', `%${query}%`)
-      .single();
-
-    // לוגיקת בניית התשובה - "המוח של סבן"
     let responseText = "";
     let visualComponent = null;
 
     if (product) {
-      // אם נמצא מוצר בקטלוג
-      responseText = `מצאתי עבורך את ${product.name}. המחיר הוא ₪${product.price}. 
-      נתונים טכניים: צריכה של ${product.coverage_per_sqm} ק"ג למ"ר וזמן ייבוש של ${product.drying_time}.
-      שיטת יישום: ${product.application_method}.`;
-      
+      responseText = `מצאתי את ${product.name}. מחיר: ₪${product.price}. צריכה: ${product.coverage_per_sqm} ק"ג/מ"ר. ייבוש: ${product.drying_time}.`;
       visualComponent = {
         type: "productCard",
-        props: {
-          name: product.name,
-          price: product.price,
-          image: product.image_url,
-          video: product.video_url,
-          sku: product.sku,
-          coverage: product.coverage_per_sqm,
-          drying: product.drying_time
-        }
+        props: { ...product }
       };
-    } else if (cachedAnswer) {
-      // אם נמצאה תשובה מוכנה מראש ב-Cache
-      responseText = cachedAnswer.payload.text;
-      visualComponent = cachedAnswer.payload.components?.[0];
     } else {
-      // תשובת ברירת מחדל חכמה
-      const driverNames = activeDrivers?.map(d => d.full_name).join(", ") || "צוות סבן";
-      responseText = `לא מצאתי בדיוק את "${message}", אבל ${driverNames} זמינים למשלוחים בטייבה והסביבה. תרצה שאחבר אותך לנציג אנושי?`;
+      const drivers = activeDrivers?.map(d => d.full_name).join(", ") || "צוות סבן";
+      responseText = `לא מצאתי את "${message}", אבל ${drivers} זמינים למשלוח. תרצה עזרה נוספת?`;
     }
 
-    // החזרת התשובה ללקוח (מונע שגיאה 500)
     return NextResponse.json({
       text: responseText,
       component: visualComponent,
-      timestamp: new Date().toISOString(),
       status: "success"
     });
-} 
-  catch (error: any) {
+
+  } catch (error: any) {
     console.error("DEBUG_SABAN_OS:", error);
 
     // המלשינון החריף - יגיד לנו בדיוק מה הבעיה במסך הצ'אט
-    let errorDetail = "שגיאה לא ידועה";
+    let errorDetail = "שגיאה לא ידועה במערכת";
     
-    if (error.code === 'PGRST116') errorDetail = "הטבלה ריקה או שהחיפוש לא החזיר תוצאה מדויקת";
-    if (error.code === '42P01') errorDetail = "הטבלה 'products' לא קיימת במסד הנתונים!";
-    if (error.code === '42703') errorDetail = `חסרה עמודה בטבלה! הודעה: ${error.message}`;
-    if (error.message.includes("fetch")) errorDetail = "אין חיבור אינטרנט ל-Supabase או ש-API KEY שגוי";
+    if (error.code === 'PGRST116') errorDetail = "חיפוש ה-Single החזיר יותר מתוצאה אחת או אפס תוצאות";
+    if (error.code === '42P01') errorDetail = "טבלת המוצרים (products) לא קיימת!";
+    if (error.code === '42703') errorDetail = `חסרה עמודה בטבלה! (כנראה sku או coverage). הודעה: ${error.message}`;
+    if (error.message?.includes("fetch")) errorDetail = "בעיית תקשורת מול Supabase - בדוק API Keys";
 
     return NextResponse.json({ 
-      text: `⚠️ **מלשינון סבן זיהה כשל:**\n\n${errorDetail}\n\n*פרטים טכניים:* ${error.message}`,
+      text: `⚠️ **מלשינון סבן זיהה כשל:**\n\n${errorDetail}\n\n*פרטים:* ${error.message || 'אין פירוט'}`,
       status: "error_debug"
-    }, { status: 200 }); 
+    }, { status: 200 });
   }
+} // <--- הסוגר הזה היה חסר וגרם לשגיאה ב-Vercel!
