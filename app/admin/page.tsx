@@ -6,7 +6,6 @@ import {
   Activity, CheckCircle2, XCircle, Database, 
   Users, Package, ShoppingCart, Truck, AlertTriangle 
 } from "lucide-react"
-import Link from "next/link"
 
 const tablesToCheck = [
   { name: "לקוחות", id: "customers", icon: Users },
