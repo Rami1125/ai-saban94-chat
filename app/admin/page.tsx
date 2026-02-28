@@ -1,18 +1,23 @@
 "use client"
-import Link from "next/link"
+
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { 
   Activity, CheckCircle2, XCircle, Database, 
-  Users, Package, ShoppingCart, Truck, AlertTriangle 
+  Users, Package, ShoppingCart, Truck, AlertTriangle, Brain, ListChecks, Tag
 } from "lucide-react"
+import Link from "next/link" // ייבוא יחיד ותקין
 
+// רשימת הטבלאות המדויקת לפי ה-Database של סבן
 const tablesToCheck = [
-  { name: "לקוחות", id: "customers", icon: Users },
+  { name: "זיכרון לקוחות", id: "customer_memory", icon: Users }, // תוקן מ-customers
   { name: "מלאי", id: "inventory", icon: Package },
   { name: "הזמנות", id: "orders", icon: ShoppingCart },
   { name: "נהגים", id: "drivers", icon: Truck },
+  { name: "משימות", id: "tasks", icon: ListChecks },
+  { name: "מוצרים", id: "products", icon: Tag },
   { name: "קאש AI", id: "answers_cache", icon: Database },
+  { name: "ידע מאוחד", id: "saban_unified_knowledge", icon: Brain },
 ]
 
 export default function AdminDashboard() {
@@ -23,12 +28,13 @@ export default function AdminDashboard() {
     async function checkHealth() {
       const results: any = {}
       for (const table of tablesToCheck) {
+        // בדיקה אם הטבלה קיימת וכמה שורות יש בה
         const { count, error } = await supabase
           .from(table.id)
           .select('*', { count: 'exact', head: true })
         
         results[table.id] = {
-          exists: !error || error.code !== 'PGRST116' && error.code !== '42P01',
+          exists: !error || (error.code !== 'PGRST116' && error.code !== '42P01'),
           count: count || 0,
           error: error?.message
         }
@@ -71,51 +77,28 @@ export default function AdminDashboard() {
                   </div>
                 ) : (
                   <div className="flex items-center gap-1 text-red-600 text-xs font-bold bg-red-50 px-2 py-1 rounded-full">
-                    <XCircle size={12} /> 404/שגיאה
+                    <XCircle size={12} /> 404
                   </div>
-                )
-              }
+                )}
               </div>
 
               <h3 className="text-xl font-bold text-slate-800 mb-1">{table.name}</h3>
-              <p className="text-slate-400 text-sm mb-4">שם טבלה: <span className="font-mono">{table.id}</span></p>
+              <p className="text-slate-400 text-sm mb-4">נתיב: <span className="font-mono text-[10px]">{table.id}</span></p>
 
-              {!loading && (
-                <div className="mt-4 pt-4 border-t border-slate-50">
-                  {isOk ? (
-                    <div className="text-slate-600 font-bold">
-                      <span className="text-2xl text-blue-600">{status.count}</span> שורות במאגר
-                    </div>
-                  ) : (
-                    <div className="text-red-500 text-[10px] leading-tight flex gap-1">
-                      <AlertTriangle size={12} className="shrink-0" />
-                      הטבלה לא נמצאה. וודא שהשם ב-Supabase תואם בדיוק.
-                    </div>
-                  )}
+              {!loading && isOk && (
+                <div className="mt-4 pt-4 border-t border-slate-50 text-slate-600 font-bold">
+                  <span className="text-2xl text-blue-600">{status.count}</span> שורות במאגר
+                </div>
+              )}
+              {!loading && !isOk && (
+                <div className="mt-4 pt-4 border-t border-red-100 text-red-500 text-[10px] flex gap-1">
+                  <AlertTriangle size={12} className="shrink-0" />
+                  טבלה לא נמצאה. וודא שם ב-Supabase.
                 </div>
               )}
             </Link>
           )
         })}
-      </div>
-
-      <div className="bg-[#0B2C63] text-white p-8 rounded-3xl shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
-        <div className="space-y-2">
-          <h2 className="text-2xl font-bold italic flex items-center gap-2">
-            <Activity className="text-blue-400" /> מצב מערכת SabanOS
-          </h2>
-          <p className="text-blue-200 text-sm max-w-md">כל הטבלאות מחוברות בזמן אמת. המידע מסונכרן אוטומטית בין הצ'אט, הנהגים והמלאי.</p>
-        </div>
-        <div className="flex gap-4">
-            <div className="text-center bg-white/10 p-4 rounded-2xl min-w-[100px]">
-                <div className="text-2xl font-bold">2026</div>
-                <div className="text-[10px] uppercase tracking-widest text-blue-300">Year</div>
-            </div>
-            <div className="text-center bg-white/10 p-4 rounded-2xl min-w-[100px]">
-                <div className="text-2xl font-bold">READY</div>
-                <div className="text-[10px] uppercase tracking-widest text-blue-300">Status</div>
-            </div>
-        </div>
       </div>
     </div>
   )
