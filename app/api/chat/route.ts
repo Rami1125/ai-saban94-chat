@@ -37,11 +37,11 @@ export async function POST(req: Request) {
       }
     }
 
-    const modelsToTry = [
-      "gemini-3.1-flash-image-preview",
-      "gemini-3-flash-preview",
-      "gemini-1.5-flash-latest"
-    ];
+// רשימת מודלים מעודכנת לפי ה-Quota שלך
+const modelsToTry = [
+  "gemini-2.0-flash", 
+  "gemini-1.5-flash-latest" 
+];
 
     if (!geminiKey) throw new Error("Missing Gemini API Key");
     const googleAI = createGoogleGenerativeAI({ apiKey: geminiKey });
