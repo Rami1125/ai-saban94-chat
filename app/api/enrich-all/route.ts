@@ -6,7 +6,8 @@ export const dynamic = 'force-dynamic';
 export async function POST() {
   try {
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY!);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+   // במקום gemini-1.5-flash, השתמש בזה:
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 
     // 1. שליפת מוצרים ללא תמונה (מגבלה של 5 לכל לחיצה כדי לא לחסום את המפתח)
     const { data: products, error: fetchError } = await supabase
