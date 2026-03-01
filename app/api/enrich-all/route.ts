@@ -5,11 +5,17 @@ export const dynamic = 'force-dynamic';
 
 export async function POST() {
   try {
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY!);
-   // במקום gemini-1.5-flash, השתמש בזה:
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+    const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    if (!apiKey) {
+      return Response.json({ success: false, error: "Missing API Key" }, { status: 500 });
+    }
 
-    // 1. שליפת מוצרים ללא תמונה (מגבלה של 5 לכל לחיצה כדי לא לחסום את המפתח)
+    const genAI = new GoogleGenerativeAI(apiKey);
+    
+    // שימוש במודל היציב ביותר למניעת שגיאות 404
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    // 1. שליפת 5 מוצרים ללא תמונה
     const { data: products, error: fetchError } = await supabase
       .from('inventory')
       .select('sku, product_name')
@@ -24,26 +30,49 @@ const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
     const updatedItems = [];
 
     for (const prod of products) {
-      // 2. פנייה ל-Gemini לשליפת מדיה
-      const prompt = `Find a direct product image URL (.jpg/.png) and a YouTube embed link for the construction product: "${prod.product_name}". 
-      Return ONLY a JSON object: {"img": "URL", "yt": "URL", "desc": "תיאור קצר בעברית"}`;
+      try {
+        const prompt = `Find a direct product image URL (.jpg or .png) and a YouTube tutorial link for the construction product: "${prod.product_name}". 
+        Return ONLY a clean JSON object without markdown tags: 
+        {"img": "URL", "yt": "URL", "desc": "תיאור קצר ומקצועי בעברית"}`;
 
-      const result = await model.generateContent(prompt);
-      const data = JSON.parse(result.response.text().replace(/```json|```/g, ""));
+        const result = await model.generateContent(prompt);
+        const textResponse = result.response.text();
+        
+        // ניקוי תגיות ```json אם ה-AI הוסיף אותן בטעות
+        const cleanJson = textResponse.replace(/```json|```/g, "").trim();
+        const data = JSON.parse(cleanJson);
 
-      // 3. עדכון ה-Database
-      await supabase.from('inventory').update({
-        image_url: data.img,
-        youtube_url: data.yt,
-        description: data.desc
-      }).eq('sku', prod.sku);
+        // 2. עדכון ה-Database
+        const { error: updateError } = await supabase
+          .from('inventory')
+          .update({
+            image_url: data.img,
+            youtube_url: data.yt,
+            description: data.desc
+          })
+          .eq('sku', prod.sku);
 
-      updatedItems.push(prod.product_name);
+        if (!updateError) {
+          updatedItems.push(prod.product_name);
+        }
+      } catch (itemError) {
+        console.error(`Error updating product ${prod.sku}:`, itemError);
+        continue; // מדלג למוצר הבא במקרה של שגיאה בודדת
+      }
     }
 
-    return Response.json({ success: true, updated: updatedItems });
+    return Response.json({ 
+      success: true, 
+      updatedCount: updatedItems.length,
+      updatedList: updatedItems 
+    });
+
   } catch (error: any) {
-    console.error(error);
-    return Response.json({ success: false, error: error.message }, { status: 500 });
+    console.error("Critical Agent Error:", error);
+    return Response.json({ 
+      success: false, 
+      error: error.message,
+      details: "Check API model availability or Supabase connection"
+    }, { status: 500 });
   }
 }
