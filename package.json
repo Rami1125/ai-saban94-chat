@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@ai-sdk/google": "latest",
-    "@google/generative-ai": "^0.21.0"
+    "@google/generative-ai": "^0.21.0",
     "@supabase/supabase-js": "latest",
     "framer-motion": "^12.4.7",
     "@hookform/resolvers": "^3.10.0",
