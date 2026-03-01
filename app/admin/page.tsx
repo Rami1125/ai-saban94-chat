@@ -1,105 +1,99 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { supabase } from "@/lib/supabase"
+import { useEffect, useState } from "react";
 import { 
-  Activity, CheckCircle2, XCircle, Database, 
-  Users, Package, ShoppingCart, Truck, AlertTriangle, Brain, ListChecks, Tag
-} from "lucide-react"
-import Link from "next/link" // ייבוא יחיד ותקין
-
-// רשימת הטבלאות המדויקת לפי ה-Database של סבן
-const tablesToCheck = [
-  { name: "זיכרון לקוחות", id: "customer_memory", icon: Users }, // תוקן מ-customers
-  { name: "מלאי", id: "inventory", icon: Package },
-  { name: "הזמנות", id: "orders", icon: ShoppingCart },
-  { name: "נהגים", id: "drivers", icon: Truck },
-  { name: "משימות", id: "tasks", icon: ListChecks },
-  { name: "מוצרים", id: "products", icon: Tag },
-  { name: "קאש AI", id: "answers_cache", icon: Database },
-  { name: "ידע מאוחד", id: "saban_unified_knowledge", icon: Brain },
-]
+  Users, MessageSquare, Package, AlertTriangle, 
+  TrendingUp, Activity, Search, RefreshCw 
+} from "lucide-react";
+import { createClient } from "@/lib/supabase";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 export default function AdminDashboard() {
-  const [stats, setStats] = useState<any>({})
-  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState({ totalChats: 0, totalProducts: 0, missingMedia: 0 });
+  const [recentChats, setRecentChats] = useState([]);
 
   useEffect(() => {
-    async function checkHealth() {
-      const results: any = {}
-      for (const table of tablesToCheck) {
-        // בדיקה אם הטבלה קיימת וכמה שורות יש בה
-        const { count, error } = await supabase
-          .from(table.id)
-          .select('*', { count: 'exact', head: true })
-        
-        results[table.id] = {
-          exists: !error || (error.code !== 'PGRST116' && error.code !== '42P01'),
-          count: count || 0,
-          error: error?.message
-        }
-      }
-      setStats(results)
-      setLoading(false)
+    async function fetchStats() {
+      const supabase = createClient();
+      
+      // שליחת נתונים מהירה
+      const { count: chatCount } = await supabase.from('chat_history').select('*', { count: 'exact', head: true });
+      const { count: productCount } = await supabase.from('inventory').select('*', { count: 'exact', head: true });
+      const { count: missingCount } = await supabase.from('inventory').select('*', { count: 'exact', head: true }).is('image_url', null);
+      
+      const { data: chats } = await supabase.from('chat_history').select('*').order('created_at', { ascending: false }).limit(5);
+
+      setStats({
+        totalChats: chatCount || 0,
+        totalProducts: productCount || 0,
+        missingMedia: missingCount || 0
+      });
+      setRecentChats(chats || []);
     }
-    checkHealth()
-  }, [])
+    fetchStats();
+  }, []);
 
   return (
-    <div className="space-y-8 p-6" dir="rtl">
-      <div>
-        <h1 className="text-3xl font-black text-[#0B2C63] mb-2">Saban Studio - דוח מצב</h1>
-        <p className="text-slate-500 font-medium">סריקת קישוריות לטבלאות ב-Supabase</p>
+    <div className="p-8 bg-[#020617] min-h-screen text-white space-y-8" dir="rtl">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-black tracking-tighter">SABAN ADMIN CENTER</h1>
+          <p className="text-slate-400 font-bold uppercase text-[10px] tracking-[3px]">ניהול בינה מלאכותית ומלאי</p>
+        </div>
+        <button className="bg-blue-600 p-3 rounded-xl hover:bg-blue-500 transition-all">
+          <RefreshCw size={20} />
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {tablesToCheck.map((table) => {
-          const status = stats[table.id]
-          const isOk = status?.exists
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <StatCard title="שיחות AI" value={stats.totalChats} icon={<MessageSquare />} color="text-blue-500" />
+        <StatCard title="סה''כ מוצרים" value={stats.totalProducts} icon={<Package />} color="text-emerald-500" />
+        <StatCard title="מוצרים ללא מדיה" value={stats.missingMedia} icon={<AlertTriangle />} color="text-amber-500" />
+      </div>
 
-          return (
-            <Link 
-              href={isOk ? `/admin/${table.id}` : "#"} 
-              key={table.id}
-              className={`p-6 rounded-2xl border-2 transition-all ${
-                isOk ? "bg-white border-slate-100 hover:border-blue-500 shadow-sm" : "bg-red-50 border-red-100 opacity-80 cursor-not-allowed"
-              }`}
-            >
-              <div className="flex justify-between items-start mb-4">
-                <div className={`p-3 rounded-xl ${isOk ? "bg-blue-50 text-blue-600" : "bg-red-100 text-red-600"}`}>
-                  <table.icon size={24} />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-12">
+        {/* Recent Conversations */}
+        <Card className="bg-slate-900/50 border-white/5 text-white rounded-[32px]">
+          <CardHeader>
+            <CardTitle className="text-lg font-black flex items-center gap-2">
+              <Activity className="text-blue-500" /> שיחות אחרונות מהשטח
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {recentChats.map((chat: any) => (
+              <div key={chat.id} className="p-4 bg-white/5 rounded-2xl border border-white/5 hover:bg-white/10 transition-all cursor-pointer">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-[10px] font-bold text-slate-500">{new Date(chat.created_at).toLocaleString('he-IL')}</span>
+                  <span className="bg-blue-600/20 text-blue-400 text-[9px] px-2 py-0.5 rounded-full font-black">AI ANALYZED</span>
                 </div>
-                {loading ? (
-                  <div className="animate-pulse bg-slate-200 h-6 w-12 rounded-full" />
-                ) : isOk ? (
-                  <div className="flex items-center gap-1 text-green-600 text-xs font-bold bg-green-50 px-2 py-1 rounded-full">
-                    <CheckCircle2 size={12} /> תקין
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1 text-red-600 text-xs font-bold bg-red-50 px-2 py-1 rounded-full">
-                    <XCircle size={12} /> 404
-                  </div>
-                )}
+                <p className="text-sm font-bold line-clamp-1">"{chat.query}"</p>
               </div>
+            ))}
+          </CardContent>
+        </Card>
 
-              <h3 className="text-xl font-bold text-slate-800 mb-1">{table.name}</h3>
-              <p className="text-slate-400 text-sm mb-4">נתיב: <span className="font-mono text-[10px]">{table.id}</span></p>
-
-              {!loading && isOk && (
-                <div className="mt-4 pt-4 border-t border-slate-50 text-slate-600 font-bold">
-                  <span className="text-2xl text-blue-600">{status.count}</span> שורות במאגר
-                </div>
-              )}
-              {!loading && !isOk && (
-                <div className="mt-4 pt-4 border-t border-red-100 text-red-500 text-[10px] flex gap-1">
-                  <AlertTriangle size={12} className="shrink-0" />
-                  טבלה לא נמצאה. וודא שם ב-Supabase.
-                </div>
-              )}
-            </Link>
-          )
-        })}
+        {/* Quick Actions */}
+        <div className="space-y-6">
+          <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-8 rounded-[40px] shadow-2xl">
+            <h3 className="text-xl font-black mb-2 text-white italic tracking-tighter">Saban Agent Active</h3>
+            <p className="text-blue-100 text-sm font-bold mb-6">הסוכן סורק כרגע את הרשת להשלמת תמונות חסרות.</p>
+            <button className="w-full bg-white text-blue-900 py-4 rounded-2xl font-black text-xs hover:bg-blue-50 transition-all shadow-xl">
+              הפעל סריקת מלאי מלאה
+            </button>
+          </div>
+        </div>
       </div>
     </div>
-  )
+  );
+}
+
+function StatCard({ title, value, icon, color }: any) {
+  return (
+    <div className="bg-slate-900/50 border border-white/5 p-8 rounded-[35px] backdrop-blur-xl">
+      <div className={`mb-4 ${color}`}>{icon}</div>
+      <div className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">{title}</div>
+      <div className="text-4xl font-black tracking-tighter">{value}</div>
+    </div>
+  );
 }
