@@ -1,50 +1,48 @@
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { generateText } from "ai";
-import { createClient } from "@supabase/supabase-js";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { supabase } from "@/lib/supabase";
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
-    const { messages, userId } = await req.json();
+    const { messages, context } = await req.json();
     const lastMessage = messages[messages.length - 1].content;
 
-    // חיבור ל-Supabase
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE!
-    );
+    // 1. בדיקת מפתח API - אם חסר, זו הסיבה ל-500
+    const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    if (!apiKey) {
+      console.error("Missing GOOGLE_GENERATIVE_AI_API_KEY");
+      return Response.json({ error: "שרת ה-AI אינו מוגדר כראוי" }, { status: 500 });
+    }
 
-    // 1. חיפוש מוצרים רלוונטיים ב-Database (RAG)
-    const { data: products } = await supabase
-      .from("inventory")
-      .select("*")
-      .or(`product_name.ilike.%${lastMessage}%,sku.ilike.%${lastMessage}%`)
-      .limit(3);
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    // 2. הגדרת המודל (Gemini)
-    const googleAI = createGoogleGenerativeAI({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY });
-    
-    const { text } = await generateText({
-      model: googleAI("gemini-1.5-flash"),
-      system: `אתה יועץ המכירות והמומחה הטכני של "ח. סבן". 
-      נתוני מוצרים מהמחסן: ${JSON.stringify(products)}.
-      תפקידך: לספק פתרונות הנדסיים, לחשב כמויות (מ"ר לשקים) ולתת "טיפי זהב" ליישום.
-      אם המוצר לא נמצא, הצע חלופה דומה מהמלאי.`,
-      messages,
-    });
+    // 2. יצירת הפרומפט עם הקשר מהמלאי (Saban Context)
+    const prompt = `
+      אתה עוזר חכם עבור 'ח. סבן חומרי בניין'. 
+      השתמש במידע הבא על המלאי כדי לענות ללקוח:
+      ${JSON.stringify(context)}
+      
+      שאילתת הלקוח: ${lastMessage}
+      תענה בצורה מקצועית, אדיבה וקצרה בעברית.
+    `;
 
-    // 3. שמירה במאגר המידע (זיכרון ארגוני)
-    await supabase.from("chat_history").insert({
-      user_id: userId,
-      query: lastMessage,
-      response: text,
-      metadata: { products_shown: products?.map(p => p.sku) }
-    });
+    const result = await model.generateContent(prompt);
+    const responseText = result.response.text();
 
-    return Response.json({ text, products });
+    // 3. שמירת היסטוריית השיחה ב-Supabase (אופציונלי)
+    await supabase.from('chat_history').insert([
+      { query: lastMessage, response: responseText }
+    ]);
 
-  } catch (error) {
-    return Response.json({ error: "שגיאת מערכת" }, { status: 500 });
+    return Response.json({ role: "assistant", content: responseText });
+
+  } catch (error: any) {
+    console.error("Chat API Error:", error);
+    return Response.json({ 
+      error: "חלה שגיאה בעיבוד הבקשה", 
+      details: error.message 
+    }, { status: 500 });
   }
 }
