@@ -39,10 +39,11 @@ export async function POST(req: Request) {
     }
 
     // רשימת מודלים מעודכנת לפי ה-Free Tier שלך
-    const modelsToTry = [
-      "gemini-2.0-flash", 
-      "gemini-1.5-flash-latest"
-    ];
+const { text } = await generateText({
+  model: googleAI("gemini-3.1-flash-image-preview"), // המודל החדש ביותר
+  system: `אתה יועץ המכירות של ח. סבן...`,
+  messages
+});
 
     if (!geminiKey) throw new Error("Missing Gemini API Key");
     const googleAI = createGoogleGenerativeAI({ apiKey: geminiKey });
