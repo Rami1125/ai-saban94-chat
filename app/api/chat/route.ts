@@ -18,56 +18,72 @@ export async function POST(req: Request) {
     const rawText = lastMsgObj.content || lastMsgObj.text || "";
     const lastMsg = rawText.toString().trim();
 
-    // הגדרת מפתחות
+    // הגדרת מפתחות מה-Environment Variables
     const geminiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE;
 
-    let products = [];
+    if (!geminiKey) throw new Error("Missing Gemini API Key");
+
+    // שליפת נתונים מ-Supabase (inventory)
+    let products: any[] = [];
     if (lastMsg && supabaseUrl && supabaseKey) {
       try {
         const supabase = createClient(supabaseUrl, supabaseKey);
+        // חיפוש גמיש לפי שם מוצר או מק"ט
         const { data } = await supabase
           .from("inventory")
           .select("*")
           .or(`product_name.ilike.%${lastMsg}%,sku.ilike.%${lastMsg}%`)
-          .limit(2);
+          .limit(3);
         if (data) products = data;
       } catch (e) {
         console.error("DB Error:", e);
       }
     }
 
-    // רשימת מודלים מעודכנת לפי ה-Free Tier שלך
-const { text } = await generateText({
-  model: googleAI("gemini-3.1-flash-image-preview"), // המודל החדש ביותר
-  system: `אתה יועץ המכירות של ח. סבן...`,
-  messages
-});
-
-    if (!geminiKey) throw new Error("Missing Gemini API Key");
     const googleAI = createGoogleGenerativeAI({ apiKey: geminiKey });
 
+    // רשימת מודלים מעודכנת לדילוג חכם (Fallback) - מרץ 2026
+    const modelsToTry = [
+      "gemini-3.1-flash-image-preview", // Nano Banana 2 (הכי חדש)
+      "gemini-3-flash-preview",         // Gemini 3 Flash
+      "gemini-3-flash",                 // Standard
+      "gemini-1.5-flash-latest"         // גיבוי אחרון
+    ];
+
     let finalResponseText = "";
-    
+
+    // לולאת הדילוג בין המודלים
     for (const modelId of modelsToTry) {
       try {
         const { text } = await generateText({
           model: googleAI(modelId),
-          system: `אתה יועץ המכירות של ח. סבן חומרי בניין. ענה בעברית.
+          system: `אתה מנהל המכירות הבכיר של "ח. סבן חומרי בניין". 
+          עליך לענות בפורמט HTML מקצועי (שימוש בתגיות <b> ו-<u>).
+
           נתוני מלאי זמינים: ${JSON.stringify(products)}.
-          חוק חישוב כמויות:
-          - עבור דבקי אריחים (כמו סיקה 255): (שטח מ"ר * 4 ק"ג) / 25 ק"ג שק. עגל תמיד למעלה + 1 שק רזרבה.
-          - עבור איטום נוזלי: (שטח מ"ר * צריכה לקמ"ר מהמפרט) / משקל פח.
-          בסוף כל תשובה טכנית, תן "טיפ זהב" ליישום והצע להוסיף לסל.`,
+
+          חוקי חישוב כמויות:
+          - דבקי אריחים/איטום צמנטי: (שטח מ"ר * 4 ק"ג) / 25 ק"ג שק + 1 שק רזרבה.
+          - איטום נוזלי: (שטח מ"ר * צריכה מהמפרט) / משקל פח.
+          
+          הנחיות עיצוב:
+          1. הדגש נתונים חשובים ומחירים עם <b>.
+          2. אם נמצא מוצר במלאי, הצג כרטיס מוצר: 📦 מוצר: <b>[שם]</b> | 💰 מחיר: <b>[מחיר]</b> ש"ח.
+          3. בסוף כל תשובה טכנית, תן "<u>טיפ זהב</u>" ליישום והצע להוסיף לסל.
+          4. אל תשתמש בסימני ** להדגשה.`,
           messages,
           temperature: 0.4
         });
 
-        finalResponseText = text?.trim() || "";
-        activeModelName = modelId;
-        break; 
+        if (text) {
+          finalResponseText = text.trim();
+          activeModelName = modelId;
+          break; // יציאה מהלולאה ברגע שיש תשובה
+        }
       } catch (err) {
+        console.warn(`המודל ${modelId} נכשל, מנסה את הבא...`);
         continue;
       }
     }
@@ -79,8 +95,9 @@ const { text } = await generateText({
     });
 
   } catch (error: any) {
+    console.error("Critical Chat Error:", error);
     return Response.json({ 
-      text: "חלה שגיאה בעיבוד. אנא וודא שמפתח ה-API תקין ב-Vercel.",
+      text: "חלה שגיאה בעיבוד. סבן AI יחזור לפעילות בעוד רגע.",
       debug: error.message
     });
   }
