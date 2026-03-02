@@ -55,32 +55,30 @@ export async function POST(req: Request) {
     let finalResponseText = "";
 
     // לולאת הדילוג בין המודלים
-    for (const modelId of modelsToTry) {
+for (const modelId of modelsToTry) {
       try {
         const { text } = await generateText({
           model: googleAI(modelId),
           system: `אתה מנהל המכירות הבכיר של "ח. סבן חומרי בניין". 
-          עליך לענות בפורמט HTML מקצועי (שימוש בתגיות <b> ו-<u>).
-
-          נתוני מלאי זמינים: ${JSON.stringify(products)}.
-
-          חוקי חישוב כמויות:
-          - דבקי אריחים/איטום צמנטי: (שטח מ"ר * 4 ק"ג) / 25 ק"ג שק + 1 שק רזרבה.
-          - איטום נוזלי: (שטח מ"ר * צריכה מהמפרט) / משקל פח.
           
-          הנחיות עיצוב:
-          1. הדגש נתונים חשובים ומחירים עם <b>.
-          2. אם נמצא מוצר במלאי, הצג כרטיס מוצר: 📦 מוצר: <b>[שם]</b> | 💰 מחיר: <b>[מחיר]</b> ש"ח.
-          3. בסוף כל תשובה טכנית, תן "<u>טיפ זהב</u>" ליישום והצע להוסיף לסל.
-          4. אל תשתמש בסימני ** להדגשה.`,
+          כלל ברזל: ענה אך ורק על המוצר הספציפי שהלקוח ביקש. 
+          אם נמצאו מספר מוצרים בנתונים: ${JSON.stringify(products)}, בחר רק את המתאים ביותר ואל תציג את האחרים.
+
+          הנחיות מענה:
+          1. ענה בפורמט HTML מקצועי (שימוש בתגיות <b> ו-<u>).
+          2. אם מצאת את המוצר במלאי, הצג את הכרטיס שלו: 📦 מוצר: <b>[שם מדויק מהטבלה]</b> | 💰 מחיר: <b>[מחיר מהטבלה]</b> ש"ח.
+          3. חוק חישוב: (שטח * 4) / 25 + 1 רזרבה. הצג רק את התוצאה הסופית המודגשת.
+          4. אל תפרט על סניפים או שעות פעילות אלא אם נשאלת עליהם במפורש.
+          5. בסוף כל תשובה טכנית, הוסף <u>טיפ זהב</u> קצר.
+          6. חל איסור מוחלט להשתמש בסימני ** להדגשה.`,
           messages,
-          temperature: 0.4
+          temperature: 0.2, // הורדתי מעט את ה-Temperature כדי שיהיה פחות "יצירתי" ויותר ממוקד בנתונים
         });
 
         if (text) {
           finalResponseText = text.trim();
           activeModelName = modelId;
-          break; // יציאה מהלולאה ברגע שיש תשובה
+          break; 
         }
       } catch (err) {
         console.warn(`המודל ${modelId} נכשל, מנסה את הבא...`);
@@ -90,11 +88,12 @@ export async function POST(req: Request) {
 
     return Response.json({ 
       text: finalResponseText, 
-      products, 
+      products: products.slice(0, 1), // שולח לפרונט-אנד רק את המוצר הראשון והכי רלוונטי
       activeModel: activeModelName 
     });
-
-  } catch (error: any) {
+    
+  } 
+  catch (error: any) {
     console.error("Critical Chat Error:", error);
     return Response.json({ 
       text: "חלה שגיאה בעיבוד. סבן AI יחזור לפעילות בעוד רגע.",
