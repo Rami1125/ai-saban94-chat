@@ -20,14 +20,27 @@ export default function BusinessInfoManager() {
 
   useEffect(() => { fetchData(); }, []);
 
-  async function fetchData() {
-    setLoading(true);
-    // התיקון הקריטי: business_info
-    const { data, error } = await supabase.from("business_info").select("*").order("id", { ascending: false });
-    if (error) console.error("Error:", error);
-    else setItems(data || []);
+async function fetchData() {
+  setLoading(true);
+  try {
+    // השם חייב להיות business_info
+    const { data, error } = await supabase
+      .from("business_info") 
+      .select("*")
+      .order("id", { ascending: false });
+
+    if (error) {
+      console.error("טעות בשליפה:", error.message);
+      toast.error("שגיאה: " + error.message);
+    } else {
+      setItems(data || []);
+    }
+  } catch (err) {
+    console.error("קריסה בקוד:", err);
+  } finally {
     setLoading(false);
   }
+}
 
   const handleSave = async () => {
     if (!form.question || !form.answer) return toast.error("מלא שאלה ותשובה");
