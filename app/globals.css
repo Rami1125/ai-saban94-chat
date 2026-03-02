@@ -2,7 +2,29 @@
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
+@keyframes orb-hue-rotate {
+  from { filter: hue-rotate(0deg); transform: scale(1); }
+  50% { transform: scale(1.05); } /* אפקט נשימה - התרחבות קלה */
+  to { filter: hue-rotate(360deg); transform: scale(1); }
+}
 
+@keyframes orb-hue-rotate-blur {
+  from { filter: blur(var(--orb-blur)) hue-rotate(0deg); }
+  to { filter: blur(var(--orb-blur)) hue-rotate(-360deg); }
+}
+
+/* תנועה אקראית לעיגולים הפנימיים */
+.orb-circle-1 { animation: orb-move-1 10s ease-in-out infinite; }
+.orb-circle-2 { animation: orb-move-2 12s ease-in-out infinite; }
+.orb-circle-3 { animation: orb-move-3 8s ease-in-out infinite; }
+.orb-circle-4 { animation: orb-move-4 15s ease-in-out infinite; }
+.orb-circle-5 { animation: orb-move-5 9s ease-in-out infinite; }
+
+@keyframes orb-move-1 { 0%, 100% { transform: translate(-20%, -20%); } 50% { transform: translate(20%, 20%); } }
+@keyframes orb-move-2 { 0%, 100% { transform: translate(25%, -15%); } 50% { transform: translate(-25%, 15%); } }
+@keyframes orb-move-3 { 0%, 100% { transform: translate(-10%, 25%); } 50% { transform: translate(10%, -25%); } }
+@keyframes orb-move-4 { 0%, 100% { transform: translate(15%, 15%); } 50% { transform: translate(-15%, -15%); } }
+@keyframes orb-move-5 { 0%, 100% { transform: translate(0%, -30%); } 50% { transform: translate(0%, 30%); } }
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
