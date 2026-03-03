@@ -3,24 +3,24 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Calculator, Clock, MessageCircle, PlayCircle } from 'lucide-react';
 
+function getYouTubeId(input?: string) {
+  if (!input) return null;
+  const match = input.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+  return match ? match[1] : null;
+}
+
 export function ProductCard({ product, onConsult }: { product: any, onConsult?: (p: any, t: string) => void }) {
   const [showVideo, setShowVideo] = useState(false);
+  const ytId = getYouTubeId(product.video_url);
 
   if (!product) return null;
 
-  // חילוץ YouTube ID
-  const getYTId = (url?: string) => {
-    if (!url) return null;
-    const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
-    return match ? match[1] : null;
-  };
-  const ytId = getYTId(product.video_url);
-
-  const safeConsult = (t: string) => {
+  // פונקציית הגנה למניעת "r is not a function"
+  const handleAction = (type: string) => {
     if (typeof onConsult === "function") {
-      onConsult(product, t);
+      onConsult(product, type);
     } else {
-      console.warn("[מלשינון] onConsult is not a function!", { type: t });
+      console.warn("[מלשינון] onConsult is missing!");
     }
   };
 
@@ -29,11 +29,7 @@ export function ProductCard({ product, onConsult }: { product: any, onConsult?: 
       <div className="w-full h-40 bg-slate-100 relative">
         {!showVideo ? (
           <>
-            <img 
-              src={product.image_url || "https://placehold.co/400x400?text=Saban+AI"} 
-              className="w-full h-full object-contain p-4" 
-              alt={product.product_name} 
-            />
+            <img src={product.image_url || "https://placehold.co/400x400?text=Saban+AI"} className="w-full h-full object-contain p-4" alt={product.product_name} />
             {ytId && (
               <button onClick={() => setShowVideo(true)} className="absolute inset-0 flex items-center justify-center bg-black/5 hover:bg-black/10">
                 <PlayCircle size={40} className="text-white" />
@@ -50,18 +46,14 @@ export function ProductCard({ product, onConsult }: { product: any, onConsult?: 
       <div className="p-4 text-right">
         <h3 className="font-black text-[#0B2C63] text-lg mb-2">{product.product_name}</h3>
         <div className="flex gap-2 mb-4">
-          <button onClick={() => safeConsult("זמן ייבוש")} className="flex-1 bg-slate-50 p-2 rounded-xl text-[10px] font-bold">
+          <button onClick={() => handleAction("זמן ייבוש")} className="flex-1 bg-slate-50 p-2 rounded-xl text-[10px] font-bold">
             <Clock size={14} className="mx-auto mb-1 text-orange-500" /> {product.drying_time || "24 שעות"}
           </button>
-          <button onClick={() => safeConsult("חישוב כמויות")} className="flex-1 bg-slate-50 p-2 rounded-xl text-[10px] font-bold">
+          <button onClick={() => handleAction("חישוב כמויות")} className="flex-1 bg-slate-50 p-2 rounded-xl text-[10px] font-bold">
             <Calculator size={14} className="mx-auto mb-1 text-blue-500" /> {product.coverage || "לפי מפרט"}
           </button>
         </div>
-        <button 
-          type="button"
-          onClick={() => safeConsult("התייעצות כללית")} 
-          className="w-full bg-[#0B2C63] text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"
-        >
+        <button onClick={() => handleAction("התייעצות כללית")} className="w-full bg-[#0B2C63] text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2">
           <MessageCircle size={18} /> התייעצות כאן
         </button>
       </div>
