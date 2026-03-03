@@ -1,10 +1,7 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { generateText, tool } from "ai"; // עברנו ל-generateText ליציבות מקסימלית
+import { generateText, tool } from "ai";
 import { z } from "zod";
 
-/**
- * מנגנון המלשינון לשליפת מפתח תקין מהמאגר
- */
 function getApiKey() {
   const pool = process.env.GOOGLE_AI_KEY_POOL;
   if (!pool) return process.env.GOOGLE_GENERATIVE_AI_API_KEY || "";
@@ -24,10 +21,10 @@ export async function POST(req: Request) {
       apiKey: getApiKey(),
     });
 
-    // שימוש ב-gemini-1.5-flash היציב
-    const model = google("gemini-1.5-flash");
+    // תיקון קריטי: הוספת הקידומת models/ עבור ה-API של גוגל
+    const model = google("models/gemini-1.5-flash");
 
-    console.log(`[מלשינון] 🤖 מריץ שאילתה מול gemini-1.5-flash`);
+    console.log(`[מלשינון] 🤖 מריץ שאילתה מול models/gemini-1.5-flash`);
 
     const result = await generateText({
       model: model,
@@ -39,11 +36,10 @@ export async function POST(req: Request) {
         חוקי עבודה:
         1. חוק סיקה: (שטח * 4) / 25 + 1 רזרבה. הצג תמיד את החישוב.
         2. פורמט: ענה ב-HTML נקי (<b>, <ul>, <li>). ללא מרקדאון (**).
-        3. אמינות: אם מוצר לא במלאי, השתמש בכלי ה-Google Search.
       `,
       tools: {
         get_product_info: tool({
-          description: "קבלת מידע מפורט על מוצר מהמלאי (שם, מחיר, מק\"ט)",
+          description: "קבלת מידע מפורט על מוצר מהמלאי",
           parameters: z.object({
             query: z.string(), 
           }),
@@ -53,24 +49,23 @@ export async function POST(req: Request) {
               i.product_name?.toLowerCase().includes(query.toLowerCase()) || 
               i.sku?.toLowerCase().includes(query.toLowerCase())
             );
-            return item || { error: "המוצר לא נמצא במלאי הפנימי" };
+            return item || { error: "המוצר לא נמצא במלאי" };
           },
         }),
       },
       maxSteps: 5,
     });
 
-    // החזרת תשובה כ-JSON פשוט שמתאים לרוב ממשקי הצ'אט
     return Response.json({
-      text: result.text,
-      toolCalls: result.toolCalls,
-      toolResults: result.toolResults
+      text: result.text
     });
 
   } catch (error: any) {
     console.error(`[מלשינון] ❌ שגיאה ב-Chat Route:`, error.message);
+    
+    // אם המודל הספציפי לא נמצא, ננסה פעם אחת עם השם הקצר כגיבוי
     return Response.json(
-      { error: "שגיאה בתקשורת עם המודל." },
+      { error: "שגיאה בחיבור למודל. המלשינון ממליץ לבדוק את הגדרת ה-models/." },
       { status: 500 }
     );
   }
