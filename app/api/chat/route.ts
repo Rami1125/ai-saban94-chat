@@ -1,10 +1,6 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { generateText, tool } from "ai";
-import { z } from "zod";
+import { generateText } from "ai";
 
-/**
- * מנהל המפתחות של סבן - בוחר מפתח רנדומלי מהפול
- */
 function getApiKey() {
   const pool = process.env.GOOGLE_AI_KEY_POOL;
   if (!pool) return process.env.GOOGLE_GENERATIVE_AI_API_KEY || "";
@@ -18,52 +14,41 @@ export async function POST(req: Request) {
   try {
     const { messages, inventory } = await req.json();
 
-    // הגדרת ה-Provider לעבודה עם v1 (חובה ל-2026)
     const google = createGoogleGenerativeAI({
       apiKey: getApiKey(),
       baseURL: "https://generativelanguage.googleapis.com/v1",
     });
 
-    // המודל החדש והתואם
+    // שימוש במנוע gemini-3-flash-preview המעודכן
     const model = google("gemini-3-flash-preview");
 
-    console.log(`[מלשינון] 🚀 מריץ שאילתה מול gemini-3-flash-preview ב-API v1`);
+    console.log(`[מלשינון] 🚀 מריץ שאילתה מול gemini-3-flash-preview (API v1)`);
+
+    // הנחיות המערכת שמוזרקות כחלק מהשיחה למניעת שגיאות Payload
+    const sabanSystemPrompt = `
+      אתה "סבן AI", עוזר המכירות של "ח. סבן חומרי בניין".
+      מלאי נוכחי: ${JSON.stringify(inventory || [])}
+      חוק סיקה: (שטח * 4) / 25 + 1 רזרבה. הצג תמיד את החישוב בבירור.
+      פורמט: ענה ב-HTML נקי (<b>, <ul>, <li>). ללא מרקדאון (**).
+      אם זיהית מוצר כמו סיקה 107, שלוף את המחיר והמפרט שלו מהמלאי.
+    `;
 
     const result = await generateText({
       model: model,
-      messages,
-      // ב-AI SDK של Vercel, הוא מתרגם את זה אוטומטית למבנה ה-JSON התקין של v1
-      system: `
-        אתה "סבן AI", עוזר המכירות של "ח. סבן חומרי בניין".
-        מלאי נוכחי: ${JSON.stringify(inventory || [])}
-        חוק סיקה: (שטח * 4) / 25 + 1 רזרבה. עגל תמיד למעלה.
-        ענה ב-HTML נקי (<b>, <ul>, <li>). ללא מרקדאון.
-      `,
-      tools: {
-        get_product_info: tool({
-          description: "שליפת מידע טכני ומחירים מהמלאי",
-          parameters: z.object({
-            query: z.string(), 
-          }),
-          execute: async ({ query }) => {
-            const items = inventory || [];
-            const found = items.find((i: any) => 
-              i.product_name?.toLowerCase().includes(query.toLowerCase()) || 
-              i.sku?.toLowerCase().includes(query.toLowerCase())
-            );
-            return found || { error: "לא נמצא במלאי" };
-          },
-        }),
-      },
-      maxSteps: 5,
+      // פתרון הקסם: דוחפים את ה-System Instruction לתוך מערך ההודעות כ-role: 'system'
+      messages: [
+        { role: 'system', content: sabanSystemPrompt },
+        ...messages
+      ],
+      // הסרנו את ה-tools באופן זמני כדי להבטיח חיבור נקי ויציב ב-v1
     });
 
     return Response.json({ text: result.text });
 
   } catch (error: any) {
-    console.error(`[מלשינון] ❌ שגיאה קריטית:`, error.message);
+    console.error(`[מלשינון] ❌ שגיאה ב-API v1:`, error.message);
     return Response.json(
-      { error: "תקלה במנוע Gemini 3. בדוק לוגים." },
+      { error: "תקלה בתקשורת מול גוגל. וודא שהמפתחות ב-Vercel תקינים." },
       { status: 500 }
     );
   }
