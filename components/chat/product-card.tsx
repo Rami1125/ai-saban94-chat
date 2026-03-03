@@ -1,96 +1,145 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ShoppingCart, Calculator, Clock, ShieldCheck, Factory } from 'lucide-react';
+import { 
+  ShoppingCart, Calculator, Clock, ShieldCheck, 
+  Factory, PlayCircle, Info, Droplets, Wand2, MessageCircle 
+} from 'lucide-react';
+import { useState } from "react";
 
-export function ProductCard({ product }: { product: any }) {
+export function ProductCard({ product, onConsult }: { product: any, onConsult: (p: any, type: string) => void }) {
+  const [showVideo, setShowVideo] = useState(false);
+
   if (!product) return null;
 
-  // חילוץ נתונים בצורה בטוחה מהאובייקט (מתאים ל-Supabase ול-Draft)
+  // חילוץ נתונים מורחב מהטבלה
   const name = product.product_name || product.name || "מוצר ללא שם";
   const sku = product.sku || "N/A";
   const price = product.price;
   const image = product.image_url || product.image;
   const supplier = product.supplier_name || product.supplier || "ח. סבן";
   const coverage = product.coverage || "לפי מפרט";
+  const dryingTime = product.drying_time || "24 שעות";
+  const applicationMethod = product.application_method || "הברשה/התזה";
+  const videoUrl = product.video_url; // לינק מיוטיוב
 
   return (
     <motion.div
       initial={{ scale: 0.9, opacity: 0, y: 20 }}
       animate={{ scale: 1, opacity: 1, y: 0 }}
-      transition={{ type: "spring", stiffness: 120, damping: 12 }}
-      whileHover={{ 
-        scale: 1.02,
-        boxShadow: "0 20px 40px rgba(11, 44, 99, 0.15)",
-      }}
-      className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[35px] overflow-hidden text-right w-[320px] shadow-xl transition-all mb-4"
+      className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[35px] overflow-hidden text-right w-full max-w-[340px] shadow-2xl transition-all mb-4 relative"
       dir="rtl"
     >
-      {/* תמונת מוצר - אם קיימת */}
-      {image ? (
-        <div className="w-full h-48 bg-slate-50 dark:bg-slate-800 relative overflow-hidden flex items-center justify-center p-4">
-          <img 
-            src={image} 
-            alt={name} 
-            className="max-w-full max-h-full object-contain mix-blend-multiply dark:mix-blend-normal"
-          />
-          <div className="absolute top-4 left-4">
-             <ShieldCheck size={20} className="text-blue-600 drop-shadow-sm" />
+      {/* תמונת מוצר וסרטון */}
+      <div className="w-full h-48 bg-slate-50 dark:bg-slate-800 relative group">
+        {image && !showVideo && (
+          <img src={image} alt={name} className="w-full h-full object-contain p-4" />
+        )}
+        
+        {showVideo && videoUrl && (
+          <div className="absolute inset-0 z-10 bg-black">
+            <iframe
+              className="w-full h-full"
+              src={`https://www.youtube.com/embed/${videoUrl.split('v=')[1]}?autoplay=1`}
+              allow="autoplay; encrypted-media"
+              allowFullScreen
+            />
+            <button onClick={() => setShowVideo(false)} className="absolute top-2 right-2 bg-white/20 p-1 rounded-full text-white text-[10px]">סגור X</button>
           </div>
-        </div>
-      ) : (
-        <div className="w-full h-32 bg-gradient-to-br from-blue-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 flex items-center justify-center">
-          <ShieldCheck size={40} className="text-blue-200 dark:text-slate-700" />
-        </div>
-      )}
+        )}
 
-      <div className="p-6">
-        <div className="flex justify-between items-center mb-3">
-          <span className="bg-[#0B2C63] text-white text-[9px] font-black px-3 py-1 rounded-full italic uppercase tracking-wider">
+        {videoUrl && !showVideo && (
+          <button 
+            onClick={() => setShowVideo(true)}
+            className="absolute inset-0 flex items-center justify-center bg-black/10 group-hover:bg-black/20 transition-all"
+          >
+            <PlayCircle size={48} className="text-white drop-shadow-lg" />
+          </button>
+        )}
+        
+        <div className="absolute top-4 left-4 bg-white/80 backdrop-blur-md p-2 rounded-full shadow-sm">
+           <ShieldCheck size={18} className="text-blue-600" />
+        </div>
+      </div>
+
+      <div className="p-5">
+        <div className="flex justify-between items-center mb-2">
+          <span className="bg-[#0B2C63] text-white text-[8px] font-black px-3 py-1 rounded-full italic uppercase tracking-tighter">
             SABAN LOGISTICS
           </span>
-          <span className="text-slate-400 text-[10px] font-mono font-bold tracking-widest">{sku}</span>
+          <span className="text-slate-400 text-[10px] font-mono font-bold">{sku}</span>
         </div>
         
-        <h3 className="text-xl font-black text-[#0B2C63] dark:text-white mb-1 leading-tight">
+        <h3 className="text-lg font-black text-[#0B2C63] dark:text-white mb-3 leading-tight">
           {name}
         </h3>
 
-        <div className="flex items-center gap-1 text-slate-500 mb-4">
-          <Factory size={12} />
-          <span className="text-[10px] font-bold tracking-tight uppercase">{supplier}</span>
-        </div>
-        
-        <div className="text-3xl font-black text-blue-600 mb-5 flex items-baseline gap-1">
+        {/* מחיר בולט */}
+        <div className="text-3xl font-black text-blue-600 mb-4 flex items-baseline gap-1">
           {price ? (
-            <>
-              <span className="text-lg">₪</span>{price}
-              <span className="text-[10px] text-slate-400 font-bold mr-1">+ מע"מ</span>
-            </>
+            <><span className="text-base">₪</span>{price}</>
           ) : (
             <span className="text-lg text-blue-500/70 italic">פנה להצעת מחיר</span>
           )}
         </div>
 
-        {/* מפרט מהיר */}
+        {/* שדות לחיצים - כל שדה מפעיל את ג'ימיני */}
         <div className="grid grid-cols-2 gap-2 mb-6">
-          <div className="bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-2xl border border-slate-100 dark:border-slate-800 text-center">
-            <Calculator size={14} className="mx-auto text-blue-500 mb-1"/>
-            <div className="text-[9px] font-black text-slate-600 dark:text-slate-400 italic leading-none">כיסוי: {coverage}</div>
-          </div>
-          <div className="bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-2xl border border-slate-100 dark:border-slate-800 text-center">
-            <Clock size={14} className="mx-auto text-orange-500 mb-1"/>
-            <div className="text-[9px] font-black text-slate-600 dark:text-slate-400 italic leading-none">אספקה מהירה</div>
-          </div>
+          
+          {/* זמן ייבוש - לחיץ */}
+          <button 
+            onClick={() => onConsult(product, "זמן ייבוש")}
+            className="flex flex-col items-center bg-slate-50 dark:bg-slate-800/50 p-3 rounded-2xl border border-slate-100 hover:border-blue-300 transition-all"
+          >
+            <Clock size={16} className="text-orange-500 mb-1"/>
+            <span className="text-[10px] text-slate-400">זמן ייבוש</span>
+            <div className="text-[11px] font-black text-slate-700 dark:text-slate-200">{dryingTime}</div>
+          </button>
+
+          {/* כמות כיסוי - לחיץ (מפעיל מחשבון) */}
+          <button 
+            onClick={() => onConsult(product, "חישוב כמויות")}
+            className="flex flex-col items-center bg-slate-50 dark:bg-slate-800/50 p-3 rounded-2xl border border-slate-100 hover:border-blue-300 transition-all"
+          >
+            <Calculator size={16} className="text-blue-500 mb-1"/>
+            <span className="text-[10px] text-slate-400">כיסוי למ"ר</span>
+            <div className="text-[11px] font-black text-slate-700 dark:text-slate-200">{coverage}</div>
+          </button>
+
+          {/* שיטת יישום - לחיץ */}
+          <button 
+            onClick={() => onConsult(product, "שיטת יישום")}
+            className="flex flex-col items-center bg-slate-50 dark:bg-slate-800/50 p-3 rounded-2xl border border-slate-100 hover:border-blue-300 transition-all"
+          >
+            <Wand2 size={16} className="text-purple-500 mb-1"/>
+            <span className="text-[10px] text-slate-400">איך מיישמים?</span>
+            <div className="text-[11px] font-black text-slate-700 dark:text-slate-200">{applicationMethod}</div>
+          </button>
+
+          {/* תכונות נוספות - לחיץ */}
+          <button 
+            onClick={() => onConsult(product, "מידע טכני")}
+            className="flex flex-col items-center bg-slate-50 dark:bg-slate-800/50 p-3 rounded-2xl border border-slate-100 hover:border-blue-300 transition-all"
+          >
+            <Info size={16} className="text-emerald-500 mb-1"/>
+            <span className="text-[10px] text-slate-400">תכונות</span>
+            <div className="text-[11px] font-black text-slate-700 dark:text-slate-200 italic font-mono">מפרט מלא</div>
+          </button>
         </div>
 
+        {/* כפתור הפעולה המרכזי - התייעצות */}
         <motion.button
           whileTap={{ scale: 0.95 }}
-          className="w-full bg-[#0B2C63] hover:bg-blue-800 text-white py-4 rounded-2xl font-black flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20 transition-all group"
+          onClick={() => onConsult(product, "כללי")}
+          className="w-full bg-gradient-to-r from-[#0B2C63] to-blue-800 text-white py-4 rounded-2xl font-black flex items-center justify-center gap-3 shadow-xl mb-3 group"
         >
-          <ShoppingCart size={18} className="group-hover:translate-x-1 transition-transform" /> 
-          הוספה להזמנה
+          <MessageCircle size={20} className="group-hover:rotate-12 transition-transform" /> 
+          התייעצות כאן
         </motion.button>
+
+        <button className="w-full py-2 text-[11px] text-slate-400 font-bold border-t border-slate-100 mt-2">
+           הוספה מהירה לסל +
+        </button>
       </div>
     </motion.div>
   );
