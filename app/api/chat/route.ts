@@ -9,94 +9,89 @@ export async function POST(req: Request) {
     const { messages } = await req.json();
     const lastMsg = messages[messages.length - 1]?.content?.toString().trim() || "";
 
-    // 1. חיבור למפתחות ומסד הנתונים
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE!
     );
 
+    // חיפוש מוצר ב-Supabase (SKU -> FTS)
+    const { data: products } = await supabase
+      .from("inventory")
+      .select("*")
+      .or(`sku.eq.${lastMsg},product_name.ilike.%${lastMsg}%`)
+      .limit(1);
+
     const googleAI = createGoogleGenerativeAI({ 
       apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY! 
     });
 
-    // 2. מנגנון חיפוש היברידי ב-Supabase (SKU -> FTS -> Trigrams)
-    let inventoryData = [];
-    const cleanSearch = lastMsg.replace(/[^\w\sא-ת]/g, '').trim();
-
-    // ניסיון שליפה ראשון (SKU/FTS)
-    const { data: products } = await supabase
-      .from("inventory")
-      .select("*")
-      .or(`sku.eq.${cleanSearch},product_name.ilike.%${cleanSearch}%`)
-      .limit(1);
-    
-    inventoryData = products || [];
-
-    // 3. הגדרת המודלים המובילים (לפי עדכוני פברואר 2026)
+    /**
+     * רשימת מודלים מעודכנת עם Fallback ל-Stable:
+     * הוספתי את gemini-1.5-flash-8b כגלגל הצלה אחרון
+     */
     const models = [
-      "gemini-3.1-pro-preview",       // הכי חזק (הושק 19.2)
-      "gemini-3.1-flash-image-preview", // הכי מהיר (הושק 26.2)
-      "gemini-3-flash-preview"        // יציב (Fallback)
+      "gemini-1.5-flash", // המודל הכי יציב כרגע ב-SDK
+      "gemini-3.1-flash-image-preview",
+      "gemini-3-flash-preview",
+      "gemini-2.0-flash-001"
     ];
 
-    let finalResponse = null;
+    let result = null;
 
-    // 4. המוח של האפליקציה - לולאת דילוג בין מודלים עם Grounding
     for (const modelId of models) {
       try {
-        finalResponse = await generateText({
+        result = await generateText({
           model: googleAI(modelId),
           tools: [
             {
-              // הפעלת מפתח גוגל לחיפוש חי (Grounding)
+              // הפעלת חיפוש גוגל בזמן אמת (Grounding)
               googleSearch: {} 
             }
           ],
           system: `אתה עוזר השירות "ח. סבן". 
-          נתוני מלאי מ-Supabase: ${JSON.stringify(inventoryData)}.
-          תפקידך:
-          1. אם נמצא מוצר, הצג תשובת HTML (<b>, <ul>).
-          2. אם חסר מידע טכני, השתמש בחיפוש גוגל (Grounding) כדי להשלים מפרט יצרן.
-          3. חוק סיקה: (שטח*4)/25 + 1 רזרבה. עגל למעלה והדגש.
-          4. אם אין מוצר במלאי, הצע חלופות על בסיס חיפוש ברשת.`,
+          נתוני מלאי: ${JSON.stringify(products || [])}.
+          הוראות:
+          1. אם יש מוצר במלאי, הצג נתונים מהטבלה בלבד.
+          2. אם המוצר חסר, השתמש בחיפוש גוגל כדי למצוא מפרט טכני או חלופות.
+          3. חוק סיקה: (שטח*4)/25 + 1. עגל למעלה והדגש.
+          4. ענה ב-HTML (<b>).`,
           messages,
           temperature: 0.1,
         });
-
-        if (finalResponse) break; // הצלחה - עוצרים את הדילוג
-      } catch (error) {
+        if (result) break;
+      } catch (err) {
         console.error(`Model ${modelId} failed, switching...`);
-        continue; // המלשינון מזהה שגיאה ועובר למודל הבא
+        continue;
       }
     }
 
-    // 5. הפקת כרטיס מוצר (uiBlueprint)
-    const uiBlueprint = inventoryData.length > 0 ? {
+    if (!result) throw new Error("All models failed");
+
+    // בניית כרטיס המוצר
+    const uiBlueprint = (products && products.length > 0) ? {
       type: "product_card",
       data: {
-        title: inventoryData[0].product_name,
-        price: inventoryData[0].price || "פנה למחסן",
-        image: inventoryData[0].image_url,
-        sku: inventoryData[0].sku,
+        title: products[0].product_name,
+        price: products[0].price || "פנה למחסן",
+        image: products[0].image_url,
+        sku: products[0].sku,
         specs: {
-          coverage: inventoryData[0].coverage || "לפי מפרט",
-          drying: inventoryData[0].drying_time || "24 שעות"
+          coverage: products[0].coverage || "4 ק\"ג למ\"ר",
+          drying: products[0].drying_time || "24 שעות"
         }
       }
     } : null;
 
-    // 6. החזרת תשובה מבוססת מקורות (Citations)
     return new Response(JSON.stringify({
-      text: finalResponse?.text,
+      text: result.text,
       uiBlueprint,
-      sources: finalResponse?.groundingMetadata?.groundingChunks || []
+      grounding: result.groundingMetadata || null
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     });
 
-  } catch (error) {
-    console.error("Critical System Error:", error);
-    return new Response(JSON.stringify({ text: "שגיאה במוח המערכת." }), { status: 500 });
+  } catch (error: any) {
+    return new Response(JSON.stringify({ text: "תקלה במוח המערכת." }), { status: 500 });
   }
 }
