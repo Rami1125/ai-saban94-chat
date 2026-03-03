@@ -20,15 +20,10 @@ export async function POST(req: Request) {
   try {
     const { messages, inventory } = await req.json();
 
-    // הגדרת הספק עם המפתח שנבחר מהפול
     const google = createGoogleGenerativeAI({
       apiKey: getApiKey(),
     });
 
-    /**
-     * שמות מודלים תואמים למניעת שגיאת 404
-     * אנחנו משתמשים ב-gemini-1.5-flash כברירת מחדל יציבה
-     */
     const model = google("gemini-1.5-flash");
 
     console.log(`[מלשינון] 🤖 מריץ שאילתה מול gemini-1.5-flash`);
@@ -38,7 +33,7 @@ export async function POST(req: Request) {
       messages,
       system: `
         אתה "סבן AI", עוזר המכירות של "ח. סבן חומרי בניין".
-        מלאי זמין: ${JSON.stringify(inventory)}
+        מלאי זמין: ${JSON.stringify(inventory || [])}
         
         חוקי עבודה:
         1. חוק סיקה: (שטח * 4) / 25 + 1 רזרבה. הצג תמיד את החישוב.
@@ -46,22 +41,23 @@ export async function POST(req: Request) {
         3. אמינות: אם מוצר לא במלאי, השתמש בכלי ה-Google Search.
       `,
       tools: {
-        // כלי לחיפוש מוצרים במלאי (אופציונלי אם המלאי גדול)
         get_product_info: tool({
-          description: "קבלת מידע מפורט על מוצר מהמלאי",
+          description: "קבלת מידע מפורט על מוצר מהמלאי (שם, מחיר, מק\"ט)",
+          // תיקון כאן: הסרנו את ה- .description() מה-Zod string
           parameters: z.object({
-            query: z.string().description("שם המוצר או מק\"ט"),
+            query: z.string(), 
           }),
           execute: async ({ query }) => {
-            const item = inventory.find((i: any) => 
-              i.name?.toLowerCase().includes(query.toLowerCase()) || 
+            const items = inventory || [];
+            const item = items.find((i: any) => 
+              i.product_name?.toLowerCase().includes(query.toLowerCase()) || 
               i.sku?.toLowerCase().includes(query.toLowerCase())
             );
             return item || { error: "המוצר לא נמצא במלאי הפנימי" };
           },
         }),
       },
-      maxSteps: 5, // מאפשר למודל להשתמש בכלים ולחזור עם תשובה
+      maxSteps: 5,
     });
 
     return result.toDataStreamResponse();
@@ -69,7 +65,7 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error(`[מלשינון] ❌ שגיאה ב-Chat Route:`, error.message);
     return new Response(
-      JSON.stringify({ error: "שגיאת שרת, המלשינון בודק את המפתחות." }),
+      JSON.stringify({ error: "שגיאת שרת במערכת הכלים." }),
       { status: 500 }
     );
   }
