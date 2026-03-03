@@ -1,19 +1,35 @@
-"use client";
-import { motion, AnimatePresence } from "framer-motion";
-import { ProductCard } from "./ProductCard"; // וודא שזה בדיוק שם הקובץ
-
-export function MessageList({ messages, onConsult }: { messages: any[], onConsult: any }) {
-  return (
-    <div className="space-y-4">
-      {messages.map((m, i) => (
-        <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-          <div className={`p-4 rounded-2xl ${m.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white border'}`}>
-            <div dangerouslySetInnerHTML={{ __html: m.content }} />
-            {/* אם יש מוצר בהודעה, נציג כרטיס */}
-            {m.product && <ProductCard product={m.product} onConsult={onConsult} />}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
+--- a/components/message-list.tsx
++++ b/components/message-list.tsx
+@@
+-export function MessageList({ messages, onConsult, isLoading }: any) {
++import { useMemo } from "react";
++export function MessageList({ messages, onConsult, isLoading }: any) {
++  // אם מישהו העביר onConsult לא-פונקציה, לא נפיל את האפליקציה
++  const safeOnConsult = useMemo(
++    () => (typeof onConsult === "function" ? onConsult : (p: any, t: string) => {
++      console.error("❌ MessageList: onConsult אינו פונקציה!", { onConsult, product: p, type: t });
++    }),
++    [onConsult]
++  );
+   return (
+     <div>
+       {messages.map((m, i) => (
+         <div key={i}>
+           {/* ... תוכן ההודעה ... */}
+-          {m.product && (
+-            <ProductCard 
+-              product={m.product} 
+-              onConsult={onConsult} // חיבור הצינור
+-            />
+-          )}
++          {m?.product && typeof m.product === "object" && m.product.product_name && (
++            <ProductCard
++              product={m.product}
++              onConsult={safeOnConsult}
++            />
++          )}
+         </div>
+       ))}
+     </div>
+   );
+ }
