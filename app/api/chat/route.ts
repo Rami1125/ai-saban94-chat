@@ -6,89 +6,97 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json().catch(() => ({}));
-    const messages = body.messages || [];
+    const { messages } = await req.json();
+    const lastMsg = messages[messages.length - 1]?.content?.toString().trim() || "";
 
-    const geminiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY;
+    // 1. חיבור למפתחות ומסד הנתונים
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE!
+    );
 
-    if (!geminiKey || !supabaseUrl || !supabaseKey) {
-      return new Response(JSON.stringify({ text: "שגיאת תצורה בשרת." }), { status: 500 });
-    }
+    const googleAI = createGoogleGenerativeAI({ 
+      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY! 
+    });
 
-    const supabase = createClient(supabaseUrl, supabaseKey);
-    const lastMsg = (messages[messages.length - 1]?.content || "").toString().trim();
+    // 2. מנגנון חיפוש היברידי ב-Supabase (SKU -> FTS -> Trigrams)
+    let inventoryData = [];
+    const cleanSearch = lastMsg.replace(/[^\w\sא-ת]/g, '').trim();
+
+    // ניסיון שליפה ראשון (SKU/FTS)
+    const { data: products } = await supabase
+      .from("inventory")
+      .select("*")
+      .or(`sku.eq.${cleanSearch},product_name.ilike.%${cleanSearch}%`)
+      .limit(1);
     
-    let products: any[] = [];
-    if (lastMsg) {
-      const searchWord = lastMsg.split(' ').filter((w: string) => w.length > 2)[0] || lastMsg;
-      const { data } = await supabase
-        .from("inventory")
-        .select("*")
-        .or(`product_name.ilike.%${searchWord}%,sku.ilike.%${searchWord}%`)
-        .limit(1);
-      if (data) products = data;
-    }
+    inventoryData = products || [];
 
-    const googleAI = createGoogleGenerativeAI({ apiKey: geminiKey });
-    
-    /**
-     * עדכון מודלים - פברואר 2026:
-     * gemini-3.1-flash-image-preview (הכי מהיר)
-     * gemini-3.1-pro-preview (הכי חזק)
-     * gemini-3-flash-preview (יציב)
-     */
+    // 3. הגדרת המודלים המובילים (לפי עדכוני פברואר 2026)
     const models = [
-      "gemini-3.1-flash-image-preview",
-      "gemini-3.1-pro-preview",
-      "gemini-3-flash-preview"
+      "gemini-3.1-pro-preview",       // הכי חזק (הושק 19.2)
+      "gemini-3.1-flash-image-preview", // הכי מהיר (הושק 26.2)
+      "gemini-3-flash-preview"        // יציב (Fallback)
     ];
-    
-    let finalResponse = "";
+
+    let finalResponse = null;
+
+    // 4. המוח של האפליקציה - לולאת דילוג בין מודלים עם Grounding
     for (const modelId of models) {
       try {
-        const { text } = await generateText({
+        finalResponse = await generateText({
           model: googleAI(modelId),
-          system: `אתה מנהל המכירות של "ח. סבן". 
-          מידע מהטבלה: ${JSON.stringify(products)}.
-          הנחיות:
-          1. ענה ב-HTML (תגיות <b>).
-          2. חוק סיקה: (שטח*4)/25 + 1. עגל למעלה והדגש.
-          3. אם יש מוצר, ציין שפרטיו מופיעים בכרטיס למטה.`,
+          tools: [
+            {
+              // הפעלת מפתח גוגל לחיפוש חי (Grounding)
+              googleSearch: {} 
+            }
+          ],
+          system: `אתה עוזר השירות "ח. סבן". 
+          נתוני מלאי מ-Supabase: ${JSON.stringify(inventoryData)}.
+          תפקידך:
+          1. אם נמצא מוצר, הצג תשובת HTML (<b>, <ul>).
+          2. אם חסר מידע טכני, השתמש בחיפוש גוגל (Grounding) כדי להשלים מפרט יצרן.
+          3. חוק סיקה: (שטח*4)/25 + 1 רזרבה. עגל למעלה והדגש.
+          4. אם אין מוצר במלאי, הצע חלופות על בסיס חיפוש ברשת.`,
           messages,
-          temperature: 0.2,
+          temperature: 0.1,
         });
-        if (text) { finalResponse = text.trim(); break; }
-      } catch (e) {
-        console.error(`Model ${modelId} failed, trying next...`);
-        continue;
+
+        if (finalResponse) break; // הצלחה - עוצרים את הדילוג
+      } catch (error) {
+        console.error(`Model ${modelId} failed, switching...`);
+        continue; // המלשינון מזהה שגיאה ועובר למודל הבא
       }
     }
 
-    const uiBlueprint = products.length > 0 ? {
+    // 5. הפקת כרטיס מוצר (uiBlueprint)
+    const uiBlueprint = inventoryData.length > 0 ? {
       type: "product_card",
       data: {
-        title: products[0].product_name,
-        price: products[0].price || "פנה למחסן",
-        image: products[0].image_url || null,
-        sku: products[0].sku,
+        title: inventoryData[0].product_name,
+        price: inventoryData[0].price || "פנה למחסן",
+        image: inventoryData[0].image_url,
+        sku: inventoryData[0].sku,
         specs: {
-          coverage: products[0].coverage || "4 ק\"ג למ\"ר",
-          drying: products[0].drying_time || "24 שעות"
+          coverage: inventoryData[0].coverage || "לפי מפרט",
+          drying: inventoryData[0].drying_time || "24 שעות"
         }
       }
     } : null;
 
-    return new Response(JSON.stringify({ 
-      text: finalResponse || "<b>סליחה, המערכת בעומס. נסה שנית.</b>", 
-      uiBlueprint 
-    }), { 
+    // 6. החזרת תשובה מבוססת מקורות (Citations)
+    return new Response(JSON.stringify({
+      text: finalResponse?.text,
+      uiBlueprint,
+      sources: finalResponse?.groundingMetadata?.groundingChunks || []
+    }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     });
 
-  } catch (error: any) {
-    return new Response(JSON.stringify({ text: "שגיאה פנימית." }), { status: 500 });
+  } catch (error) {
+    console.error("Critical System Error:", error);
+    return new Response(JSON.stringify({ text: "שגיאה במוח המערכת." }), { status: 500 });
   }
 }
