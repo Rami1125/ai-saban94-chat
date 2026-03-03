@@ -9,15 +9,11 @@ export function ChatManager() {
 
   const { messages, append, isLoading } = useChat({
     api: "/api/chat",
-    // הערה: נשמור את ה-body הכללי אבל נחזק אותו ב-append
-    body: { selectedProduct },
   });
 
-  // התיקון הקריטי לבאג האסינכרוני:
+  // פונקציית הליבה שמחברת את הכרטיס לצ'אט
   const handleConsult = (product: any, type: string) => {
     setSelectedProduct(product);
-    
-    // שליחת המוצר ישירות בבקשה הנוכחית כדי לעקוף את הדיליי של ה-State
     append(
       { 
         role: "user", 
@@ -31,11 +27,12 @@ export function ChatManager() {
 
   return (
     <div className="flex flex-col h-screen bg-slate-50" dir="rtl">
-      <main className="flex-1 overflow-y-auto p-4 scroll-smooth">
-        {/* חשוב: העברת handleConsult כפונקציה ולא כקריאה לפונקציה */}
+      <main className="flex-1 overflow-y-auto p-4">
+        {/* חיבור קריטי: העברת הפונקציה לרשימת ההודעות */}
         <MessageList messages={messages} onConsult={handleConsult} />
       </main>
-      <footer className="p-4 bg-white border-t z-10">
+      <footer className="p-4 bg-white border-t">
+        {/* חיבור קריטי: העברת הפונקציה לחיפוש הציף */}
         <Composer 
           onSendMessage={(msg) => append({ role: 'user', content: msg }, { body: { selectedProduct } })}
           onSelectProduct={(p) => handleConsult(p, "התייעצות כללית")}
