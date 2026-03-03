@@ -1,72 +1,84 @@
-import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { generateText, ToolInvocation } from "ai";
 
-// 1. הגדרת הפונקציה למודל (ה"שריר" של השליפה)
-const getProductDetailsDeclaration: FunctionDeclaration = {
-  name: "get_product_details",
-  description: "שליפת נתונים מלאים על מוצר מהמחסן של ח. סבן לפי שם או מק\"ט",
-  parameters: {
-    type: Type.OBJECT,
-    properties: {
-      query: {
-        type: Type.STRING,
-        description: "שם המוצר או המק\"ט לחיפוש",
-      },
-    },
-    required: ["query"],
-  },
-};
+/**
+ * פונקציה לבחירת מפתח רנדומלי מתוך המאגר
+ * המלשינון מדפיס ללוג בדיוק באיזה מפתח המערכת משתמשת
+ */
+function getApiKeyFromPool(): string {
+  const pool = process.env.GOOGLE_AI_KEY_POOL;
+  if (!pool) return process.env.GOOGLE_GENERATIVE_AI_API_KEY || "";
+
+  const keys = pool.split(",").map(k => k.trim()).filter(Boolean);
+  const randomIndex = Math.floor(Math.random() * keys.length);
+  
+  console.log(`[מלשינון] 🔑 משתמש במפתח מספר ${randomIndex + 1} מתוך ${keys.length}`);
+  return keys[randomIndex];
+}
 
 const SYSTEM_PROMPT = `
-אתה "סבן AI", מנהל המלאי של "ח. סבן חומרי בניין".
+אתה "סבן AI", עוזר המכירות הבכיר של "ח. סבן חומרי בניין". 
+תפקידך: לספק מידע טכני, לבצע חישובי כמויות ולעזור במציאת מוצרים.
+
 חוקי עבודה:
-1. אל תנחש נתונים טכניים. השתמש תמיד בפונקציה get_product_details.
-2. הצג את התוצאות בפורמט HTML נקי: <b>שם מוצר</b>, <small>מק"ט</small>, ₪מחיר.
-3. חוק סיקה: אם המוצר הוא חומר איטום וצוין שטח, בצע: (שטח * 4) / 25 + 1 רזרבה. עגל למעלה והדגש.
-4. אם המוצר לא נמצא במחסן, השתמש בכלי ה-Google Search כדי למצוא חלופות טכניות.
+1. חוק סיקה: שטח במ"ר -> (שטח * 4) / 25 + 1 רזרבה. הצג תמיד את החישוב.
+2. מלאי: השתמש בנתונים שהוזרקו לך. אם חסר מידע, השתמש בחיפוש גוגל.
+3. עיצוב: ענה ב-HTML נקי (<b>, <br>, <ul>, <li>). אל תשתמש ב-Markdown (**).
+4. כרטיס מוצר: אם זיהית מוצר, ציין זאת כדי שהמערכת תציג כרטיס ויזואלי.
 `;
 
-export async function askSabanAI(userPrompt: string, inventory: any[]) {
-  const genAI = new GoogleGenAI(process.env.GEMINI_API_KEY!);
-  const model = genAI.getGenerativeModel({
-    model: "gemini-1.5-flash-latest",
-    tools: [
-      { functionDeclarations: [getProductDetailsDeclaration] },
-      { googleSearch: {} }
-    ],
-  });
-
-  const chat = model.startChat({
-    systemInstruction: SYSTEM_PROMPT,
-  });
-
-  // שליחת הבקשה הראשונית
-  let result = await chat.sendMessage(userPrompt);
-  let response = result.response;
-
-  // בדיקה אם המודל רוצה לקרוא לפונקציה (שליפה מהמלאי)
-  const call = response.functionCalls()?.[0];
+export async function askSabanAI(messages: any[], inventory: any[]) {
+  const apiKey = getApiKeyFromPool();
   
-  if (call && call.name === "get_product_details") {
-    const searchQuery = call.args.query.toLowerCase();
-    
-    // חיפוש הלוגיקה בתוך המערך שנשלח (המחסן)
-    const product = inventory.find(item => 
-      item.product_name?.toLowerCase().includes(searchQuery) || 
-      item.sku?.toLowerCase().includes(searchQuery)
-    );
+  // הגדרת הספק של גוגל עם המפתח שנבחר
+  const google = createGoogleGenerativeAI({
+    apiKey: apiKey,
+  });
 
-    // שליחת התוצאה חזרה למודל כדי שיגמר את התשובה
-    result = await chat.sendMessage([{
-      functionResponse: {
-        name: "get_product_details",
-        response: product || { error: "המוצר לא נמצא במלאי הפנימי" }
-      }
-    }]);
-    response = result.response;
+  /**
+   * רשימת מודלים תואמת למרץ 2026
+   * משתמשים בשמות נקיים למניעת שגיאות 404
+   */
+  const models = [
+    "gemini-1.5-flash", 
+    "gemini-2.0-flash-exp", 
+    "gemini-1.5-pro"
+  ];
+
+  let lastError = null;
+
+  // לולאת המלשינון לדילוג בין מודלים במקרה של תקלה
+  for (const modelId of models) {
+    try {
+      console.log(`[מלשינון] 🤖 מנסה להריץ שאילתה עם מודל: ${modelId}`);
+
+      const result = await generateText({
+        model: google(modelId),
+        system: `${SYSTEM_PROMPT} \n מלאי נוכחי: ${JSON.stringify(inventory)}`,
+        messages,
+        tools: {
+          googleSearch: {
+            description: "חיפוש בגוגל למידע טכני נוסף על חומרי בניין",
+            parameters: {}, 
+          },
+        },
+        maxSteps: 5, // מאפשר למודל לבצע חיפוש ולחזור עם תשובה
+      });
+
+      console.log(`[מלשינון] ✅ הצלחה עם מודל: ${modelId}`);
+      
+      return {
+        text: result.text,
+        modelUsed: modelId,
+        sources: result.steps?.[0]?.text || ""
+      };
+
+    } catch (err: any) {
+      lastError = err;
+      console.error(`[מלשינון] ❌ מודל ${modelId} נכשל: ${err.message}`);
+      continue; // עובר למודל הבא ברשימה
+    }
   }
 
-  return {
-    text: response.text(),
-    grounding: response.groundingMetadata
-  };
+  throw new Error(`כל המודלים נכשלו. שגיאה אחרונה: ${lastError?.message}`);
 }
