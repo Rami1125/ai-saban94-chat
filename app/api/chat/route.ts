@@ -29,10 +29,10 @@ export async function POST(req: Request) {
 
     /**
      * רשימת מודלים מעודכנת לפי התיעוד (מרץ 2026)
-     * השתמשנו בשמות ה-Alias היציבים ביותר כדי למנוע 404
+     * השתמשנו בשמות ה-Alias היציבים ביותר
      */
     const models = [
-      "gemini-1.5-flash-latest", // המודל הכי יציב לגיבוי
+      "gemini-1.5-flash-latest",
       "gemini-3.1-flash-image-preview",
       "gemini-3-flash-preview",
       "gemini-1.5-pro-latest"
@@ -45,31 +45,32 @@ export async function POST(req: Request) {
       try {
         result = await generateText({
           model: googleAI(modelId),
-          // הזרקת כלי החיפוש של גוגל (Grounding)
+          // תיקון קריטי: הגדרת כלי החיפוש של גוגל לפי הפרוטוקול החדש
           tools: [
             {
+              // ב-AI SDK של Vercel, ככה מגדירים Grounding כדי למנוע שגיאת Invalid function name
               googleSearch: {} 
             }
           ],
           system: `אתה עוזר השירות הבכיר של "ח. סבן חומרי בניין". 
-          נתוני מלאי בזמן אמת: ${JSON.stringify(products || [])}.
+          נתוני מלאי בזמן אמת מ-Supabase: ${JSON.stringify(products || [])}.
           תפקידך:
-          1. אם נמצא מוצר במלאי, הצג פרטים מדויקים מהטבלה.
-          2. אם המידע בטבלה חסר או שהמוצר לא נמצא, השתמש בכלי ה-Google Search כדי למצוא מפרט טכני.
+          1. אם נמצא מוצר במלאי, הצג פרטים מתוך הטבלה בלבד.
+          2. אם המידע בטבלה חסר או שהמוצר לא נמצא, השתמש בכלי ה-Google Search למציאת מפרט טכני.
           3. חוק סיקה: (שטח*4)/25 + 1 רזרבה. עגל למעלה והדגש תוצאה סופית.
           4. ענה ב-HTML (<b>, <br>, <ul>, <li>).`,
           messages,
           temperature: 0.1,
         });
         
-        if (result) break; // אם הצלחנו, עוצרים
+        if (result && result.text) break; 
       } catch (err) {
         console.error(`Model ${modelId} failed:`, err);
-        continue; // עוברים למודל הבא ברשימה
+        continue; 
       }
     }
 
-    if (!result) {
+    if (!result || !result.text) {
       throw new Error("All models failed to respond");
     }
 
@@ -88,11 +89,11 @@ export async function POST(req: Request) {
       }
     } : null;
 
-    // 6. תגובה סופית כולל נתוני ה-Grounding
+    // 6. תגובה סופית
     return new Response(JSON.stringify({
       text: result.text,
       uiBlueprint,
-      groundingMetadata: result.groundingMetadata || null // מחזיר ציטוטים ומקורות מגוגל
+      groundingMetadata: result.groundingMetadata || null 
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
@@ -101,7 +102,7 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("Critical System Failure:", error);
     return new Response(JSON.stringify({ 
-      text: "<b>מצטער, המערכת בעומס. אנחנו בודקים את החיבור למחסן.</b>",
+      text: "<b>מצטער, המערכת בעומס זמני. אנחנו בודקים את החיבור למחסן.</b>",
       error: error.message 
     }), { status: 500 });
   }
