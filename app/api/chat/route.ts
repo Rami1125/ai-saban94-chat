@@ -1,5 +1,4 @@
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { generateText } from "ai";
+// app/api/chat/route.ts
 
 function getApiKey() {
   const pool = process.env.GOOGLE_AI_KEY_POOL;
@@ -13,42 +12,60 @@ function getApiKey() {
 export async function POST(req: Request) {
   try {
     const { messages, inventory } = await req.json();
+    const apiKey = getApiKey();
 
-    const google = createGoogleGenerativeAI({
-      apiKey: getApiKey(),
-      baseURL: "https://generativelanguage.googleapis.com/v1",
-    });
+    // בניית ה-System Instruction במבנה האובייקטים המדויק ש-v1 דורש
+    const systemInstruction = {
+      role: "system",
+      parts: [
+        {
+          text: `אתה "סבן AI", עוזר המכירות של "ח. סבן חומרי בניין". 
+          מלאי נוכחי: ${JSON.stringify(inventory || [])}.
+          חוק סיקה: (שטח * 4) / 25 + 1 רזרבה. הצג תמיד את החישוב בבירור.
+          ענה ב-HTML נקי (<b>, <ul>, <li>). ללא מרקדאון (**).`
+        }
+      ]
+    };
 
-    // שימוש במנוע gemini-3-flash-preview המעודכן
-    const model = google("gemini-3-flash-preview");
+    // המרת הודעות ה-Chat למבנה שגוגל מכירה (role ו-parts)
+    const contents = messages.map((m: any) => ({
+      role: m.role === "user" ? "user" : "model",
+      parts: [{ text: m.content }]
+    }));
 
-    console.log(`[מלשינון] 🚀 מריץ שאילתה מול gemini-3-flash-preview (API v1)`);
+    console.log(`[מלשינון] 🚀 שולח בקשה ידנית ל-gemini-3-flash-preview (v1)`);
 
-    // הנחיות המערכת שמוזרקות כחלק מהשיחה למניעת שגיאות Payload
-    const sabanSystemPrompt = `
-      אתה "סבן AI", עוזר המכירות של "ח. סבן חומרי בניין".
-      מלאי נוכחי: ${JSON.stringify(inventory || [])}
-      חוק סיקה: (שטח * 4) / 25 + 1 רזרבה. הצג תמיד את החישוב בבירור.
-      פורמט: ענה ב-HTML נקי (<b>, <ul>, <li>). ללא מרקדאון (**).
-      אם זיהית מוצר כמו סיקה 107, שלוף את המחיר והמפרט שלו מהמלאי.
-    `;
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1/models/gemini-3-flash-preview:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction,
+          contents,
+          generationConfig: {
+            temperature: 0.4,
+            maxOutputTokens: 1024,
+          }
+        })
+      }
+    );
 
-    const result = await generateText({
-      model: model,
-      // פתרון הקסם: דוחפים את ה-System Instruction לתוך מערך ההודעות כ-role: 'system'
-      messages: [
-        { role: 'system', content: sabanSystemPrompt },
-        ...messages
-      ],
-      // הסרנו את ה-tools באופן זמני כדי להבטיח חיבור נקי ויציב ב-v1
-    });
+    const data = await response.json();
 
-    return Response.json({ text: result.text });
+    if (data.error) {
+      throw new Error(data.error.message);
+    }
+
+    // חילוץ התשובה מהמבנה של גוגל
+    const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || "סליחה, לא הצלחתי לעבד את התשובה.";
+
+    return Response.json({ text: aiText });
 
   } catch (error: any) {
-    console.error(`[מלשינון] ❌ שגיאה ב-API v1:`, error.message);
+    console.error(`[מלשינון] ❌ שגיאה בחיבור ישיר:`, error.message);
     return Response.json(
-      { error: "תקלה בתקשורת מול גוגל. וודא שהמפתחות ב-Vercel תקינים." },
+      { error: "תקלה בחיבור למנוע Gemini 3. וודא שהמפתחות תקינים." },
       { status: 500 }
     );
   }
