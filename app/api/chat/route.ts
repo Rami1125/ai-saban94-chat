@@ -1,35 +1,75 @@
-// app/api/chat/route.ts
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { generateText } from "ai";
-import { getGeminiKey } from "@/lib/key-manager"; // ייבוא המנהל שיצרנו
+import { streamText, tool } from "ai";
+import { z } from "zod";
+
+/**
+ * מנגנון המלשינון לשליפת מפתח תקין מהמאגר
+ */
+function getApiKey() {
+  const pool = process.env.GOOGLE_AI_KEY_POOL;
+  if (!pool) return process.env.GOOGLE_GENERATIVE_AI_API_KEY || "";
+  
+  const keys = pool.split(",").map(k => k.trim()).filter(Boolean);
+  const randomIndex = Math.floor(Math.random() * keys.length);
+  
+  console.log(`[מלשינון] 🔑 נבחר מפתח מספר ${randomIndex + 1} מתוך ${keys.length}`);
+  return keys[randomIndex];
+}
 
 export async function POST(req: Request) {
   try {
-    const { messages } = await req.json();
+    const { messages, inventory } = await req.json();
 
-    // שליפת מפתח רנדומלי מהפול
-    const apiKey = getGeminiKey();
-    
-    const googleAI = createGoogleGenerativeAI({ 
-      apiKey: apiKey 
+    // הגדרת הספק עם המפתח שנבחר מהפול
+    const google = createGoogleGenerativeAI({
+      apiKey: getApiKey(),
     });
 
-const models = [
-      "gemini-1.5-flash",      // השם הכי יציב ב-Vercel SDK
-      "gemini-2.0-flash-exp",  // אם אתה רוצה את הגרסה החדשה
-      "gemini-1.5-pro"
-    ];
-      system: "אתה עוזר השירות של ח. סבן...",
+    /**
+     * שמות מודלים תואמים למניעת שגיאת 404
+     * אנחנו משתמשים ב-gemini-1.5-flash כברירת מחדל יציבה
+     */
+    const model = google("gemini-1.5-flash");
+
+    console.log(`[מלשינון] 🤖 מריץ שאילתה מול gemini-1.5-flash`);
+
+    const result = await streamText({
+      model: model,
       messages,
-      // כאן ניתן להוסיף לוגיקה שמנסה שוב עם מפתח אחר אם הראשון נכשל (429)
+      system: `
+        אתה "סבן AI", עוזר המכירות של "ח. סבן חומרי בניין".
+        מלאי זמין: ${JSON.stringify(inventory)}
+        
+        חוקי עבודה:
+        1. חוק סיקה: (שטח * 4) / 25 + 1 רזרבה. הצג תמיד את החישוב.
+        2. פורמט: ענה ב-HTML נקי (<b>, <ul>, <li>). ללא מרקדאון (**).
+        3. אמינות: אם מוצר לא במלאי, השתמש בכלי ה-Google Search.
+      `,
+      tools: {
+        // כלי לחיפוש מוצרים במלאי (אופציונלי אם המלאי גדול)
+        get_product_info: tool({
+          description: "קבלת מידע מפורט על מוצר מהמלאי",
+          parameters: z.object({
+            query: z.string().description("שם המוצר או מק\"ט"),
+          }),
+          execute: async ({ query }) => {
+            const item = inventory.find((i: any) => 
+              i.name?.toLowerCase().includes(query.toLowerCase()) || 
+              i.sku?.toLowerCase().includes(query.toLowerCase())
+            );
+            return item || { error: "המוצר לא נמצא במלאי הפנימי" };
+          },
+        }),
+      },
+      maxSteps: 5, // מאפשר למודל להשתמש בכלים ולחזור עם תשובה
     });
 
     return result.toDataStreamResponse();
 
   } catch (error: any) {
-    console.error("Chat Error:", error);
+    console.error(`[מלשינון] ❌ שגיאה ב-Chat Route:`, error.message);
     return new Response(
-      JSON.stringify({ error: "המערכת עמוסה, נסה שוב בעוד רגע." }), 
+      JSON.stringify({ error: "שגיאת שרת, המלשינון בודק את המפתחות." }),
       { status: 500 }
     );
   }
