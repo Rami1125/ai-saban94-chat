@@ -6,103 +6,93 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
-    const { messages } = await req.json();
-    const lastMsg = messages[messages.length - 1]?.content?.toString().trim() || "";
+    // בדיקה שהגוף קיים למניעת קריסה
+    const body = await req.json().catch(() => ({}));
+    const messages = body.messages || [];
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE!
-    );
+    if (messages.length === 0) {
+      return new Response(JSON.stringify({ text: "שלום! סבן AI מוכן לעזור לך." }), { status: 200 });
+    }
 
-    // --- שלב 1: זיהוי שטח לחישוב "חוק סיקה" ---
-    const areaMatch = lastMsg.match(/(\d+(?:\.\d+)?)\s*(?:מ"ר|sqm|m2|m\^2)/i);
-    const areaM2 = areaMatch ? parseFloat(areaMatch[1]) : null;
+    // אימות מפתחות - שים לב לשמות המשתנים ב-Vercel!
+    const geminiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    // --- שלב 2: מנגנון חיפוש היברידי (The Investigator) ---
+    if (!geminiKey || !supabaseUrl || !supabaseKey) {
+      console.error("Missing Environment Variables");
+      return new Response(JSON.stringify({ text: "שגיאה בתצורת השרת - חסרים מפתחות אימות." }), { status: 500 });
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const lastMsg = (messages[messages.length - 1]?.content || "").toString().trim();
+    
     let products: any[] = [];
     
-    // ניקוי ראשוני לחיפוש
-    const cleanSearch = lastMsg.replace(/(גימני|אחי|שלום|צריך|כמה|עולה|תביא|לי|בבקשה)/g, "").trim();
-    const isSkuPattern = /^[A-Z0-9-]{3,}$/i.test(cleanSearch);
-
-    // 1. מסלול SKU (Exact/Prefix)
-    if (isSkuPattern) {
-      const { data } = await supabase
+    // חיפוש חכם ב-Supabase
+    if (lastMsg) {
+      const searchWord = lastMsg.split(' ').filter((w: string) => w.length > 2)[0] || lastMsg;
+      const { data, error } = await supabase
         .from("inventory")
         .select("*")
-        .or(`sku.eq.${cleanSearch},sku.ilike.${cleanSearch.replace(/-/g, "")}%`)
+        .or(`product_name.ilike.%${searchWord}%,sku.ilike.%${searchWord}%`)
         .limit(1);
-      if (data?.length) products = data;
+      
+      if (!error && data) products = data;
     }
 
-    // 2. מסלול FTS (Full Text Search) - אם לא נמצא SKU
-    if (products.length === 0) {
-      const { data } = await supabase
-        .from("inventory")
-        .select("*")
-        .textSearch("search_tsv", cleanSearch, { config: "simple", type: "websearch" })
-        .limit(1);
-      if (data?.length) products = data;
-    }
-
-    // 3. מסלול Trigrams / Fuzzy (אם עדיין אין תוצאה)
-    if (products.length === 0) {
-      const { data } = await supabase
-        .from("inventory")
-        .select("*")
-        .or(`product_name.ilike.%${cleanSearch}%,description.ilike.%${cleanSearch}%`)
-        .limit(1);
-      if (data?.length) products = data;
-    }
-
-    // --- שלב 3: הפעלת המוח (Gemini 3.1 Flash) ---
-    const googleAI = createGoogleGenerativeAI({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY! });
+    const googleAI = createGoogleGenerativeAI({ apiKey: geminiKey });
     
-    // חישוב חוק סיקה אם יש שטח
-    let sikaLawResult = "";
-    if (areaM2) {
-      const units = Math.ceil((areaM2 * 4) / 25 + 1);
-      sikaLawResult = `עבור <b>${areaM2} מ"ר</b> ⇒ <b>${units} יח'</b>`;
+    // שימוש במודלים קיימים ויציבים למניעת 500
+    const models = ["gemini-1.5-flash", "gemini-1.5-pro"];
+    
+    let finalResponse = "";
+    for (const modelId of models) {
+      try {
+        const { text } = await generateText({
+          model: googleAI(modelId),
+          system: `אתה מנהל המכירות של "ח. סבן חומרי בניין". 
+          הנחיות קריטיות:
+          1. השתמש במידע מהטבלה בלבד: ${JSON.stringify(products)}.
+          2. ענה בפורמט HTML נקי (<b> בלבד).
+          3. אם נמצא מוצר, ציין: "הנה הפרטים הטכניים של המוצר:".
+          4. חוק סיקה: (שטח*4)/25 + 1 רזרבה. עגל למעלה והדגש תוצאה.`,
+          messages,
+          temperature: 0.2,
+        });
+        if (text) { finalResponse = text.trim(); break; }
+      } catch (e) { 
+        console.error(`Model ${modelId} failed:`, e);
+        continue; 
+      }
     }
 
-    const { text } = await generateText({
-      model: googleAI("gemini-1.5-flash"), // מודל יציב ל-Logic
-      system: `אתה עוזר שירות "ח. סבן". 
-      נתוני מוצר מ-Supabase: ${JSON.stringify(products)}.
-      הנחיות פלט:
-      1. השתמש ב-HTML בלבד: <b>, <ul>, <li>, <br>.
-      2. אם נמצא מוצר (${products.length > 0}), הצג שם ו-SKU מודגשים.
-      3. אם יש חישוב שטח, הצג: <b>חוק סיקה:</b> ${sikaLawResult}.
-      4. אם לא נמצא מוצר, הצע 2 וריאנטים לחיפוש (למשל עם/בלי מקף).
-      5. אל תמציא מחירים. אם חסר מחיר, כתוב "פנה להצעת מחיר".`,
-      messages,
-      temperature: 0.1
-    });
-
-    // --- שלב 4: הפקת JSON כרטיס מוצר (uiBlueprint) ---
+    // בניית ה-uiBlueprint לעיצוב הויזואלי
     const uiBlueprint = products.length > 0 ? {
       type: "product_card",
       data: {
         title: products[0].product_name,
-        price: products[0].price || null,
+        price: products[0].price || "פנה למחסן",
         image: products[0].image_url || null,
         sku: products[0].sku,
-        supplier: products[0].supplier_name || "ח. סבן",
         specs: {
-          coverage: products[0].coverage || products[0].coverage_per_sqm || "לפי מפרט",
-          drying: products[0].drying_time || "24 שעות",
-          method: products[0].application_method || "הברשה/מאלאג'"
+          coverage: products[0].coverage || "4 ק\"ג למ\"ר",
+          drying: products[0].drying_time || "24 שעות"
         }
       }
     } : null;
 
-    return Response.json({ 
-      text: text.trim(), 
-      uiBlueprint,
-      debug: { searchType: products.length > 0 ? "Found" : "Not Found", cleanSearch } 
+    return new Response(JSON.stringify({ 
+      text: finalResponse || "מצטער, לא הצלחתי לעבד את הבקשה.", 
+      products,
+      uiBlueprint 
+    }), { 
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
     });
 
   } catch (error: any) {
-    return Response.json({ text: "שגיאה במערכת החיפוש." }, { status: 500 });
+    console.error("Critical API Error:", error);
+    return new Response(JSON.stringify({ text: "שגיאה פנימית בשרת.", error: error.message }), { status: 500 });
   }
 }
