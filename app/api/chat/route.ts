@@ -14,8 +14,11 @@ export async function POST(req: Request) {
       apiKey: apiKey 
     });
 
-    const result = await generateText({
-      model: googleAI("gemini-1.5-flash-latest"),
+const models = [
+      "gemini-1.5-flash",      // השם הכי יציב ב-Vercel SDK
+      "gemini-2.0-flash-exp",  // אם אתה רוצה את הגרסה החדשה
+      "gemini-1.5-pro"
+    ];
       system: "אתה עוזר השירות של ח. סבן...",
       messages,
       // כאן ניתן להוסיף לוגיקה שמנסה שוב עם מפתח אחר אם הראשון נכשל (429)
