@@ -6,68 +6,66 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
-    // בדיקה שהגוף קיים למניעת קריסה
     const body = await req.json().catch(() => ({}));
     const messages = body.messages || [];
 
-    if (messages.length === 0) {
-      return new Response(JSON.stringify({ text: "שלום! סבן AI מוכן לעזור לך." }), { status: 200 });
-    }
-
-    // אימות מפתחות - שים לב לשמות המשתנים ב-Vercel!
     const geminiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!geminiKey || !supabaseUrl || !supabaseKey) {
-      console.error("Missing Environment Variables");
-      return new Response(JSON.stringify({ text: "שגיאה בתצורת השרת - חסרים מפתחות אימות." }), { status: 500 });
+      return new Response(JSON.stringify({ text: "שגיאת תצורה בשרת." }), { status: 500 });
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
     const lastMsg = (messages[messages.length - 1]?.content || "").toString().trim();
     
     let products: any[] = [];
-    
-    // חיפוש חכם ב-Supabase
     if (lastMsg) {
       const searchWord = lastMsg.split(' ').filter((w: string) => w.length > 2)[0] || lastMsg;
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("inventory")
         .select("*")
         .or(`product_name.ilike.%${searchWord}%,sku.ilike.%${searchWord}%`)
         .limit(1);
-      
-      if (!error && data) products = data;
+      if (data) products = data;
     }
 
     const googleAI = createGoogleGenerativeAI({ apiKey: geminiKey });
     
-    // שימוש במודלים קיימים ויציבים למניעת 500
-    const models = ["gemini-1.5-flash", "gemini-1.5-pro"];
+    /**
+     * עדכון מודלים - פברואר 2026:
+     * gemini-3.1-flash-image-preview (הכי מהיר)
+     * gemini-3.1-pro-preview (הכי חזק)
+     * gemini-3-flash-preview (יציב)
+     */
+    const models = [
+      "gemini-3.1-flash-image-preview",
+      "gemini-3.1-pro-preview",
+      "gemini-3-flash-preview"
+    ];
     
     let finalResponse = "";
     for (const modelId of models) {
       try {
         const { text } = await generateText({
           model: googleAI(modelId),
-          system: `אתה מנהל המכירות של "ח. סבן חומרי בניין". 
-          הנחיות קריטיות:
-          1. השתמש במידע מהטבלה בלבד: ${JSON.stringify(products)}.
-          2. ענה בפורמט HTML נקי (<b> בלבד).
-          3. אם נמצא מוצר, ציין: "הנה הפרטים הטכניים של המוצר:".
-          4. חוק סיקה: (שטח*4)/25 + 1 רזרבה. עגל למעלה והדגש תוצאה.`,
+          system: `אתה מנהל המכירות של "ח. סבן". 
+          מידע מהטבלה: ${JSON.stringify(products)}.
+          הנחיות:
+          1. ענה ב-HTML (תגיות <b>).
+          2. חוק סיקה: (שטח*4)/25 + 1. עגל למעלה והדגש.
+          3. אם יש מוצר, ציין שפרטיו מופיעים בכרטיס למטה.`,
           messages,
           temperature: 0.2,
         });
         if (text) { finalResponse = text.trim(); break; }
-      } catch (e) { 
-        console.error(`Model ${modelId} failed:`, e);
-        continue; 
+      } catch (e) {
+        console.error(`Model ${modelId} failed, trying next...`);
+        continue;
       }
     }
 
-    // בניית ה-uiBlueprint לעיצוב הויזואלי
     const uiBlueprint = products.length > 0 ? {
       type: "product_card",
       data: {
@@ -83,8 +81,7 @@ export async function POST(req: Request) {
     } : null;
 
     return new Response(JSON.stringify({ 
-      text: finalResponse || "מצטער, לא הצלחתי לעבד את הבקשה.", 
-      products,
+      text: finalResponse || "<b>סליחה, המערכת בעומס. נסה שנית.</b>", 
       uiBlueprint 
     }), { 
       status: 200,
@@ -92,7 +89,6 @@ export async function POST(req: Request) {
     });
 
   } catch (error: any) {
-    console.error("Critical API Error:", error);
-    return new Response(JSON.stringify({ text: "שגיאה פנימית בשרת.", error: error.message }), { status: 500 });
+    return new Response(JSON.stringify({ text: "שגיאה פנימית." }), { status: 500 });
   }
 }
