@@ -1,4 +1,4 @@
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { google } from "@ai-sdk/google"; // שינוי ייבוא לייבוא פשוט
 import { generateText, tool } from "ai";
 import { z } from "zod";
 
@@ -17,17 +17,16 @@ export async function POST(req: Request) {
   try {
     const { messages, inventory } = await req.json();
 
-    const google = createGoogleGenerativeAI({
-      apiKey: getApiKey(),
-    });
+    // קבלת מפתח מהפול
+    const apiKey = getApiKey();
 
-    // תיקון קריטי: הוספת הקידומת models/ עבור ה-API של גוגל
-    const model = google("models/gemini-1.5-flash");
-
-    console.log(`[מלשינון] 🤖 מריץ שאילתה מול models/gemini-1.5-flash`);
+    console.log(`[מלשינון] 🤖 מריץ שאילתה מול gemini-1.5-flash`);
 
     const result = await generateText({
-      model: model,
+      // שימוש בייבוא הישיר עם המפתח הספציפי
+      model: google("gemini-1.5-flash", {
+        apiKey: apiKey,
+      }),
       messages,
       system: `
         אתה "סבן AI", עוזר המכירות של "ח. סבן חומרי בניין".
@@ -63,9 +62,8 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error(`[מלשינון] ❌ שגיאה ב-Chat Route:`, error.message);
     
-    // אם המודל הספציפי לא נמצא, ננסה פעם אחת עם השם הקצר כגיבוי
     return Response.json(
-      { error: "שגיאה בחיבור למודל. המלשינון ממליץ לבדוק את הגדרת ה-models/." },
+      { error: "שגיאה בחיבור. המלשינון מציע לבדוק אם המפתחות הוגדרו נכון ב-Vercel." },
       { status: 500 }
     );
   }
