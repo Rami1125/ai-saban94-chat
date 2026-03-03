@@ -1,291 +1,108 @@
-// app/api/assistant/route.ts
-import { NextRequest } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { generateText } from "ai";
+import { createClient } from "@supabase/supabase-js";
 
-// ריצה כ-Edge (דינמי)
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic';
 
-/**
- * טיפ אבטחה:
- *  - וודא שהמשתנים הבאים מוגדרים בסביבה (Server-side only):
- *    NEXT_PUBLIC_SUPABASE_URL
- *    SUPABASE_SERVICE_ROLE
- *    GOOGLE_GENERATIVE_AI_API_KEY
- */
+export async function POST(req: Request) {
+  try {
+    const { messages } = await req.json();
+    const lastMsg = messages[messages.length - 1]?.content?.toString().trim() || "";
 
-type Msg = { role: "user" | "assistant" | "system"; content: string };
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE!
+    );
 
-const MAX_MSG_LEN = 600;
+    // --- שלב 1: זיהוי שטח לחישוב "חוק סיקה" ---
+    const areaMatch = lastMsg.match(/(\d+(?:\.\d+)?)\s*(?:מ"ר|sqm|m2|m\^2)/i);
+    const areaM2 = areaMatch ? parseFloat(areaMatch[1]) : null;
 
-// Stop-words בסיסיות בעברית (ניתן להרחיב)
-const STOP_WORDS_HE = new Set([
-  "גימני", "ג׳ימיני", "אחי", "שלום", "צריך", "כמה", "עולה",
-  "תביא", "לי", "בבקשה", "אפשר", "תן", "תני", "יש", "יש לך",
-  "מחיר", "מחירים", "כמה עולה", "במחיר"
-]);
+    // --- שלב 2: מנגנון חיפוש היברידי (The Investigator) ---
+    let products: any[] = [];
+    
+    // ניקוי ראשוני לחיפוש
+    const cleanSearch = lastMsg.replace(/(גימני|אחי|שלום|צריך|כמה|עולה|תביא|לי|בבקשה)/g, "").trim();
+    const isSkuPattern = /^[A-Z0-9-]{3,}$/i.test(cleanSearch);
 
-// זיהוי מותג/וריאנטים בסיסי
-const BRAND_PAT = /(sika|סיקה|sikatop|סיקהטופ)/i;
-// זיהוי מספר דגם (2–4 ספרות)
-const NUM_PAT = /(\d{2,4})/;
-
-/* ------------------------------ Utilities ------------------------------ */
-
-function normalize(q: string) {
-  // נורמליזציה רכה: lowercase, החלפת מפרידים לרווח, דילול רווחים
-  return q
-    .toLowerCase()
-    .replace(/[-–—_/\\]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function extractSearch(lastMsg: string) {
-  const tokens = normalize(lastMsg)
-    .split(" ")
-    .filter((w) => w && !STOP_WORDS_HE.has(w) && w.length > 1);
-  const clean = tokens.join(" ") || normalize(lastMsg);
-  return clean.slice(0, MAX_MSG_LEN);
-}
-
-function looksLikeSKU(q: string) {
-  // הגדרה שמרנית למק״ט: תווים אלפאנומריים + מקפים/נקודות/קו תחתון
-  return /^[a-z0-9\-_.]{3,}$/i.test(q) && /[0-9]/.test(q);
-}
-
-function hasQuotes(q: string) {
-  // בדיקה פשוטה לנוכחות פראזה במרכאות
-  return /"[^"]{2,}"/.test(q) || /„[^„]{2,}”/.test(q);
-}
-
-function extractAreaM2(text: string): number | null {
-  // מזהה תבניות כמו: "12 מ״ר", "12m2", "12 sqm"
-  const m = text.match(/(\d+(?:[.,]\d+)?)\s*(?:מ\"?ר|m2|sqm)/i);
-  if (!m) return null;
-  const val = parseFloat(m[1].replace(",", "."));
-  return isNaN(val) ? null : val;
-}
-const sikaFormulaUnits = (m2: number) => Math.ceil((m2 * 4) / 25 + 1); // חוק סיקה
-
-/**
- * מייצר וריאנטים לשאילתה:
- *  - websearch (ל-FTS עם מרכאות/AND)
- *  - like (לטרייאגרמות)
- *  - sku (וריאנטים של מק״ט: עם/בלי מקף; prefix)
- */
-function buildQueryVariants(q: string) {
-  const nq = normalize(q);
-  const mBrand = nq.match(BRAND_PAT);
-  const mNum = nq.match(NUM_PAT);
-
-  const variants: { websearch: string[]; like: string[]; sku: string[] } = {
-    websearch: [],
-    like: [nq, nq.replace(/-/g, " "), nq.replace(/\s+/g, "-")],
-    sku: [nq, nq.replace(/-/g, ""), nq.split(/\s+/)[0]]
-  };
-
-  // אם זיהינו מותג+מספר — נייצר פראזות ווריאנטים
-  if (mBrand && mNum) {
-    const brand = mBrand[1].toLowerCase().replace(/\s+/g, " ");
-    const num = mNum[1];
-
-    // פראזות (ציטוטים) עבור websearch_to_tsquery
-    variants.websearch.push(`"${brand} ${num}"`);
-    // גם AND פשוט (למקרה שהטקסט אינו פראזה אבל קיים רצף)
-    variants.websearch.push(`${brand} ${num}`);
-
-    // טרייאגרמות – עם/בלי מקף/צמוד
-    variants.like.push(`${brand} ${num}`, `${brand}-${num}`, `${brand}${num}`);
-  }
-
-  // ייחוד וריאנטים
-  variants.websearch = Array.from(new Set(variants.websearch));
-  variants.like = Array.from(new Set(variants.like));
-  variants.sku = Array.from(new Set(variants.sku));
-  return variants;
-}
-
-/* ------------------------------ Hybrid Search ------------------------------ */
-
-async function hybridSearch(supabase: any, cleanSearch: string) {
-  const v = buildQueryVariants(cleanSearch);
-
-  // 1) SKU – exact / prefix / גרסאות ללא מקף
-  {
-    const skuOrs = [
-      `sku.eq.${cleanSearch}`,
-      `sku.ilike.${cleanSearch}%`,
-      `sku.eq.${cleanSearch.replace(/-/g, "")}`,
-      `sku.ilike.${cleanSearch.replace(/-/g, "")}%`
-    ].join(",");
-    const { data, error } = await supabase
-      .from("inventory")
-      .select("*")
-      .or(skuOrs)
-      .limit(1);
-    if (error) console.warn("SKU search error:", error);
-    if (data?.length) return data;
-  }
-
-  // 2) FTS (websearch) על search_tsv — מנסה כמה וריאנטים
-  {
-    const candidates = v.websearch.length ? v.websearch : [cleanSearch];
-    for (const wq of candidates) {
-      const { data, error } = await supabase
+    // 1. מסלול SKU (Exact/Prefix)
+    if (isSkuPattern) {
+      const { data } = await supabase
         .from("inventory")
         .select("*")
-        .textSearch("search_tsv", wq, { type: "websearch" })
+        .or(`sku.eq.${cleanSearch},sku.ilike.${cleanSearch.replace(/-/g, "")}%`)
         .limit(1);
-      if (error) console.warn("FTS search error:", { wq, error });
-      if (data?.length) return data;
-    }
-  }
-
-  // 3) טרייאגרמות (LIKE/ILIKE) על עמודות מנורמלות + SKU
-  {
-    const likeTerms = v.like.length ? v.like : [cleanSearch];
-    const clauses: string[] = [];
-    for (const t of likeTerms) {
-      // ilike על name_norm / desc_norm / sku
-      clauses.push(`product_name_norm.ilike.%${t}%`);
-      clauses.push(`description_norm.ilike.%${t}%`);
-      clauses.push(`sku.ilike.%${t}%`);
+      if (data?.length) products = data;
     }
 
-    const { data, error } = await supabase
-      .from("inventory")
-      .select("*")
-      .or(clauses.join(","))
-      .limit(1);
-    if (error) console.warn("TRGM search error:", error);
-    if (data?.length) return data;
-  }
-
-  return [];
-}
-
-/* ------------------------------ Route Handler ------------------------------ */
-
-export async function POST(req: NextRequest) {
-  try {
-    // בדיקות סביבה הכרחיות
-    const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE;
-    const GEMINI_API_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE || !GEMINI_API_KEY) {
-      console.error("Missing env vars (Supabase/Gemini)");
-      return Response.json({ text: "שגיאה בהגדרות שרת (env)." }, { status: 500 });
+    // 2. מסלול FTS (Full Text Search) - אם לא נמצא SKU
+    if (products.length === 0) {
+      const { data } = await supabase
+        .from("inventory")
+        .select("*")
+        .textSearch("search_tsv", cleanSearch, { config: "simple", type: "websearch" })
+        .limit(1);
+      if (data?.length) products = data;
     }
 
-    // פרסינג הודעה אחרונה
-    const body = await req.json();
-    const messages: Msg[] = Array.isArray(body?.messages) ? body.messages : [];
-    const rawText = messages[messages.length - 1]?.content?.toString() ?? "";
-    const lastMsg = rawText.trim().slice(0, MAX_MSG_LEN);
-    const cleanSearch = extractSearch(lastMsg);
-
-    // Supabase (שרת)
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE);
-
-    // Pipeline חיפוש היברידי
-    const products = await hybridSearch(supabase, cleanSearch);
-
-    // חישוב חוק סיקה (אם הוזן שטח)
-    const areaM2 = extractAreaM2(lastMsg);
-    const sikaCalc = areaM2 != null ? sikaFormulaUnits(areaM2) : null;
-
-    // UI Blueprint (כרטיס מוצר)
-    const product = products?.[0] ?? null;
-    const uiBlueprint =
-      product
-        ? {
-            type: "product_card",
-            data: {
-              title: product.product_name,
-              price: product.price ?? null,
-              image: product.image_url ?? null,
-              sku: product.sku,
-              supplier: product.supplier_name ?? null,
-              specs: {
-                coverage: product.coverage ?? product.coverage_per_sqm ?? null,
-                drying: product.drying_time ?? null,
-                method: product.application_method ?? null
-              }
-            }
-          }
-        : null;
-
-    // הכנה ל‑Gemini: הנחיות קצרות ו"עוגנים" מהדאטה
-    const googleAI = createGoogleGenerativeAI({ apiKey: GEMINI_API_KEY });
-    const models = [
-      "gemini-3.1-pro-preview",
-      "gemini-3.1-flash-image-preview",
-      "gemini-3-flash-preview"
-    ];
-
-    const systemPrompt = [
-      `את/ה מנהל/ת מכירות של "ח. סבן". ענה/י תמציתי ב‑HTML (מותר <b>, <ul>, <li>, <br>).`,
-      `העדף/י מידע אמיתי מ‑Supabase על פני אלתור.`,
-      `אם נמצא מוצר: הדגש/י שם + SKU, מחיר אם קיים, והוסף/י 2 תבליטים (כיסוי/ייבוש/שיטת יישום).`,
-      `אם המשתמש ציין שטח במ״ר — בצע/י "חוק סיקה": (שטח*4)/25 + 1 (רזרבה) והדגש/י.`,
-      `אם price=null — כתוב/כתבי "פנה/י להצעת מחיר".`,
-      `אם לא נמצא מוצר: הצע/י 2 ניסוחים אלטרנטיביים (עם/בלי מקף/תעתיק), בלי להמציא נתוני מלאי.`
-    ].join("\n");
-
-    const stockHint = product
-      ? "זמין במלאי. מציג/ה כרטיס מוצר למטה."
-      : "לא נמצא מוצר תואם חד־משמעית.";
-    const sikaLine = sikaCalc != null
-      ? `חישוב "חוק סיקה": עבור ${areaM2} מ״ר → <b>${sikaCalc} יח׳</b>.`
-      : "";
-
-    const userContext = [
-      `<b>תמצית מלאי:</b> ${product ? "נמצא פריט." : "לא נמצא."} ${stockHint}`,
-      product ? `שם: ${product.product_name} | SKU: ${product.sku}` : "",
-      sikaLine
-    ].filter(Boolean).join("<br>");
-
-    let responseText = "";
-    for (const modelId of models) {
-      try {
-        const { text } = await generateText({
-          model: googleAI(modelId),
-          system: systemPrompt,
-          messages: [
-            ...messages,
-            { role: "system", content: userContext }
-          ],
-          temperature: 0.2
-        });
-        if (text) { responseText = text; break; }
-      } catch (e) {
-        console.warn("Gemini model failed, trying next:", modelId, e);
-        continue;
-      }
+    // 3. מסלול Trigrams / Fuzzy (אם עדיין אין תוצאה)
+    if (products.length === 0) {
+      const { data } = await supabase
+        .from("inventory")
+        .select("*")
+        .or(`product_name.ilike.%${cleanSearch}%,description.ilike.%${cleanSearch}%`)
+        .limit(1);
+      if (data?.length) products = data;
     }
 
-    // תשובת ברירת מחדל אם LLM לא החזיר
-    if (!responseText) {
-      responseText =
-        product
-          ? `<b>${product.product_name}</b> (SKU: ${product.sku})<br>${sikaLine || ""}`
-          : `<b>לא נמצא מוצר תואם</b><br>נסה/י: "סיקה 107", "Sika 107", "SikaTop-107"`;
+    // --- שלב 3: הפעלת המוח (Gemini 3.1 Flash) ---
+    const googleAI = createGoogleGenerativeAI({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY! });
+    
+    // חישוב חוק סיקה אם יש שטח
+    let sikaLawResult = "";
+    if (areaM2) {
+      const units = Math.ceil((areaM2 * 4) / 25 + 1);
+      sikaLawResult = `עבור <b>${areaM2} מ"ר</b> ⇒ <b>${units} יח'</b>`;
     }
 
-    return Response.json({
-      text: responseText,
-      products: products ?? [],
-      uiBlueprint
+    const { text } = await generateText({
+      model: googleAI("gemini-1.5-flash"), // מודל יציב ל-Logic
+      system: `אתה עוזר שירות "ח. סבן". 
+      נתוני מוצר מ-Supabase: ${JSON.stringify(products)}.
+      הנחיות פלט:
+      1. השתמש ב-HTML בלבד: <b>, <ul>, <li>, <br>.
+      2. אם נמצא מוצר (${products.length > 0}), הצג שם ו-SKU מודגשים.
+      3. אם יש חישוב שטח, הצג: <b>חוק סיקה:</b> ${sikaLawResult}.
+      4. אם לא נמצא מוצר, הצע 2 וריאנטים לחיפוש (למשל עם/בלי מקף).
+      5. אל תמציא מחירים. אם חסר מחיר, כתוב "פנה להצעת מחיר".`,
+      messages,
+      temperature: 0.1
     });
 
-  } catch (error) {
-    console.error("assistant route error:", error);
-    return Response.json(
-      { text: "שגיאה בחיבור למערכת סבן AI." },
-      { status: 500 }
-    );
+    // --- שלב 4: הפקת JSON כרטיס מוצר (uiBlueprint) ---
+    const uiBlueprint = products.length > 0 ? {
+      type: "product_card",
+      data: {
+        title: products[0].product_name,
+        price: products[0].price || null,
+        image: products[0].image_url || null,
+        sku: products[0].sku,
+        supplier: products[0].supplier_name || "ח. סבן",
+        specs: {
+          coverage: products[0].coverage || products[0].coverage_per_sqm || "לפי מפרט",
+          drying: products[0].drying_time || "24 שעות",
+          method: products[0].application_method || "הברשה/מאלאג'"
+        }
+      }
+    } : null;
+
+    return Response.json({ 
+      text: text.trim(), 
+      uiBlueprint,
+      debug: { searchType: products.length > 0 ? "Found" : "Not Found", cleanSearch } 
+    });
+
+  } catch (error: any) {
+    return Response.json({ text: "שגיאה במערכת החיפוש." }, { status: 500 });
   }
 }
