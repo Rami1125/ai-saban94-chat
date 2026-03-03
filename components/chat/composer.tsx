@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, Send, Loader2, Package } from "lucide-react";
-import { ProductCard } from "./product-card";
+import { ProductCard } from "./ProductCard";
 
 interface ComposerProps {
   onSendMessage: (message: string) => void;
@@ -17,7 +17,7 @@ export function Composer({ onSendMessage, onSelectProduct }: ComposerProps) {
   const [showResults, setShowResults] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
 
-  // מנגנון חיפוש בזמן אמת (Debounce)
+  // מנגנון חיפוש בזמן אמת
   useEffect(() => {
     const searchProducts = async () => {
       if (input.length < 2) {
@@ -27,7 +27,6 @@ export function Composer({ onSendMessage, onSelectProduct }: ComposerProps) {
 
       setIsLoading(true);
       try {
-        // פנייה ל-API החיפוש שבנינו בנתיב /api/inventory/search
         const res = await fetch(`/api/inventory/search?q=${encodeURIComponent(input)}`);
         const data = await res.json();
         setResults(Array.isArray(data) ? data : []);
@@ -43,7 +42,7 @@ export function Composer({ onSendMessage, onSelectProduct }: ComposerProps) {
     return () => clearTimeout(timeoutId);
   }, [input]);
 
-  // סגירת התוצאות כשלוחצים בחוץ
+  // סגירה בלחיצה בחוץ
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
@@ -64,7 +63,7 @@ export function Composer({ onSendMessage, onSelectProduct }: ComposerProps) {
   return (
     <div className="relative w-full max-w-2xl mx-auto p-4" dir="rtl" ref={searchRef}>
       
-      {/* רשימת תוצאות מצטמצמת */}
+      {/* רשימת תוצאות מצטמצמת - תיקון מבנה ה-JSX */}
       <AnimatePresence>
         {showResults && results.length > 0 && (
           <motion.div
@@ -77,20 +76,22 @@ export function Composer({ onSendMessage, onSelectProduct }: ComposerProps) {
               <Package size={14} />
               תוצאות מהמחסן של סבן
             </div>
+            
             <div className="grid grid-cols-1 gap-3">
-            // בתוך הקומפוננטה Composer, איפה שמרנדרים את התוצאות:
-             {results.map((product) => (
-            <div key={product.id} className="p-2">
-              <ProductCard 
-             product={product} 
-            // הזרקת הפונקציה מה-Props של ה-Composer לתוך הכרטיס
-               onConsult={(p, t) => onSelectProduct(p)} 
-              />
-            </div>
-           ))}
+              {results.map((product) => (
+                <div 
+                  key={product.id || product.sku} 
                   className="cursor-pointer transition-transform hover:scale-[0.98]"
+                  onClick={() => {
+                    onSelectProduct(product);
+                    setInput("");
+                    setShowResults(false);
+                  }}
                 >
-                  <ProductCard product={product} />
+                  <ProductCard 
+                    product={product} 
+                    onConsult={(p) => onSelectProduct(p)}
+                  />
                 </div>
               ))}
             </div>
@@ -98,11 +99,10 @@ export function Composer({ onSendMessage, onSelectProduct }: ComposerProps) {
         )}
       </AnimatePresence>
 
-      {/* תיבת הקלט המעוצבת */}
+      {/* תיבת הקלט */}
       <div className="relative group">
         <div className="absolute inset-0 bg-blue-500/20 blur-2xl group-focus-within:bg-blue-500/40 transition-all rounded-full" />
         <div className="relative flex items-center bg-white dark:bg-slate-950 rounded-full border-2 border-blue-500/10 dark:border-blue-500/20 p-2 shadow-xl">
-          
           <div className="flex-1 flex items-center px-4 gap-3">
             {isLoading ? (
               <Loader2 size={20} className="animate-spin text-blue-500" />
