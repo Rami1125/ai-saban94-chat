@@ -1,5 +1,5 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { streamText, tool } from "ai";
+import { generateText, tool } from "ai"; // עברנו ל-generateText ליציבות מקסימלית
 import { z } from "zod";
 
 /**
@@ -24,11 +24,12 @@ export async function POST(req: Request) {
       apiKey: getApiKey(),
     });
 
+    // שימוש ב-gemini-1.5-flash היציב
     const model = google("gemini-1.5-flash");
 
     console.log(`[מלשינון] 🤖 מריץ שאילתה מול gemini-1.5-flash`);
 
-    const result = await streamText({
+    const result = await generateText({
       model: model,
       messages,
       system: `
@@ -43,7 +44,6 @@ export async function POST(req: Request) {
       tools: {
         get_product_info: tool({
           description: "קבלת מידע מפורט על מוצר מהמלאי (שם, מחיר, מק\"ט)",
-          // תיקון כאן: הסרנו את ה- .description() מה-Zod string
           parameters: z.object({
             query: z.string(), 
           }),
@@ -60,12 +60,17 @@ export async function POST(req: Request) {
       maxSteps: 5,
     });
 
-    return result.toDataStreamResponse();
+    // החזרת תשובה כ-JSON פשוט שמתאים לרוב ממשקי הצ'אט
+    return Response.json({
+      text: result.text,
+      toolCalls: result.toolCalls,
+      toolResults: result.toolResults
+    });
 
   } catch (error: any) {
     console.error(`[מלשינון] ❌ שגיאה ב-Chat Route:`, error.message);
-    return new Response(
-      JSON.stringify({ error: "שגיאת שרת במערכת הכלים." }),
+    return Response.json(
+      { error: "שגיאה בתקשורת עם המודל." },
       { status: 500 }
     );
   }
