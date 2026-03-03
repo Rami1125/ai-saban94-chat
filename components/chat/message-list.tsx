@@ -1,53 +1,30 @@
 "use client";
-
 import { useMemo } from "react";
 import { ProductCard } from "./ProductCard";
 
-export function MessageList({
-  messages,
-  onConsult,
-  isLoading,
-}: {
-  messages: any[];
-  onConsult?: (p: any, t: string) => void;
-  isLoading?: boolean;
-}) {
-  // גם אם onConsult הועבר שגוי — לא נקרוס, נדפיס לוג
+export function MessageList({ messages, onConsult, isLoading }: any) {
   const safeOnConsult = useMemo(
-    () =>
-      typeof onConsult === "function"
-        ? onConsult
-        : (p: any, t: string) => {
-            console.error("❌ MessageList: onConsult אינו פונקציה!", {
-              onConsult,
-              product: p,
-              type: t,
-            });
-          },
+    () => (typeof onConsult === "function" ? onConsult : (p: any, t: string) => {
+      console.error("❌ [MessageList] onConsult אינו פונקציה!", { onConsult });
+    }),
     [onConsult]
   );
 
   return (
-    <div>
-      {messages?.map((m, i) => (
-        <div key={i}>
-          {/* כאן אפשר להציג את תוכן ההודעה עצמה */}
-          {m?.content && (
-            <div className="mb-2 text-sm text-slate-700 dark:text-slate-200">{m.content}</div>
-          )}
-
-          {/* נרנדר כרטיס מוצר רק אם זה אובייקט מוצר אמיתי עם שם מוצר */}
-          {m?.product &&
-            typeof m.product === "object" &&
-            m.product.product_name && (
-              <ProductCard product={m.product} onConsult={safeOnConsult} />
+    <div className="space-y-6 max-w-4xl mx-auto pb-20" dir="rtl">
+      {messages?.map((m: any, i: number) => (
+        <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+          <div className={`max-w-[85%] p-4 rounded-[25px] ${m.role === "user" ? "bg-blue-600 text-white" : "bg-white border"}`}>
+            {m.content && <div dangerouslySetInnerHTML={{ __html: m.content }} />}
+            {m.product && typeof m.product === "object" && m.product.product_name && (
+              <div className="mt-4">
+                <ProductCard product={m.product} onConsult={safeOnConsult} />
+              </div>
             )}
+          </div>
         </div>
       ))}
-
-      {isLoading ? (
-        <div className="text-xs text-slate-400 mt-2">טוען…</div>
-      ) : null}
+      {isLoading && <div className="text-xs text-slate-400 p-4">סבן AI חושב...</div>}
     </div>
   );
 }
