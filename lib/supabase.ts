@@ -1,33 +1,33 @@
-// server.ts - מעודכן
-db.exec(`
-  CREATE TABLE IF NOT EXISTS inventory (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    sku TEXT UNIQUE,
-    name TEXT,
-    description TEXT,
-    price REAL,
-    stock_quantity INTEGER,
-    coverage TEXT,
-    drying_time TEXT,
-    image_url TEXT,      -- שדה חדש
-    supplier_name TEXT   -- שדה חדש
-  )
-`);
+import { createClient } from '@supabase/supabase-js'
 
-// דוגמה לעדכון נתונים ראשוניים
-const insert = db.prepare(`
-  INSERT INTO inventory (sku, name, description, price, stock_quantity, coverage, drying_time, image_url, supplier_name)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-`);
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-insert.run(
-  "SIKA-107", 
-  "סיקה טופ 107", 
-  "חומר איטום צמנטי גמיש", 
-  220, 
-  30, 
-  "4 ק\"ג למ\"ר", 
-  "24 שעות",
-  "https://www.sika.com/content/dam/dms/il01/k/sika_top_107_seal_new.png", 
-  "גילאר (סיקה ישראל)"
-);
+// 1. ה-Export שכל דפי הניהול מחפשים (קריטי ל-Build)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+/**
+ * פונקציה לעדכון/הזרקת נתונים (Seeding)
+ * השתמשנו ב-Client של Supabase במקום ב-Better-SQLite כדי להתאים ל-Production
+ */
+export async function seedInventory() {
+  const product = {
+    sku: "SIKA-107",
+    product_name: "סיקה טופ 107",
+    description: "חומר איטום צמנטי גמיש",
+    price: 220,
+    stock_quantity: 30,
+    coverage: "4 ק\"ג למ\"ר",
+    drying_time: "24 שעות",
+    image_url: "https://www.sika.com/content/dam/dms/il01/k/sika_top_107_seal_new.png",
+    supplier_name: "גילאר (סיקה ישראל)"
+  }
+
+  // עדכון ב-Supabase
+  const { data, error } = await supabase
+    .from('inventory')
+    .upsert(product, { onConflict: 'sku' })
+
+  if (error) console.error("Error seeding inventory:", error)
+  else console.log("Inventory seeded successfully")
+}
