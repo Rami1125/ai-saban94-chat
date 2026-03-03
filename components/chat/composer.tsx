@@ -78,14 +78,16 @@ export function Composer({ onSendMessage, onSelectProduct }: ComposerProps) {
               תוצאות מהמחסן של סבן
             </div>
             <div className="grid grid-cols-1 gap-3">
-              {results.map((product) => (
-                <div 
-                  key={product.id || product.sku} 
-                  onClick={() => {
-                    onSelectProduct(product);
-                    setInput("");
-                    setShowResults(false);
-                  }}
+// בתוך הקומפוננטה Composer, איפה שמרנדרים את התוצאות:
+{results.map((product) => (
+  <div key={product.id} className="p-2">
+    <ProductCard 
+      product={product} 
+      // הזרקת הפונקציה מה-Props של ה-Composer לתוך הכרטיס
+      onConsult={(p, t) => onSelectProduct(p)} 
+    />
+  </div>
+))}
                   className="cursor-pointer transition-transform hover:scale-[0.98]"
                 >
                   <ProductCard product={product} />
