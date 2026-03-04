@@ -5,44 +5,80 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
+    // בדיקת חיבור ל-Database
     if (!supabase) {
       return NextResponse.json({ error: "Database not connected" }, { status: 500 });
     }
 
+    // חילוץ ההודעות מהבקשה
     const { messages } = await req.json();
+    if (!messages || messages.length === 0) {
+      return NextResponse.json({ error: "No messages provided" }, { status: 400 });
+    }
+
     const lastUserMessage = messages[messages.length - 1].content.trim();
 
-    // --- שלב 1: ניקוי השאילתה למציאת מילות מפתח ---
-    // אנחנו מסירים מילים שכיחות שלא קשורות לשם המוצר
-    const stopWords = ["אני", "רוצה", "להתייעץ", "לגבי", "בנושא", "ייעוץ", "מה", "תוכל", "לספר", "לי", "של", "את"];
-    let searchTerms = lastUserMessage
+    // --- שלב 1: זיהוי כוונת המשתמש (Intent) ---
+    // האם המשתמש מבקש ייעוץ ספציפי על בסיס כפתור או שאלה מפורטת?
+    const isConsultation = lastUserMessage.includes("להתייעץ") || 
+                           lastUserMessage.includes("מפרט מלא") || 
+                           lastUserMessage.includes("זמינות") ||
+                           lastUserMessage.includes("מה תוכל לספר לי");
+
+    // ניקוי השאילתה ממילים מיותרות כדי למצוא את שם המוצר נטו
+    const stopWords = ["אני", "רוצה", "להתייעץ", "לגבי", "בנושא", "ייעוץ", "מה", "תוכל", "לספר", "לי", "של", "את", "מפרט", "מלא", "זמינות"];
+    const productNameQuery = lastUserMessage
       .split(/\s+/)
       .filter((word: string) => !stopWords.includes(word) && word.length > 1)
-      .join(" & "); // פורמט לחיפוש טקסט מלא ב-Postgres
+      .join(" ");
 
-    // --- שלב 2: חיפוש ב-Inventory ---
-    // ננסה קודם חיפוש גמיש (ilike) על השאילתה המקורית
-    let { data: products, error } = await supabase
+    // --- שלב 2: חיפוש בטבלת ה-Inventory ---
+    // ניסיון ראשון: חיפוש גמיש על כל השאילתה המנוקה
+    let { data: products, error: prodError } = await supabase
       .from('inventory')
       .select('*')
-      .or(`product_name.ilike.%${lastUserMessage.split(' ')[0]}%,sku.ilike.%${lastUserMessage}%`)
+      .or(`product_name.ilike.%${productNameQuery}%,sku.ilike.%${productNameQuery}%`)
       .limit(1);
 
-    // אם לא נמצא, ננסה לחפש לפי המילה הראשונה המשמעותית (למשל "גבס")
+    // ניסיון שני: אם לא נמצא, נחפש רק לפי המילה הראשונה (למשל "גבס")
     if (!products || products.length === 0) {
-      const mainKeyword = lastUserMessage.replace("אני רוצה להתייעץ לגבי", "").trim().split(' ')[0];
-      const { data: secondTry } = await supabase
+      const firstWord = productNameQuery.split(' ')[0];
+      const { data: retryData } = await supabase
         .from('inventory')
         .select('*')
-        .ilike('product_name', `%${mainKeyword}%`)
+        .ilike('product_name', `%${firstWord}%`)
         .limit(1);
-      products = secondTry;
+      products = retryData;
     }
 
     if (products && products.length > 0) {
       const p = products[0];
-      const responseText = `בשמחה! הנה הפרטים הטכניים על <b>${p.product_name}</b> שביקשת:`;
 
+      // תרחיש א': המשתמש ביקש ייעוץ (לחיצה על כפתור בכרטיס או שאלה מפורטת)
+      if (isConsultation) {
+        let advisorText = `לגבי <b>${p.product_name}</b> (מק"ט ${p.sku}):<br/><br/>`;
+        
+        if (p.description) advisorText += `📝 <b>תיאור:</b> ${p.description}<br/><br/>`;
+        
+        if (p.features && Array.isArray(p.features) && p.features.length > 0) {
+          advisorText += `✅ <b>למה כדאי להשתמש בו?</b><br/>• ${p.features.join('<br/>• ')}<br/><br/>`;
+        }
+
+        if (p.drying_time) advisorText += `⏱️ <b>זמן עבודה/ייבוש:</b> ${p.drying_time}<br/>`;
+        if (p.coverage) advisorText += `📏 <b>כושר כיסוי הערכתי:</b> ${p.coverage}<br/>`;
+        if (p.application_method) advisorText += `🛠️ <b>אופן היישום:</b> ${p.application_method}<br/>`;
+        
+        advisorText += `<br/>📦 <b>זמינות:</b> המוצר במלאי שוטף. האם תרצה שאחשב לך כמויות מדויקות לפרויקט שלך?`;
+
+        return NextResponse.json({ 
+          text: advisorText,
+          // בייעוץ עומק, אפשר לשלוח את המוצר שוב או לוותר כדי למנוע כפילות ויזואלית
+          product: p 
+        });
+      }
+
+      // תרחיש ב': חיפוש ראשוני - מחזירים הודעה קצרה וכרטיס ויזואלי
+      const responseText = `מצאתי עבורך את <b>${p.product_name}</b>. הנה הפרטים המהירים:`;
       return NextResponse.json({ 
         text: responseText,
         product: {
@@ -60,11 +96,11 @@ export async function POST(req: Request) {
       });
     }
 
-    // --- שלב 3: חיפוש במידע כללי ---
+    // --- שלב 3: חיפוש ב-Knowledge Base (מידע כללי/נהלים) ---
     const { data: knowledge } = await supabase
       .from('saban_unified_knowledge')
       .select('content')
-      .ilike('title', `%${lastUserMessage.split(' ')[0]}%`)
+      .ilike('title', `%${productNameQuery.split(' ')[0]}%`)
       .limit(1);
 
     if (knowledge && knowledge.length > 0) {
@@ -73,11 +109,11 @@ export async function POST(req: Request) {
 
     // --- שלב 4: הודעת אי-מציאה חכמה ---
     return NextResponse.json({ 
-      text: `לא מצאתי מוצר שתואם בדיוק לחיפוש "${lastUserMessage}". <br/><br/><b>טיפ:</b> נסה להקליד רק "גבס לבן" או את המק"ט המדויק.` 
+      text: `לא מצאתי מוצר שתואם בדיוק לחיפוש "${lastUserMessage}". <br/><br/><b>טיפ מהמומחה של סבן:</b> נסה לחפש לפי מילה אחת (כמו "סיקה" או "מלט") או הזן מק"ט מדויק.` 
     });
 
   } catch (error: any) {
-    console.error("API Error:", error);
+    console.error("Chat API Error:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
