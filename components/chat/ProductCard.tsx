@@ -2,9 +2,9 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { Clock, Calculator, MessageCircle } from "lucide-react";
-import { Product } from "../types";
-import { useChatActions } from "../context/ChatActionsContext";
-import { formatPrice } from "../utils/chat-helpers";
+import { Product } from "../../types"; // תיקון נתיב
+import { useChatActions } from "../../context/ChatActionsContext"; // תיקון נתיב
+import { formatPrice } from "../../utils/chat-helpers"; // תיקון נתיב
 
 export function ProductCard({ product }: { product: Product }) {
   const { handleConsult } = useChatActions();
