@@ -1,65 +1,63 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
-export const runtime = "edge";
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export async function POST(req: Request) {
   try {
-    const { messages, selectedProduct, businessId } = await req.json();
+    const { messages } = await req.json();
+    const lastUserMessage = messages[messages.length - 1].content.toLowerCase();
 
-    // 1. חילוץ המפתחות מה-Pool ובחירת מפתח אקראי
-    const rawPool = process.env.GOOGLE_GENERATIVE_AI_API_KEY || "";
-    const keys = rawPool.split(",").map(k => k.trim()).filter(Boolean);
-    
-    if (keys.length === 0) {
-      console.error("CRITICAL: API Key Pool is empty");
-      return NextResponse.json({ error: "שגיאת קונפיגורציה: חסר מפתח API" }, { status: 500 });
+    // 1. חיפוש ב-Answers Cache (תשובות מוכנות מראש)
+    const { data: cachedAnswer } = await supabase
+      .from('answers_cache')
+      .select('answer_text')
+      .ilike('question_text', `%${lastUserMessage}%`)
+      .single();
+
+    if (cachedAnswer) {
+      return NextResponse.json({ text: cachedAnswer.answer_text });
     }
 
-    // בחירת מפתח אקראי מתוך המערך
-    const apiKey = keys[Math.floor(Math.random() * keys.length)];
-    console.log(`[Pool Logic] Using key ${apiKey.substring(0, 5)}...`);
+    // 2. חיפוש ב-Unified Knowledge (נהלים, מחירונים, ידע כללי)
+    const { data: knowledge } = await supabase
+      .from('saban_unified_knowledge')
+      .select('content')
+      .ilike('title', `%${lastUserMessage}%`)
+      .limit(1);
 
-    // 2. הגדרת ה-Context של העסק
-    const systemInstruction = `אתה אסיסטנט טכני של ח. סבן חומרי בניין. ענה בעברית מקצועית.`;
-
-    const payload = {
-      contents: messages.map((m: any) => ({
-        role: m.role === "assistant" ? "model" : "user",
-        parts: [{ text: m.content }]
-      })),
-      systemInstruction: {
-        role: "system",
-        parts: [{ text: systemInstruction }]
-      },
-      generationConfig: {
-        temperature: 0.5,
-        maxOutputTokens: 1024,
-      }
-    };
-
-    // 3. ביצוע הקריאה לגוגל עם המפתח שנבחר
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      }
-    );
-
-    if (!response.ok) {
-      const errorData = await response.text();
-      console.error("Gemini API Error:", errorData);
-      return NextResponse.json({ error: "שגיאה מול מודל ה-AI", details: errorData }, { status: response.status });
+    if (knowledge && knowledge.length > 0) {
+      return NextResponse.json({ text: knowledge[0].content });
     }
 
-    const data = await response.json();
-    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || "לא התקבלה תשובה";
+    // 3. חיפוש מוצר ב-Products + Inventory
+    const { data: product } = await supabase
+      .from('products')
+      .select(`
+        product_name, 
+        sku, 
+        price, 
+        inventory (quantity)
+      `)
+      .ilike('product_name', `%${lastUserMessage}%`)
+      .limit(1);
 
-    return NextResponse.json({ text: responseText });
+    if (product && product.length > 0) {
+      const p = product[0];
+      const stock = p.inventory?.[0]?.quantity || 0;
+      const response = `<b>פרטי מוצר:</b><br/>${p.product_name}<br/>מק"ט: ${p.sku}<br/>מחיר: ₪${p.price}<br/>מלאי זמין: ${stock} יחידות.`;
+      return NextResponse.json({ text: response });
+    }
 
-  } catch (error: any) {
-    console.error("Server Route Fatal Error:", error);
-    return NextResponse.json({ error: "Internal Server Error", details: error.message }, { status: 500 });
+    // 4. ברירת מחדל אם לא נמצא נתון
+    return NextResponse.json({ 
+      text: "מצטער, לא מצאתי נתון מדויק במערכת לגבי השאלה שלך. ניתן לפנות לנציג אנושי בטלפון של ח. סבן." 
+    });
+
+  } catch (error) {
+    return NextResponse.json({ error: "שגיאת שליפה מהמסד" }, { status: 500 });
   }
 }
