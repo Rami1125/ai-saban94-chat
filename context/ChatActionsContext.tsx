@@ -1,7 +1,7 @@
 "use client";
 import React, { createContext, useContext, useState, ReactNode, useCallback } from "react";
 import { Product, ChatMessage } from "../types";
-import { buildConsultMessage } from "../utils/chat-helpers";
+import { buildConsultMessage } from "../utils/chat-helpers"; // וודא שהנתיב תקין
 import { safeFetch } from "../lib/api-client";
 import { useConfig } from "./BusinessConfigContext";
 
