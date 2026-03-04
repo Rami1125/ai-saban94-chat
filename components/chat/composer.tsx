@@ -2,10 +2,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, Send, Loader2, Package, X } from "lucide-react";
-import { ProductCard } from "./ProductCard";
-import { useChatActions } from "@/context/ChatActionsContext";
-import { useConfig } from "@/context/BusinessConfigContext";
-import { Product } from "@/types";
+import { ProductCard } from "./ProductCard"; // אותו נתיב, זה בסדר
+import { useChatActions } from "../../context/ChatActionsContext"; // תיקון נתיב
+import { useConfig } from "../../context/BusinessConfigContext"; // תיקון נתיב
+import { Product } from "../../types"; // תיקון נתיב
 
 export function Composer() {
   const [input, setInput] = useState("");
