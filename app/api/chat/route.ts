@@ -1,50 +1,29 @@
 import { NextResponse } from "next/server";
-import { Product, MessageRole } from "@/types";
 
 export const runtime = "edge";
 
-interface ChatRequest {
-  messages: { role: MessageRole; content: string }[];
-  selectedProduct?: Product;
-  businessId: string;
-}
-
 export async function POST(req: Request) {
   try {
-    const { messages, selectedProduct, businessId }: ChatRequest = await req.json();
+    const { messages, selectedProduct, businessId } = await req.json();
 
-    // 1. ולידציה בסיסית
-    if (!messages || !Array.isArray(messages)) {
-      return NextResponse.json({ error: "Messages are required" }, { status: 400 });
-    }
-
-    // 2. ניהול מפתחות API (Key Pool)
-    const pool = process.env.GOOGLE_GENERATIVE_AI_API_KEY || "";
-    const keys = pool.split(",").map(k => k.trim()).filter(Boolean);
+    // 1. חילוץ המפתחות מה-Pool ובחירת מפתח אקראי
+    const rawPool = process.env.GOOGLE_GENERATIVE_AI_API_KEY || "";
+    const keys = rawPool.split(",").map(k => k.trim()).filter(Boolean);
     
     if (keys.length === 0) {
-      return NextResponse.json({ error: "API Configuration missing" }, { status: 500 });
+      console.error("CRITICAL: API Key Pool is empty");
+      return NextResponse.json({ error: "שגיאת קונפיגורציה: חסר מפתח API" }, { status: 500 });
     }
-    
+
+    // בחירת מפתח אקראי מתוך המערך
     const apiKey = keys[Math.floor(Math.random() * keys.length)];
+    console.log(`[Pool Logic] Using key ${apiKey.substring(0, 5)}...`);
 
-    // 3. בניית ה-System Prompt לפי זהות העסק (White Label)
-    let systemInstruction = `אתה אסיסטנט טכני חכם עבור עסק בשם "${businessId === 'saban' ? 'ח. סבן' : 'השותף העסקי'}".
-    עליך לענות בצורה מקצועית, אדיבה וקצרה. השתמש ב-HTML נקי להדגשות (<b>) ורשימות (<ul>, <li>).`;
+    // 2. הגדרת ה-Context של העסק
+    const systemInstruction = `אתה אסיסטנט טכני של ח. סבן חומרי בניין. ענה בעברית מקצועית.`;
 
-    if (selectedProduct) {
-      systemInstruction += `\nהלקוח מתעניין כרגע במוצר הבא:
-      שם: ${selectedProduct.product_name}
-      מק"ט: ${selectedProduct.sku}
-      מחיר: ${selectedProduct.price}₪
-      זמן ייבוש: ${selectedProduct.drying_time || 'לא צוין'}
-      כיסוי: ${selectedProduct.coverage || 'לפי מפרט'}
-      ענה על שאלות טכניות לגביו והצע עזרה בחישוב כמויות.`;
-    }
-
-    // 4. בניית ה-Payload ל-Gemini v1 API
     const payload = {
-      contents: messages.map(m => ({
+      contents: messages.map((m: any) => ({
         role: m.role === "assistant" ? "model" : "user",
         parts: [{ text: m.content }]
       })),
@@ -53,13 +32,12 @@ export async function POST(req: Request) {
         parts: [{ text: systemInstruction }]
       },
       generationConfig: {
-        temperature: 0.4,
+        temperature: 0.5,
         maxOutputTokens: 1024,
-        topP: 0.8,
-        topK: 40
       }
     };
 
+    // 3. ביצוע הקריאה לגוגל עם המפתח שנבחר
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
       {
@@ -70,21 +48,18 @@ export async function POST(req: Request) {
     );
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Gemini API Error:", errorText);
-      throw new Error("Failed to fetch from Gemini");
+      const errorData = await response.text();
+      console.error("Gemini API Error:", errorData);
+      return NextResponse.json({ error: "שגיאה מול מודל ה-AI", details: errorData }, { status: response.status });
     }
 
     const data = await response.json();
-    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || "מצטער, לא הצלחתי לעבד את התשובה.";
+    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || "לא התקבלה תשובה";
 
     return NextResponse.json({ text: responseText });
 
   } catch (error: any) {
-    console.error("Server Route Error:", error);
-    return NextResponse.json(
-      { error: "Internal Server Error", details: error.message },
-      { status: 500 }
-    );
+    console.error("Server Route Fatal Error:", error);
+    return NextResponse.json({ error: "Internal Server Error", details: error.message }, { status: 500 });
   }
 }
