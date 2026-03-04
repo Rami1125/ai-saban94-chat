@@ -1,89 +1,86 @@
 "use client";
-
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Send, Loader2, Package } from "lucide-react";
+import { Search, Send, Loader2, Package, X } from "lucide-react";
 import { ProductCard } from "./ProductCard";
+import { useChatActions } from "@/context/ChatActionsContext";
+import { useConfig } from "@/context/BusinessConfigContext";
+import { Product } from "@/types";
 
-interface ComposerProps {
-  onSendMessage: (message: string) => void;
-  onSelectProduct: (product: any) => void;
-}
-
-export function Composer({ onSendMessage, onSelectProduct }: ComposerProps) {
+export function Composer() {
   const [input, setInput] = useState("");
-  const [results, setResults] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [results, setResults] = useState<Product[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
-  const searchRef = useRef<HTMLDivElement>(null);
+  
+  const { sendMessage, handleConsult, isLoading } = useChatActions();
+  const config = useConfig();
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  // חיפוש מוצרים בזמן אמת מה-Inventory
+  // סגירת תוצאות בלחיצה בחוץ
   useEffect(() => {
-    const searchProducts = async () => {
-      if (input.trim().length < 2) {
-        setResults([]);
-        return;
-      }
-
-      setIsLoading(true);
-      try {
-        const res = await fetch(`/api/inventory/search?q=${encodeURIComponent(input)}`);
-        if (!res.ok) throw new Error("Search failed");
-        const data = await res.json();
-        setResults(Array.isArray(data) ? data : []);
-        setShowResults(true);
-      } catch (err) {
-        console.error("Search error:", err);
-      } finally {
-        setIsLoading(false);
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setShowResults(false);
       }
     };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
-    const timeoutId = setTimeout(searchProducts, 300);
-    return () => clearTimeout(timeoutId);
+  // לוגיקת חיפוש עם Debounce
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(async () => {
+      if (input.trim().length >= 2) {
+        setIsSearching(true);
+        try {
+          const res = await fetch(`/api/inventory/search?q=${encodeURIComponent(input)}`);
+          if (res.ok) {
+            const data = await res.json();
+            setResults(data);
+            setShowResults(true);
+          }
+        } catch (err) {
+          console.error("Search failed", err);
+        } finally {
+          setIsSearching(false);
+        }
+      } else {
+        setResults([]);
+        setShowResults(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(delayDebounceFn);
   }, [input]);
 
-  const handleSend = () => {
-    if (!input.trim()) return;
-    onSendMessage(input);
+  const onSend = () => {
+    if (!input.trim() || isLoading) return;
+    sendMessage(input);
     setInput("");
     setShowResults(false);
   };
 
   return (
-    <div className="relative w-full max-w-2xl mx-auto p-4" dir="rtl" ref={searchRef}>
-      
-      {/* רשימת תוצאות החיפוש הציפה */}
+    <div className="relative w-full max-w-2xl mx-auto" ref={containerRef}>
       <AnimatePresence>
         {showResults && results.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
-            className="absolute bottom-full mb-4 w-full left-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-[30px] shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-[450px] overflow-y-auto p-4 z-50"
+            className="absolute bottom-full mb-4 w-full bg-white dark:bg-slate-900 rounded-[35px] shadow-2xl border border-slate-100 dark:border-slate-800 p-4 z-50 max-h-[500px] overflow-y-auto custom-scrollbar"
           >
-            <div className="flex items-center gap-2 mb-3 px-2 text-[#0B2C63] dark:text-blue-400 font-black text-[10px] uppercase tracking-widest">
-              <Package size={14} />
-              נמצאו {results.length} מוצרים במחסן
+            <div className="flex items-center justify-between mb-4 px-2">
+              <span className="text-[10px] font-black uppercase tracking-tighter text-slate-400 flex items-center gap-1">
+                <Package size={12} /> נמצאו {results.length} מוצרים
+              </span>
+              <button onClick={() => setShowResults(false)}><X size={14} className="text-slate-300" /></button>
             </div>
-            
-            <div className="grid grid-cols-1 gap-3">
+            <div className="grid grid-cols-1 gap-4">
               {results.map((product) => (
-                <div 
-                  key={product.id || product.sku} 
-                  className="cursor-pointer transition-transform active:scale-95"
-                  onClick={() => {
-                    // לחיצה על הכרטיס עצמו (לא על הכפתורים) בוחרת אותו
-                    onSelectProduct(product);
-                    setInput("");
-                    setShowResults(false);
-                  }}
-                >
-                  <ProductCard 
-                    product={product} 
-                    // התיקון הקריטי: חיבור הצינור שמונע את ה-TypeError: r is not a function
-                    onConsult={(p, t) => onSelectProduct(p)} 
-                  />
+                <div key={product.id} onClick={() => { handleConsult(product, "התייעצות כללית"); setInput(""); setShowResults(false); }}>
+                  <ProductCard product={product} />
                 </div>
               ))}
             </div>
@@ -91,32 +88,30 @@ export function Composer({ onSendMessage, onSelectProduct }: ComposerProps) {
         )}
       </AnimatePresence>
 
-      {/* תיבת הקלט והחיפוש */}
-      <div className="relative flex items-center bg-white dark:bg-slate-950 rounded-full border-2 border-slate-100 dark:border-slate-800 p-2 shadow-2xl transition-all focus-within:border-blue-500/50">
-        <div className="flex-1 flex items-center px-4 gap-3">
-          {isLoading ? (
-            <Loader2 size={20} className="animate-spin text-blue-500" />
-          ) : (
-            <Search size={20} className="text-slate-400" />
-          )}
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSend()}
-            placeholder="חפש מוצר (למשל: סיקה, גבס...)"
-            className="w-full bg-transparent border-none outline-none text-slate-800 dark:text-white font-medium py-3"
-          />
+      <div className="relative group p-1 bg-gradient-to-r from-slate-200 to-slate-100 dark:from-slate-800 dark:to-slate-900 rounded-full shadow-lg transition-all focus-within:shadow-blue-500/10">
+        <div className="flex items-center bg-white dark:bg-slate-950 rounded-full p-2">
+          <div className="flex-1 flex items-center px-4 gap-3">
+            {isSearching ? <Loader2 size={18} className="animate-spin text-blue-500" /> : <Search size={18} className="text-slate-400" />}
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && onSend()}
+              placeholder="חפש מוצר או שאל שאלה..."
+              className="w-full bg-transparent border-none outline-none py-3 text-sm font-medium placeholder:text-slate-400"
+            />
+          </div>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={onSend}
+            disabled={isLoading}
+            style={{ backgroundColor: config.primaryColor }}
+            className="text-white p-4 rounded-full shadow-lg disabled:opacity-50"
+          >
+            <Send size={18} className="rotate-180" />
+          </motion.button>
         </div>
-
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={handleSend}
-          className="bg-[#0B2C63] text-white p-4 rounded-full shadow-lg hover:bg-blue-800 transition-colors"
-        >
-          <Send size={20} className="rotate-180" />
-        </motion.button>
       </div>
     </div>
   );
