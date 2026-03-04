@@ -11,11 +11,8 @@ import {
   Database,
   Info
 } from "lucide-react";
-
-/**
- * קומפוננטת דף הבית המרכזית - Canvas Chat AI
- * משלבת את ממשק הצ'אט עם גישה לנתוני הטבלאות (Products, Inventory, Orders)
- */
+export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
 export default function ChatCanvasPage() {
   const config = useConfig();
   const { messages, isLoading } = useChatActions();
