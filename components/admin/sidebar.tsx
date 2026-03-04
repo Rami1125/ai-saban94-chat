@@ -9,11 +9,18 @@ import {
   Settings, 
   ListChecks, 
   Tag, 
-  Brain 
+  Brain,
+  Sparkles // הוספנו אייקון לסוכן ה-AI
 } from "lucide-react"
 
 const studioMenu = [
+  // דף הבית של האדמין - כאן ירוץ ה-SabanAdminDashboard שסיפקת
   { name: "דשבורד בקרה", icon: LayoutDashboard, path: "/admin" },
+  
+  // הוספת ניהול המוח (הדף שהתחלנו מקודם)
+  { name: "ניהול מוח AI", icon: Brain, path: "/admin/ai-brain" },
+  
+  // שאר הטבלאות הקיימות
   { name: "זיכרון לקוחות", icon: Users, table: "customer_memory" },
   { name: "מלאי (Inventory)", icon: Package, table: "inventory" },
   { name: "הזמנות", icon: ShoppingCart, table: "orders" },
@@ -23,6 +30,7 @@ const studioMenu = [
   { name: "קאש תשובות AI", icon: Database, table: "answers_cache" },
   { name: "ידע מאוחד (Brain)", icon: Brain, table: "saban_unified_knowledge" },
 ]
+
 export function Sidebar() {
   return (
     <aside className="w-64 bg-[#0B2C63] text-white h-screen sticky top-0 flex flex-col p-4 shadow-2xl">
@@ -33,6 +41,7 @@ export function Sidebar() {
         {studioMenu.map((item) => (
           <Link 
             key={item.name} 
+            // אם יש table, הנתיב הוא דינמי, אחרת משתמש ב-path הקבוע
             href={item.table ? `/admin/${item.table}` : item.path!}
             className="flex items-center gap-3 p-3 rounded-lg hover:bg-white/10 transition-all text-sm group"
           >
@@ -41,6 +50,8 @@ export function Sidebar() {
           </Link>
         ))}
       </nav>
+      
+      {/* כפתור הגדרות בתחתית */}
       <div className="pt-4 border-t border-blue-400/20">
         <button className="flex items-center gap-3 p-3 w-full rounded-lg hover:bg-red-500/20 text-red-300 text-sm">
           <Settings size={18} />
