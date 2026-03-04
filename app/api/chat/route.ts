@@ -6,13 +6,13 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: Request) {
   try {
     if (!supabase) {
-      return NextResponse.json({ error: "Database configuration missing" }, { status: 500 });
+      return NextResponse.json({ error: "Database not connected" }, { status: 500 });
     }
 
     const { messages } = await req.json();
     const lastUserMessage = messages[messages.length - 1].content.trim();
 
-    // 1. חיפוש חכם ב-Inventory (לפי שם, מק"ט או תיאור)
+    // חיפוש ב-Inventory (חיפוש גמיש בשם, מק"ט ותיאור)
     const { data: products, error } = await supabase
       .from('inventory')
       .select('*')
@@ -24,12 +24,10 @@ export async function POST(req: Request) {
     if (products && products.length > 0) {
       const p = products[0];
       
-      // יצירת תשובה טקסטואלית מעוצבת
-      const responseText = `מצאתי עבורך את <b>${p.product_name}</b>. הנה הפרטים הטכניים מהמערכת:`;
+      const responseText = `מצאתי עבורך מידע על <b>${p.product_name}</b>:`;
 
       return NextResponse.json({ 
         text: responseText,
-        // הזרקת אובייקט המוצר המלא לצורך רינדור ProductCard
         product: {
           id: p.id || p.sku,
           product_name: p.product_name,
@@ -45,7 +43,7 @@ export async function POST(req: Request) {
       });
     }
 
-    // 2. חיפוש ב-Knowledge Base אם לא נמצא מוצר ספציפי
+    // חיפוש ב-Knowledge Base כגיבוי
     const { data: knowledge } = await supabase
       .from('saban_unified_knowledge')
       .select('content')
@@ -56,13 +54,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ text: knowledge[0].content });
     }
 
-    // 3. תשובת ברירת מחדל
     return NextResponse.json({ 
-      text: `לא מצאתי מוצר מדויק בשם "${lastUserMessage}". כדאי לנסות חיפוש לפי מק"ט או שם כללי יותר, או לבדוק עם נציג ח. סבן.` 
+      text: "לא מצאתי מוצר מדויק. נסה לחפש לפי שם מוצר או מק\"ט." 
     });
 
   } catch (error: any) {
-    console.error("Chat API Error:", error);
+    console.error("API Error:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
