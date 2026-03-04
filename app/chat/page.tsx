@@ -1,97 +1,165 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-// ייבוא רכיבים עם שמות מדויקים
 import { ChatWindow } from "@/components/ChatWindow";
 import { Composer } from "@/components/chat/Composer"; 
 import { SafeIcon } from "@/components/SafeIcon";
 import { SafeChatIcon } from "@/components/SafeChatIcon";
 import { useConfig } from "@/context/BusinessConfigContext";
 import { useChatActions } from "@/context/ChatActionsContext";
-import { LayoutDashboard, ShoppingBag, Database, Info } from "lucide-react";
+import { ProductCard } from "@/components/chat/ProductCard";
+import { supabase } from "@/lib/supabase";
+import { Product } from "@/types";
 
-export default function ChatPage() {
+type TabType = "chat" | "products" | "inventory";
+
+export default function SabanMainPage() {
   const config = useConfig();
   const { messages } = useChatActions();
+  const [activeTab, setActiveTab] = useState<TabType>("chat");
   const [mounted, setMounted] = useState(false);
+  const [dbProducts, setDbProducts] = useState<Product[]>([]);
+  const [isLoadingDb, setIsLoadingDb] = useState(false);
 
-  // מניעת שגיאת Hydration - טעינה רק בדפדפן
   useEffect(() => {
     setMounted(true);
+    fetchProducts();
   }, []);
 
-  if (!mounted) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center font-black text-blue-600">
-        טוען מערכת...
-      </div>
-    );
-  }
+  // שליפת כל המוצרים מהטבלה ב-Supabase
+  const fetchProducts = async () => {
+    setIsLoadingDb(true);
+    try {
+      const { data, error } = await supabase
+        .from("inventory")
+        .select("*")
+        .order("product_name", { ascending: true });
+      
+      if (data) setDbProducts(data);
+    } catch (err) {
+      console.error("Error fetching products:", err);
+    } finally {
+      setIsLoadingDb(false);
+    }
+  };
+
+  if (!mounted) return null;
 
   return (
-    <main className="min-h-screen bg-[#F8FAFC] flex flex-col md:flex-row h-screen overflow-hidden font-sans" dir="rtl">
+    <main className="min-h-screen bg-[#F1F5F9] flex flex-col md:flex-row h-screen overflow-hidden font-sans" dir="rtl">
       
-      {/* סרגל צד דסקטופ */}
+      {/* Sidebar - תפריט ניווט טאבים */}
       <aside className="hidden md:flex flex-col w-64 bg-[#0B2C63] text-white p-6 space-y-8 shadow-2xl z-30">
         <div className="flex items-center gap-3 border-b border-white/10 pb-6">
           <div className="p-2 bg-white rounded-xl shadow-lg">
             <SafeIcon name="Zap" className="text-[#0B2C63]" size={24} fill="currentColor" />
           </div>
-          <div className="flex flex-col leading-none">
-            <span className="font-black text-xl tracking-tighter">{config.businessName}</span>
-            <span className="text-[9px] font-bold text-blue-300 uppercase tracking-widest mt-1">AI Assistant</span>
-          </div>
+          <span className="font-black text-xl tracking-tighter">{config.businessName}</span>
         </div>
 
-        <nav className="flex-1 space-y-2">
-          <button className="w-full flex items-center gap-3 p-3 bg-white/10 text-white rounded-2xl font-bold border border-white/5 transition-all">
+        <nav className="flex-1 space-y-4">
+          <button 
+            onClick={() => setActiveTab("chat")}
+            className={`w-full flex items-center gap-3 p-4 rounded-2xl font-bold transition-all ${activeTab === 'chat' ? 'bg-white/20 text-white shadow-inner' : 'text-white/60 hover:text-white'}`}
+          >
             <SafeChatIcon size={20} />
             <span>צ'אט ייעוץ</span>
           </button>
-          <button className="w-full flex items-center gap-3 p-3 text-white/60 hover:text-white hover:bg-white/5 rounded-2xl font-medium transition-all group">
+
+          <button 
+            onClick={() => setActiveTab("products")}
+            className={`w-full flex items-center gap-3 p-4 rounded-2xl font-bold transition-all ${activeTab === 'products' ? 'bg-white/20 text-white shadow-inner' : 'text-white/60 hover:text-white'}`}
+          >
             <SafeIcon name="LayoutGrid" size={20} />
             <span>מוצרים</span>
           </button>
-          <button className="w-full flex items-center gap-3 p-3 text-white/60 hover:text-white hover:bg-white/5 rounded-2xl font-medium transition-all group">
+
+          <button 
+            onClick={() => setActiveTab("inventory")}
+            className={`w-full flex items-center gap-3 p-4 rounded-2xl font-bold transition-all ${activeTab === 'inventory' ? 'bg-white/20 text-white shadow-inner' : 'text-white/60 hover:text-white'}`}
+          >
             <SafeIcon name="Database" size={20} />
             <span>מלאי</span>
           </button>
         </nav>
       </aside>
 
-      {/* אזור העבודה המרכזי */}
+      {/* אזור התוכן המשתנה */}
       <section className="flex-1 flex flex-col relative overflow-hidden h-full">
         
-        {/* Navbar עליון */}
-        <header className="flex items-center justify-between p-4 bg-white/80 backdrop-blur-md border-b border-slate-200 z-10 shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="md:hidden p-2 bg-[#0B2C63] rounded-lg text-white">
-               <SafeChatIcon size={20} />
-            </div>
-            <div>
-              <h1 className="text-lg font-black text-slate-900 leading-none">מרכז שירות AI</h1>
-              <p className="text-[10px] text-green-500 font-bold uppercase mt-1">Live Connection</p>
-            </div>
-          </div>
-          <div className="bg-slate-100 px-4 py-1.5 rounded-full text-[10px] font-black text-slate-500 border border-slate-200">
-            {messages.length} הודעות
+        {/* Header סטטי */}
+        <header className="flex items-center justify-between p-4 bg-white border-b border-slate-200 z-10 shadow-sm">
+          <h1 className="text-lg font-black text-slate-900">
+            {activeTab === "chat" && "צ'אט מומחה AI"}
+            {activeTab === "products" && "קטלוג מוצרים דיגיטלי"}
+            {activeTab === "inventory" && "מצב מלאי מעודכן"}
+          </h1>
+          <div className="bg-blue-50 text-blue-700 px-4 py-1.5 rounded-full text-[10px] font-black border border-blue-100 uppercase tracking-tighter">
+            {activeTab === "chat" ? `${messages.length} הודעות` : `${dbProducts.length} פריטים`}
           </div>
         </header>
 
-        {/* חלון הצ'אט (היסטוריה) */}
-        <div className="flex-1 overflow-hidden flex flex-col max-w-5xl w-full mx-auto relative px-4 pt-6 pb-2">
-          <div className="flex-1 relative z-10 flex flex-col bg-white rounded-t-[40px] shadow-xl border border-slate-100 overflow-hidden">
-            <ChatWindow />
-          </div>
+        {/* תצוגה מותנית לפי הטאב הנבחר */}
+        <div className="flex-1 overflow-hidden relative p-4 flex flex-col">
+          
+          {/* טאב 1: צ'אט */}
+          {activeTab === "chat" && (
+            <div className="flex-1 flex flex-col max-w-5xl w-full mx-auto overflow-hidden">
+              <div className="flex-1 bg-white rounded-t-[40px] shadow-xl border border-slate-100 overflow-hidden">
+                <ChatWindow />
+              </div>
+              <div className="bg-white border-t border-slate-100 px-6 py-8 z-20 shadow-lg rounded-b-[40px] mb-4">
+                <Composer />
+              </div>
+            </div>
+          )}
+
+          {/* טאב 2: מוצרים (שליפה מהטבלה) */}
+          {activeTab === "products" && (
+            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {isLoadingDb ? (
+                  <div className="col-span-full text-center py-20 animate-pulse font-bold text-slate-400 uppercase">טוען קטלוג סבן...</div>
+                ) : (
+                  dbProducts.map((p) => <ProductCard key={p.sku} product={p} />)
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* טאב 3: מלאי (תצוגת טבלה נקייה) */}
+          {activeTab === "inventory" && (
+            <div className="flex-1 bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-hidden m-2">
+              <div className="overflow-x-auto h-full">
+                <table className="w-full text-right text-sm">
+                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-black uppercase text-[10px] tracking-widest">
+                    <tr>
+                      <th className="p-4">מק"ט</th>
+                      <th className="p-4">שם המוצר</th>
+                      <th className="p-4 text-center">מחיר</th>
+                      <th className="p-4 text-center">סטטוס</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {dbProducts.map((p) => (
+                      <tr key={p.sku} className="hover:bg-blue-50/50 transition-colors">
+                        <td className="p-4 font-mono font-bold text-blue-600">{p.sku}</td>
+                        <td className="p-4 font-bold text-slate-800">{p.product_name}</td>
+                        <td className="p-4 text-center font-black">₪{p.price || '--'}</td>
+                        <td className="p-4 text-center">
+                          <span className="bg-green-100 text-green-700 px-2 py-1 rounded-md text-[10px] font-bold italic">במלאי שוטף</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* --- כאן מופיע שדה הכתיבה והחיפוש --- */}
-        <div className="bg-white border-t border-slate-100 px-6 py-8 z-20 shadow-lg rounded-b-[40px] max-w-5xl w-full mx-auto mb-4">
-          <Composer />
-        </div>
-
-        <footer className="px-8 pb-4 text-center text-[9px] text-slate-400 font-black uppercase tracking-widest bg-transparent">
-          SABAN BUILDING MATERIALS AI • PROD V2.5
+        <footer className="px-8 pb-4 text-[9px] text-slate-400 font-black uppercase tracking-widest">
+          SABAN BUILDING MATERIALS • PROD V2.5
         </footer>
       </section>
     </main>
