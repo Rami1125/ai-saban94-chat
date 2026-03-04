@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import { 
-  Brain, Save, Package, MessageSquare, Activity, 
-  Search, ExternalLink, Loader2, Send, Database, BarChart3
+  Brain, Save, Package, Activity, Search, Loader2, 
+  Send, Database, Edit2, Trash2, CheckCircle, Smartphone
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { SafeIcon } from "@/components/SafeIcon";
@@ -12,139 +12,110 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ProductCard } from "@/components/chat/productcard"; 
+import { ProductCard } from "@/components/chat/ProductCard"; // שימוש בקומפוננטה המקורית
+import { motion, AnimatePresence } from "framer-motion";
 
-export default function ProfessionalAiStudio() {
+export default function SabanAiStudio() {
   const [systemPrompt, setSystemPrompt] = useState("");
   const [inventory, setInventory] = useState<any[]>([]);
-  const [recentChats, setRecentChats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  
+  // Simulator states
   const [isThinking, setIsThinking] = useState(false);
   const [userInput, setUserInput] = useState("");
-  const [simMessages, setSimMessages] = useState<any[]>([
-    { role: 'bot', content: 'מערכת ה-AI מחוברת למסדי הנתונים של ח. סבן. כיצד אוכל לעזור?' }
-  ]);
+  const [messages, setMessages] = useState([{ role: 'bot', content: 'מערכת SABAN AI מחוברת למלאי. במה אוכל לעזור?' }]);
 
   useEffect(() => {
-    loadRealTimeData();
+    loadStudioData();
   }, []);
 
-  async function loadRealTimeData() {
+  async function loadStudioData() {
     setLoading(true);
     try {
-      // 1. שליפת המוח (שימוש ב-maybeSingle למניעת שגיאת 406/404)
-      const { data: promptData } = await supabase
-        .from('saban_unified_knowledge')
-        .select('content')
-        .eq('type', 'system_prompt')
-        .maybeSingle();
-
-      // 2. שליפת מלאי אמיתי מהטבלה הקיימת
-      const { data: invData } = await supabase
-        .from('inventory')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      // 3. שליפת פעילות אחרונה של לקוחות (Online Monitor)
-      const { data: chats } = await supabase
-        .from('chat_history')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      if (promptData) setSystemPrompt(promptData.content);
+      // שליפת המוח - שימוש ב-maybeSingle למניעת שגיאות HTTP
+      const { data: pData } = await supabase.from('saban_unified_knowledge').select('content').eq('type', 'system_prompt').maybeSingle();
+      // שליפת מלאי אמיתי מהטבלה הקיימת
+      const { data: invData } = await supabase.from('inventory').select('*').limit(100);
+      
+      if (pData) setSystemPrompt(pData.content);
       setInventory(invData || []);
-      setRecentChats(chats || []);
-    } catch (err) {
-      console.error("Connection error:", err);
     } finally {
       setLoading(false);
     }
   }
 
-  const handleSavePrompt = async () => {
+  const handleSave = async () => {
     setSaving(true);
-    const { error } = await supabase.from('saban_unified_knowledge').upsert(
-      { type: 'system_prompt', content: systemPrompt },
-      { onConflict: 'type' }
-    );
+    await supabase.from('saban_unified_knowledge').upsert({ type: 'system_prompt', content: systemPrompt });
     setSaving(false);
-    if (!error) alert("הגדרות המוח עודכנו בהצלחה!");
+    alert("המוח עודכן בהצלחה!");
   };
 
-  const handleSimSend = async () => {
+  const simulateChat = async () => {
     if (!userInput) return;
-    const text = userInput;
+    const q = userInput;
     setUserInput("");
-    setSimMessages(prev => [...prev, { role: 'user', content: text }]);
+    setMessages(prev => [...prev, { role: 'user', content: q }]);
     
     setIsThinking(true);
     setTimeout(() => {
       setIsThinking(false);
-      // חיפוש חכם במלאי האמיתי
-      const product = inventory.find(p => 
-        text.toLowerCase().includes(p.product_name?.toLowerCase())
-      );
-      
+      // חיפוש מוצר אמיתי מהמלאי שנטען
+      const product = inventory.find(p => q.includes(p.product_name) || q.includes(p.sku));
       if (product) {
-        setSimMessages(prev => [...prev, { 
-          role: 'bot', 
-          content: `מצאתי את המוצר במלאי שלנו:`,
-          product: product 
-        }]);
+        setMessages(prev => [...prev, { role: 'bot', content: `מצאתי את ${product.product_name}:`, product }]);
       } else {
-        setSimMessages(prev => [...prev, { role: 'bot', content: "מעבד את בקשתך מול נתוני המחסן..." }]);
+        setMessages(prev => [...prev, { role: 'bot', content: "מעבד את שאלתך מול נתוני המערכת..." }]);
       }
-    }, 1000);
+    }, 1200);
   };
 
   return (
-    <div className="p-6 bg-[#F8FAFC] min-h-screen text-right font-sans" dir="rtl">
-      {/* Top Professional Header */}
-      <header className="flex justify-between items-center mb-6 bg-white p-5 rounded-[2rem] shadow-sm border border-slate-200">
+    <div className="min-h-screen bg-slate-50 p-6 font-sans text-right" dir="rtl">
+      {/* Header מקצועי */}
+      <div className="max-w-7xl mx-auto flex justify-between items-center mb-8 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200">
         <div className="flex items-center gap-4">
-          <div className="bg-blue-600 p-3 rounded-2xl shadow-lg shadow-blue-200">
-            <Brain className="text-white" size={24} />
+          <div className="p-3 bg-blue-600 rounded-2xl shadow-lg shadow-blue-200 text-white">
+            <Brain size={28} />
           </div>
           <div>
-            <h1 className="text-xl font-black text-slate-800 leading-none">AI Business Core</h1>
-            <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" /> מחובר ל-Supabase Realtime
+            <h1 className="text-2xl font-black text-slate-900">AI BRAIN STUDIO</h1>
+            <p className="text-xs text-green-600 font-bold flex items-center gap-1">
+              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" /> מערכת אונליין
             </p>
           </div>
         </div>
-        <Button onClick={handleSavePrompt} disabled={saving} className="bg-[#0B2C63] hover:bg-blue-800 rounded-2xl px-6 py-6 transition-all shadow-md">
-          {saving ? <Loader2 className="animate-spin" /> : <Save size={18} className="ml-2"/>}
-          עדכן מוח מערכת
+        <Button onClick={handleSave} disabled={saving} className="bg-[#0B2C63] rounded-2xl h-12 px-8">
+          {saving ? <Loader2 className="animate-spin" /> : <Save size={18} className="ml-2" />}
+          שמור הגדרות מוח
         </Button>
-      </header>
+      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Section: Intelligence & Data */}
+      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* צד שמאל: ניהול תוכן */}
         <div className="lg:col-span-8 space-y-6">
           <Tabs defaultValue="knowledge">
-            <TabsList className="bg-slate-200/50 p-1 rounded-2xl h-14 w-full justify-start gap-2">
-              <TabsTrigger value="knowledge" className="rounded-xl px-6 data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                <Database size={16} className="ml-2" /> בסיס ידע (Prompt)
-              </TabsTrigger>
-              <TabsTrigger value="inventory" className="rounded-xl px-6 data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                <Package size={16} className="ml-2" /> ניהול מלאי חי
-              </TabsTrigger>
-              <TabsTrigger value="activity" className="rounded-xl px-6 data-[state=active]:bg-white data-[state=active]:shadow-sm">
-                <Activity size={16} className="ml-2" /> ניטור אונליין
-              </TabsTrigger>
+            <TabsList className="bg-white border p-1 rounded-2xl h-14">
+              <TabsTrigger value="knowledge" className="rounded-xl px-8">הנחיות מערכת</TabsTrigger>
+              <TabsTrigger value="inventory" className="rounded-xl px-8">מלאי אונליין</TabsTrigger>
             </TabsList>
 
             <TabsContent value="knowledge" className="mt-4">
-              <Card className="rounded-[2.5rem] border-none shadow-xl shadow-slate-200/50">
-                <CardContent className="p-6">
+              <Card className="rounded-[2.5rem] border-none shadow-xl overflow-hidden">
+                <CardContent className="p-8">
+                  <div className="mb-4 flex justify-between items-center">
+                    <span className="text-sm font-bold text-slate-500">System Prompt</span>
+                    <div className="flex gap-2">
+                       {['🏗️', '📦', '🚚', '😊'].map(e => (
+                         <button key={e} onClick={() => setSystemPrompt(p => p + e)} className="p-1 hover:bg-slate-100 rounded">{e}</button>
+                       ))}
+                    </div>
+                  </div>
                   <Textarea 
                     value={systemPrompt}
                     onChange={(e) => setSystemPrompt(e.target.value)}
-                    className="min-h-[400px] text-lg rounded-2xl border-slate-100 bg-slate-50/30 focus:bg-white transition-all leading-relaxed p-6"
-                    placeholder="הגדר את חוקי העסק וה-AI כאן..."
+                    className="min-h-[400px] text-lg rounded-2xl border-slate-100 bg-slate-50/50 p-6 leading-relaxed focus:bg-white transition-all"
                   />
                 </CardContent>
               </Card>
@@ -152,26 +123,30 @@ export default function ProfessionalAiStudio() {
 
             <TabsContent value="inventory" className="mt-4">
               <Card className="rounded-[2.5rem] border-none shadow-xl overflow-hidden bg-white">
-                <div className="p-6 border-b flex justify-between items-center bg-slate-50/50">
-                  <h3 className="font-bold text-slate-700 flex items-center gap-2"><BarChart3 size={18}/> מוצרים במערכת ({inventory.length})</h3>
-                  <Button variant="outline" size="sm" className="rounded-xl" onClick={loadRealTimeData}><Search size={14} className="ml-2"/> רענן נתונים</Button>
+                <div className="p-6 bg-slate-50 border-b flex justify-between items-center">
+                  <h3 className="font-bold flex items-center gap-2"><Database size={18}/> נתוני טבלת Inventory</h3>
+                  <div className="relative">
+                    <Search className="absolute right-3 top-2.5 text-slate-400" size={16} />
+                    <Input className="pr-10 rounded-xl h-10 w-64 bg-white" placeholder="חיפוש מהיר..." />
+                  </div>
                 </div>
                 <div className="max-h-[500px] overflow-y-auto">
                   <table className="w-full text-right">
-                    <thead className="bg-slate-50 sticky top-0 border-b">
-                      <tr className="text-slate-500 text-xs">
+                    <thead className="bg-slate-100 text-slate-500 text-[10px] uppercase">
+                      <tr>
                         <th className="p-4">שם מוצר</th>
-                        <th className="p-4">מחיר (₪)</th>
-                        <th className="p-4">סטטוס</th>
+                        <th className="p-4 text-center">מחיר</th>
+                        <th className="p-4 text-center">פעולות</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
                       {inventory.map(item => (
-                        <tr key={item.id} className="hover:bg-blue-50/30 transition-colors">
-                          <td className="p-4 font-semibold text-slate-800">{item.product_name}</td>
-                          <td className="p-4 font-mono text-blue-600 font-bold">{item.price}</td>
-                          <td className="p-4">
-                            <span className="px-2 py-1 bg-green-100 text-green-700 rounded-md text-[10px] font-bold">זמין במחסן</span>
+                        <tr key={item.id} className="hover:bg-blue-50/50 transition-colors">
+                          <td className="p-4 font-bold text-slate-800">{item.product_name}</td>
+                          <td className="p-4 text-center font-mono text-blue-600 font-black">₪{item.price}</td>
+                          <td className="p-4 text-center flex justify-center gap-2">
+                            <button className="p-2 text-slate-400 hover:text-blue-600"><Edit2 size={16}/></button>
+                            <button className="p-2 text-slate-400 hover:text-red-600"><Trash2 size={16}/></button>
                           </td>
                         </tr>
                       ))}
@@ -180,64 +155,54 @@ export default function ProfessionalAiStudio() {
                 </div>
               </Card>
             </TabsContent>
-
-            <TabsContent value="activity">
-              <div className="space-y-4">
-                {recentChats.map(chat => (
-                  <div key={chat.id} className="bg-white p-4 rounded-2xl border border-slate-100 flex items-center justify-between shadow-sm">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center"><MessageSquare size={16} className="text-slate-400"/></div>
-                      <div>
-                        <p className="text-sm font-bold">{chat.query}</p>
-                        <p className="text-[10px] text-slate-400">{new Date(chat.created_at).toLocaleString()}</p>
-                      </div>
-                    </div>
-                    <ExternalLink size={14} className="text-slate-300"/>
-                  </div>
-                ))}
-              </div>
-            </TabsContent>
           </Tabs>
         </div>
 
-        {/* Right Section: iPhone Simulator */}
-        <div className="lg:col-span-4 h-[750px] border-[10px] border-[#1E293B] rounded-[3.5rem] bg-slate-200 relative overflow-hidden flex flex-col shadow-[0_20px_50px_rgba(0,0,0,0.15)]">
-          {/* Dynamic Island */}
-          <div className="w-28 h-7 bg-[#1E293B] top-2 rounded-2xl left-1/2 -translate-x-1/2 absolute z-20"></div>
-          
-          <div className="flex-1 p-4 overflow-y-auto space-y-4 pt-12">
-            {simMessages.map((m, i) => (
-              <div key={i} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
-                <div className={`p-3 rounded-2xl text-sm max-w-[90%] shadow-sm ${m.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white text-slate-800 rounded-bl-none'}`}>
-                  {m.content}
-                </div>
-                {m.product && (
-                  <div className="mt-2 w-full scale-90 origin-right">
-                    <ProductCard product={m.product} />
+        {/* צד ימין: סימולטור iPhone */}
+        <div className="lg:col-span-4 space-y-4">
+          <div className="relative mx-auto border-[12px] border-slate-900 bg-slate-900 rounded-[3.5rem] h-[750px] w-[340px] shadow-2xl overflow-hidden">
+            <div className="w-32 h-7 bg-slate-900 top-2 rounded-2xl left-1/2 -translate-x-1/2 absolute z-20 flex items-center justify-center">
+               <div className="w-2 h-2 bg-slate-800 rounded-full"></div>
+            </div>
+            
+            <div className="h-full bg-slate-100 flex flex-col pt-12 overflow-hidden">
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {messages.map((m, i) => (
+                  <div key={i} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
+                    <div className={`p-3 rounded-2xl text-xs shadow-sm max-w-[85%] ${m.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white text-slate-800 rounded-bl-none'}`}>
+                      {m.content}
+                    </div>
+                    {/* הצגת כרטיס מוצר אמיתי */}
+                    {(m as any).product && (
+                      <div className="mt-2 w-full scale-90 origin-right">
+                        <ProductCard product={(m as any).product} />
+                      </div>
+                    )}
+                  </div>
+                ))}
+                
+                {isThinking && (
+                  <div className="flex gap-1 p-3 bg-white rounded-xl w-14 shadow-sm animate-pulse">
+                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce"/>
+                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce [animation-delay:0.2s]"/>
+                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce [animation-delay:0.4s]"/>
                   </div>
                 )}
               </div>
-            ))}
-            {isThinking && (
-              <div className="flex gap-1 p-3 bg-white rounded-2xl w-14 shadow-sm animate-pulse">
-                <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce"/>
-                <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce [animation-delay:0.2s]"/>
-                <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce [animation-delay:0.4s]"/>
-              </div>
-            )}
-          </div>
 
-          <div className="p-4 bg-white/80 backdrop-blur-md border-t flex gap-2">
-            <Input 
-              value={userInput} 
-              onChange={e => setUserInput(e.target.value)} 
-              onKeyDown={e => e.key === 'Enter' && handleSimSend()}
-              placeholder="שאל את המוח משהו..." 
-              className="rounded-full bg-slate-100 border-none h-12 text-right" 
-            />
-            <button onClick={handleSimSend} className="p-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-transform active:scale-90 shadow-lg">
-              <Send size={20}/>
-            </button>
+              <div className="p-4 bg-white border-t flex gap-2">
+                <Input 
+                  value={userInput} 
+                  onChange={e => setUserInput(e.target.value)} 
+                  onKeyDown={e => e.key === 'Enter' && simulateChat()}
+                  placeholder="כתוב משהו..." 
+                  className="rounded-full bg-slate-50 border-none h-11" 
+                />
+                <button onClick={simulateChat} className="bg-blue-600 text-white p-3 rounded-full hover:scale-105 transition-all">
+                  <Send size={18}/>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
