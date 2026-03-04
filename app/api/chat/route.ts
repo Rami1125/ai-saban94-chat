@@ -1,95 +1,89 @@
-// app/api/chat/route.ts
+import { NextResponse } from "next/server";
+import { Product, MessageRole } from "@/types";
 
-/**
- * פונקציה לבחירת מפתח רנדומלי מהמאגר (Key Pool)
- */
-function getApiKey() {
-  const pool = process.env.GOOGLE_AI_KEY_POOL;
-  if (!pool) return process.env.GOOGLE_GENERATIVE_AI_API_KEY || "";
-  
-  const keys = pool.split(",").map(k => k.trim()).filter(Boolean);
-  const randomIndex = Math.floor(Math.random() * keys.length);
-  
-  console.log(`[מלשינון] 🔑 נבחר מפתח מספר ${randomIndex + 1} מתוך ${keys.length}`);
-  return keys[randomIndex];
+export const runtime = "edge";
+
+interface ChatRequest {
+  messages: { role: MessageRole; content: string }[];
+  selectedProduct?: Product;
+  businessId: string;
 }
 
 export async function POST(req: Request) {
   try {
-    const { messages, inventory, selectedProduct } = await req.json();
-    const apiKey = getApiKey();
+    const { messages, selectedProduct, businessId }: ChatRequest = await req.json();
 
-    // בניית ההנחיה המערכתית (System Prompt)
-    // אם יש מוצר נבחר מהכפתור, אנחנו נותנים לו עדיפות עליונה בשיחה
-    let systemInstructionText = `
-      אתה "סבן AI", עוזר המכירות הבכיר של "ח. סבן חומרי בניין".
-      
-      חוקי עבודה קריטיים:
-      1. חוק סיקה: בכל פעם שמוזכר שטח במ"ר, חשב לפי: (שטח * 4) / 25 + 1 רזרבה. הצג את החישוב.
-      2. פורמט: ענה אך ורק ב-HTML נקי (<b>, <ul>, <li>). ללא סימני מרקדאון (**).
-      3. מלאי: המידע ב-Inventory הוא המקור המוסמך היחיד למחירים ומק"טים.
-    `;
-
-    if (selectedProduct) {
-      systemInstructionText += `
-      
-      [מידע על מוצר להתייעצות כעת]
-      שם מוצר: ${selectedProduct.product_name}
-      מק"ט: ${selectedProduct.sku}
-      מחיר: ${selectedProduct.price}₪
-      מפרט: ${selectedProduct.description || "לוח גבס איכותי מבית טמבור"}
-      
-      הנחיה ספציפית: הלקוח לחץ על "התייעצות" עבור המוצר הזה. 
-      תתחיל בלהסביר לו על התכונות של ${selectedProduct.product_name} 
-      ושאל אותו מה השטח (במ"ר) שהוא מתכנן לבנות/לחפות כדי שתוכל לחשב לו כמויות מדויקות.
-      `;
+    // 1. ולידציה בסיסית
+    if (!messages || !Array.isArray(messages)) {
+      return NextResponse.json({ error: "Messages are required" }, { status: 400 });
     }
 
-    // בניית ה-Payload במבנה המדויק ש-v1 דורש
+    // 2. ניהול מפתחות API (Key Pool)
+    const pool = process.env.GOOGLE_GENERATIVE_AI_API_KEY || "";
+    const keys = pool.split(",").map(k => k.trim()).filter(Boolean);
+    
+    if (keys.length === 0) {
+      return NextResponse.json({ error: "API Configuration missing" }, { status: 500 });
+    }
+    
+    const apiKey = keys[Math.floor(Math.random() * keys.length)];
+
+    // 3. בניית ה-System Prompt לפי זהות העסק (White Label)
+    let systemInstruction = `אתה אסיסטנט טכני חכם עבור עסק בשם "${businessId === 'saban' ? 'ח. סבן' : 'השותף העסקי'}".
+    עליך לענות בצורה מקצועית, אדיבה וקצרה. השתמש ב-HTML נקי להדגשות (<b>) ורשימות (<ul>, <li>).`;
+
+    if (selectedProduct) {
+      systemInstruction += `\nהלקוח מתעניין כרגע במוצר הבא:
+      שם: ${selectedProduct.product_name}
+      מק"ט: ${selectedProduct.sku}
+      מחיר: ${selectedProduct.price}₪
+      זמן ייבוש: ${selectedProduct.drying_time || 'לא צוין'}
+      כיסוי: ${selectedProduct.coverage || 'לפי מפרט'}
+      ענה על שאלות טכניות לגביו והצע עזרה בחישוב כמויות.`;
+    }
+
+    // 4. בניית ה-Payload ל-Gemini v1 API
     const payload = {
+      contents: messages.map(m => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }]
+      })),
       systemInstruction: {
         role: "system",
-        parts: [{ text: systemInstructionText }]
+        parts: [{ text: systemInstruction }]
       },
-      contents: messages.map((m: any) => ({
-        role: m.role === "user" ? "user" : "model",
-        parts: [{ text: m.content || m.text }]
-      })),
       generationConfig: {
         temperature: 0.4,
         maxOutputTokens: 1024,
-        topP: 0.95
+        topP: 0.8,
+        topK: 40
       }
     };
 
-    console.log(`[מלשינון] 🚀 שולח התייעצות ל-gemini-3-flash-preview (API v1)`);
-
-    // קריאת Fetch ישירה ל-API של גוגל
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-3-flash-preview:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       }
     );
 
-    const data = await response.json();
-
-    if (data.error) {
-      console.error(`[מלשינון] ❌ שגיאת API:`, data.error.message);
-      throw new Error(data.error.message);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Gemini API Error:", errorText);
+      throw new Error("Failed to fetch from Gemini");
     }
 
-    // חילוץ הטקסט מהמבנה של גוגל
-    const aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || "סליחה, אני מתקשה לעבד את המידע על המוצר כרגע.";
+    const data = await response.json();
+    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || "מצטער, לא הצלחתי לעבד את התשובה.";
 
-    return Response.json({ text: aiResponse });
+    return NextResponse.json({ text: responseText });
 
   } catch (error: any) {
-    console.error(`[מלשינון] ❌ קריסה ב-Route:`, error.message);
-    return Response.json(
-      { error: "תקלה בחיבור לסבן AI. המלשינון בודק את הצינורות." },
+    console.error("Server Route Error:", error);
+    return NextResponse.json(
+      { error: "Internal Server Error", details: error.message },
       { status: 500 }
     );
   }
