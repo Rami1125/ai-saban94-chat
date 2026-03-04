@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { ChatWindow } from "@/components/chatwindow";
-import { Composer } from "@/components/chat/composer"; 
+// שימוש בשמות קבצים עם אותיות גדולות בדיוק כמו בתיקייה
+import { ChatWindow } from "@/components/ChatWindow";
+import { Composer } from "@/components/chat/Composer"; 
 import { SafeIcon } from "@/components/SafeIcon";
 import { SafeChatIcon } from "@/components/SafeChatIcon";
 import { useConfig } from "@/context/BusinessConfigContext";
@@ -21,7 +22,7 @@ export default function ChatCanvasPage() {
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center space-y-4">
         <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-        <p className="font-black text-blue-600 animate-pulse uppercase">SABAN AI LOADING...</p>
+        <p className="font-black text-blue-600 animate-pulse uppercase tracking-tighter">SABAN AI LOADING...</p>
       </div>
     );
   }
@@ -29,7 +30,7 @@ export default function ChatCanvasPage() {
   return (
     <main className="min-h-screen bg-[#F1F5F9] flex flex-col md:flex-row h-screen overflow-hidden font-sans" dir="rtl">
       
-      {/* Sidebar */}
+      {/* סרגל צד - Sidebar */}
       <aside className="hidden md:flex flex-col w-64 bg-[#0B2C63] text-white p-6 space-y-8 shadow-2xl z-30">
         <div className="flex items-center gap-3 border-b border-white/10 pb-6">
           <div className="p-2 bg-white rounded-xl shadow-inner">
@@ -48,64 +49,32 @@ export default function ChatCanvasPage() {
             <SafeChatIcon size={20} />
             <span>צ'אט ייעוץ</span>
           </button>
-          <button className="w-full flex items-center gap-3 p-3 text-white/60 hover:text-white hover:bg-white/5 rounded-2xl font-medium transition-all group">
-            <SafeIcon name="LayoutGrid" size={20} className="group-hover:scale-110 transition-transform" />
-            <span>קטלוג מוצרים</span>
-          </button>
-          <button className="w-full flex items-center gap-3 p-3 text-white/60 hover:text-white hover:bg-white/5 rounded-2xl font-medium transition-all group">
-            <SafeIcon name="Database" size={20} className="group-hover:scale-110 transition-transform" />
-            <span>מלאי סניפים</span>
+          <button className="w-full flex items-center gap-3 p-3 text-white/60 hover:text-white rounded-2xl transition-all">
+            <SafeIcon name="Database" size={20} />
+            <span>מלאי</span>
           </button>
         </nav>
-
-        <div className="p-4 bg-gradient-to-br from-blue-500 to-blue-700 rounded-3xl shadow-lg border border-white/20 relative overflow-hidden group">
-          <div className="relative z-10">
-            <div className="flex items-center gap-2 mb-2 text-white">
-              <SafeIcon name="ShieldCheck" size={16} />
-              <span className="text-[10px] font-black uppercase tracking-widest">Secured DB</span>
-            </div>
-            <p className="text-[11px] leading-tight text-blue-50 font-medium">
-              הנתונים מסונכרנים מול טבלאות Supabase בזמן אמת.
-            </p>
-          </div>
-          <SafeIcon name="Database" size={80} className="absolute -bottom-4 -left-4 opacity-10 group-hover:rotate-12 transition-transform" />
-        </div>
       </aside>
 
-      {/* Main Canvas */}
+      {/* אזור העבודה המרכזי */}
       <section className="flex-1 flex flex-col relative overflow-hidden h-full">
-        <header className="flex items-center justify-between p-4 bg-white/80 backdrop-blur-md border-b border-slate-200 z-10">
-          <div className="flex items-center gap-4">
-            <div className="md:hidden p-2 bg-[#0B2C63] rounded-lg text-white">
-               <SafeChatIcon size={20} />
-            </div>
-            <div>
-              <h1 className="text-lg font-black text-slate-900 leading-none">ממשק ניהול חכם</h1>
-              <p className="text-[10px] text-green-500 font-bold uppercase mt-1 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
-                Connected to Unified DB
-              </p>
-            </div>
-          </div>
-          <div className="bg-slate-100 px-4 py-1.5 rounded-full text-[10px] font-black text-slate-500 border border-slate-200 uppercase tracking-tighter shadow-sm">
-            Session: {messages.length} Events
+        <header className="flex items-center justify-between p-4 bg-white/80 backdrop-blur-md border-b border-slate-200 z-10 shadow-sm">
+          <h1 className="text-lg font-black text-slate-900 leading-none">ממשק חכם</h1>
+          <div className="bg-slate-100 px-4 py-1.5 rounded-full text-[10px] font-black text-slate-500 border border-slate-200">
+            {messages.length} הודעות
           </div>
         </header>
 
         <div className="flex-1 overflow-hidden flex flex-col max-w-5xl w-full mx-auto relative px-4 pt-6 pb-2">
-          <div className="flex-1 relative z-10 flex flex-col bg-white rounded-t-[40px] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-slate-100 overflow-hidden">
+          <div className="flex-1 relative z-10 flex flex-col bg-white rounded-t-[40px] shadow-2xl border border-slate-100 overflow-hidden">
             <ChatWindow />
           </div>
         </div>
 
-        <div className="bg-white border-t border-slate-100 px-6 py-8 z-20 shadow-[0_-15px_50px_rgba(0,0,0,0.04)] rounded-b-[40px] max-w-5xl w-full mx-auto mb-4">
+        {/* שדה הכתיבה - ממוקם בנפרד למניעת בעיות תצוגה */}
+        <div className="bg-white border-t border-slate-100 px-6 py-8 z-20 shadow-lg rounded-b-[40px] max-w-5xl w-full mx-auto mb-4">
           <Composer />
         </div>
-
-        <footer className="px-8 pb-4 flex justify-between items-center text-[9px] text-slate-400 font-black uppercase tracking-widest">
-          <div>v2.5.0-PROD</div>
-          <div>SABAN BUILDING MATERIALS AI</div>
-        </footer>
       </section>
     </main>
   );
