@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Send, Bot, User } from "lucide-react";
 import { useChatActions } from "../context/ChatActionsContext";
-import { ProductCard } from "./chat/ProductCard"; // תיקון נתיב לתיקיית chat
+import { ProductCard } from "./chat/ProductCard"; // וודא שהנתיב מדויק לתיקיית המשנה chat
 
 export function ChatWindow() {
   const { messages, sendMessage, isLoading, error } = useChatActions();
