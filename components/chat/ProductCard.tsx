@@ -1,38 +1,63 @@
 "use client";
-import { useState } from "react";
+import React from "react";
 import { motion } from "framer-motion";
-import { Calculator, Clock, MessageCircle, PlayCircle } from "lucide-react";
+import { Clock, Calculator, MessageCircle } from "lucide-react";
+import { Product } from "../types";
+import { useChatActions } from "../context/ChatActionsContext";
+import { formatPrice } from "../utils/chat-helpers";
 
-export function ProductCard({ product, onConsult }: { product: any; onConsult?: (p: any, t: string) => void }) {
-  const [showVideo, setShowVideo] = useState(false);
-  if (!product) return null;
+export function ProductCard({ product }: { product: Product }) {
+  const { handleConsult } = useChatActions();
 
-  const safeConsult = (e: React.MouseEvent, type: string) => {
-    e.stopPropagation(); // עוצר את הלחיצה מפעפוע לאבא
-    if (typeof onConsult === "function") {
-      onConsult(product, type);
-    } else {
-      console.error("❌ [ProductCard] onConsult אינו פונקציה!", { onConsult, type });
-    }
+  const onAction = (e: React.MouseEvent, type: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    handleConsult(product, type);
   };
 
   return (
-    <motion.div className="bg-white dark:bg-slate-900 border border-slate-200 rounded-[30px] overflow-hidden w-full max-w-[320px] shadow-xl text-right" dir="rtl">
-      <div className="w-full h-40 bg-slate-100 relative">
-        <img src={product.image_url || "https://placehold.co/400x400?text=Saban+AI"} className="w-full h-full object-contain p-4" alt={product.product_name} />
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[35px] overflow-hidden shadow-xl max-w-[320px] transition-all"
+      dir="rtl"
+    >
+      <div className="w-full h-44 bg-slate-50 relative p-4 flex items-center justify-center">
+        <img src={product.image_url} alt={product.product_name} className="max-h-full object-contain" />
       </div>
-      <div className="p-4">
-        <h3 className="font-black text-[#0B2C63] dark:text-white text-lg mb-2">{product.product_name || "מוצר"}</h3>
-        <div className="flex gap-2 mb-4">
-          <button type="button" onClick={(e) => safeConsult(e, "זמן ייבוש")} className="flex-1 bg-slate-50 dark:bg-slate-800 p-2 rounded-xl text-[10px] font-bold">
-            <Clock size={14} className="mx-auto mb-1 text-orange-500" /> {product.drying_time || "24 שעות"}
+      
+      <div className="p-5">
+        <h3 className="text-lg font-black text-slate-900 dark:text-white mb-1 leading-tight h-12 overflow-hidden">
+          {product.product_name}
+        </h3>
+        <p className="text-blue-600 font-black text-xl mb-4">{formatPrice(product.price)}</p>
+        
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          <button 
+            onClick={(e) => onAction(e, "זמן ייבוש")}
+            className="flex flex-col items-center p-2 bg-slate-50 dark:bg-slate-800 rounded-2xl hover:bg-blue-50 transition-colors"
+          >
+            <Clock size={16} className="text-orange-500 mb-1" />
+            <span className="text-[10px] font-bold text-slate-400">זמן ייבוש</span>
+            <span className="text-[11px] font-black">{product.drying_time || "24 שעות"}</span>
           </button>
-          <button type="button" onClick={(e) => safeConsult(e, "חישוב כמויות")} className="flex-1 bg-slate-50 dark:bg-slate-800 p-2 rounded-xl text-[10px] font-bold">
-            <Calculator size={14} className="mx-auto mb-1 text-blue-500" /> {product.coverage || "לפי מפרט"}
+          
+          <button 
+            onClick={(e) => onAction(e, "חישוב כמויות")}
+            className="flex flex-col items-center p-2 bg-slate-50 dark:bg-slate-800 rounded-2xl hover:bg-blue-50 transition-colors"
+          >
+            <Calculator size={16} className="text-blue-500 mb-1" />
+            <span className="text-[10px] font-bold text-slate-400">כיסוי</span>
+            <span className="text-[11px] font-black">{product.coverage || "לפי מפרט"}</span>
           </button>
         </div>
-        <button type="button" onClick={(e) => safeConsult(e, "התייעצות כללית")} className="w-full bg-[#0B2C63] text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-800 transition-all">
-          <MessageCircle size={18} /> התייעצות כאן
+
+        <button 
+          onClick={(e) => onAction(e, "ייעוץ כללי")}
+          className="w-full py-3 bg-slate-900 dark:bg-blue-600 text-white rounded-2xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity shadow-lg shadow-blue-500/20"
+        >
+          <MessageCircle size={18} />
+          התייעצות כאן
         </button>
       </div>
     </motion.div>
