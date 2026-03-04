@@ -1,15 +1,22 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Inter, Heebo } from "next/font/google";
 import "./globals.css";
 import { GlobalErrorBoundary } from "../components/GlobalErrorBoundary";
 import { BusinessConfigProvider } from "../context/BusinessConfigContext";
 import { ChatActionsProvider } from "../context/ChatActionsContext";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const heebo = Heebo({ subsets: ["hebrew", "latin"], variable: "--font-heebo" });
 
 export const metadata: Metadata = {
-  title: "ח. סבן AI - אסיסטנט טכני",
-  description: "ייעוץ טכני חכם לחומרי בניין",
+  title: "ח. סבן – יועץ חומרים | ייעוץ טכני חכם לחומרי בניין",
+  description: "ייעוץ טכני חכם לחומרי בניין – גבס, מלט, איטום, ברזל ועוד. חיפוש מוצרים, מפרטים טכניים והדרכות מקצועיות.",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#2563eb",
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({
@@ -19,7 +26,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="he" dir="rtl">
-      <body className={inter.className}>
+      <body className={`${heebo.variable} ${inter.variable} font-sans`}>
         <GlobalErrorBoundary>
           <BusinessConfigProvider>
             <ChatActionsProvider>
