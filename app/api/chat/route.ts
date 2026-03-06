@@ -4,6 +4,31 @@ import { rtdb } from "@/lib/firebase";
 import { ref, push } from "firebase/database";
 import { NextResponse } from "next/server";
 
+// פונקציית עזר לשליחה רשמית דרך Infobip
+async function sendOfficialWhatsApp(to: string, text: string) {
+  const url = `https://${process.env.INFOBIP_BASE_URL}/whatsapp/1/message/text`;
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `App ${process.env.INFOBIP_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        messages: [{
+          from: "447860099299", // המספר שקיבלת ב-Sandbox
+          to: to.replace('+', ''),
+          content: { text: text }
+        }]
+      })
+    });
+    return await response.json();
+  } catch (err) {
+    console.error("Infobip Error:", err);
+    return null;
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const { messages, userId, phone } = await req.json();
@@ -21,12 +46,11 @@ export async function POST(req: Request) {
       ? `\n[הקשר מוצר נוכחי: ${foundProduct.product_name}, מחיר: ${foundProduct.price}₪]` 
       : "";
 
-    // 2. רשימת מודלים לדילוג (לפי סדר עדיפות מעודכן ל-2026)
+    // 2. רשימת מודלים לדילוג (מעודכן ל-2026)
     const modelPool = [
-      "gemini-3.1-flash-lite-preview", // הכי חדש ומהיר (מרץ 2026)
-      "gemini-3.1-flash-preview",      // יציב וחזק
-      "gemini-3-flash-preview",        // גיבוי סדרה 3
-      "gemini-1.5-flash-latest"        // ה-Fallback הסופי והבטוח
+      "gemini-3.1-flash-lite-preview", 
+      "gemini-3.1-flash-preview",      
+      "gemini-1.5-flash-latest"        
     ];
 
     const rawKeys = process.env.GOOGLE_AI_KEY_POOL || process.env.GEMINI_API_KEY || "";
@@ -36,10 +60,9 @@ export async function POST(req: Request) {
     let aiResponse = "";
     let lastError = "";
 
-    // 3. מנגנון הדילוג הכפול: גם על מפתחות וגם על מודלים
+    // 3. מנגנון הדילוג הכפול
     for (const key of keyPool) {
       if (!key) continue;
-      
       const genAI = new GoogleGenerativeAI(key);
 
       for (const modelName of modelPool) {
@@ -54,23 +77,32 @@ export async function POST(req: Request) {
           
           if (aiResponse) {
             aiResponse = aiResponse.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
-            break; // הצלחנו עם המודל הזה!
+            break; 
           }
         } catch (e: any) {
           lastError = e.message;
-          console.warn(`Model ${modelName} failed with key ${key.substring(0,5)}: ${lastError}`);
-          continue; // נכשל? נסה את המודל הבא ברשימה
+          console.warn(`Model ${modelName} failed: ${lastError}`);
+          continue; 
         }
       }
-      if (aiResponse) break; // הצלחנו עם המפתח הזה!
+      if (aiResponse) break; 
     }
 
-    if (!aiResponse) throw new Error(`נכשלו כל ניסיונות החיבור. שגיאה אחרונה: ${lastError}`);
+    if (!aiResponse) throw new Error(`נכשלו כל ניסיונות החיבור. שגיאה: ${lastError}`);
 
-    // 4. סנכרון לווטסאפ דרך Firebase
+    // 4. שליחה רב-ערוצית (Infobip + JONI)
     if (phone) {
+      const cleanPhone = phone.replace('+', '');
+      
+      // א. אם יש מוצר מזוהה - שלח כרטיס רשמי דרך Infobip (למספר שביקשת)
+      if (foundProduct) {
+        const officialMsg = `🏗️ *ח. סבן - כרטיס מוצר*\n*מוצר:* ${foundProduct.product_name}\n*מחיר:* ${foundProduct.price}₪\n\nשלום, מצורפים הפרטים לבקשתך.`;
+        await sendOfficialWhatsApp("972508861080", officialMsg);
+      }
+
+      // ב. סנכרון ל-Firebase עבור JONI (הערוץ החינמי)
       await push(ref(rtdb, 'saban94/send'), {
-        to: phone,
+        to: cleanPhone,
         text: aiResponse,
         timestamp: Date.now(),
         product: foundProduct
