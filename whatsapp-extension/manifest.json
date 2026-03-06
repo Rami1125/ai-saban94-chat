@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "JONI Saban — Link Notifier",
+  "version": "1.1.0",
+  "description": "מציג התראות על לינקים ומוצרים מח. סבן בתוך WhatsApp Web.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://*.firebasedatabase.app/"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  }
+}
