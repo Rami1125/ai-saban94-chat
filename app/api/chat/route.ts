@@ -37,12 +37,11 @@ export async function POST(req: Request) {
       .limit(1);
     const foundProduct = products?.[0] || null;
 
-    // 3. בריכת מודלים יציבה (בלי סיומות בעייתיות)
-// הוספת הקידומת models/ פותרת את שגיאת ה-404 בגרסת v1beta
+// מבוסס על עדכוני ינואר-מרץ 2026: השמות היציבים ביותר כרגע
 const modelPool = [
-  "models/gemini-1.5-flash", 
-  "models/gemini-1.5-pro",
-  "models/gemini-pro"
+  "gemini-3-flash-preview",   // המהיר והחכם ביותר לסדרת Gemini 3
+  "gemini-3.1-flash-lite-preview", // המודל החדש ביותר (הושק לפני 3 ימים!)
+  "gemini-3.1-pro-preview"    // לחישובים לוגיסטיים מורכבים
 ];
     // 4. בריכת מפתחות (מ-Environment Variables)
     const rawKeys = process.env.GOOGLE_AI_KEY_POOL || process.env.GEMINI_API_KEY || "";
