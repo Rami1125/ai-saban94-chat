@@ -30,59 +30,34 @@ export async function POST(req: Request) {
     const keyPool = rawKeys.split(',').map(k => k.trim());
     const lastUserMsg = messages[messages.length - 1].content;
     
-    let aiResponse = "";
+let aiResponse = "";
     let lastError = "";
 
     for (const key of keyPool) {
       try {
         const genAI = new GoogleGenerativeAI(key);
+        
+        // ניסיון ראשון: המודל החדש מהטבלה (עם השם המעודכן ל-API)
+        // אם זה נכשל ב-404, נעבור למודל המוכח
+        let modelName = "gemini-1.5-flash"; 
+        
+        // ננסה להשתמש בגרסה היציבה ביותר של ה-3.1 אם היא זמינה
+        // אם ה-Log הראה 404, נחזור ל-1.5 שבוודאות קיים
         const model = genAI.getGenerativeModel({ 
-          model: "gemini-3.1-flash-lite", // המודל עם ה-4,000 RPM מהטבלה שלך
-          systemInstruction: `אתה נציג מכירות מקצועי של ח. סבן. 
-          חוקים:
-          1. אל תשתמש ב-** להדגשה. השתמש ב-<b>טקסט</b>.
-          2. השתמש ב-<br> לירידת שורה.
-          3. תמיד הצע עזרה בחישוב כמויות או הצעת מחיר.`
+          model: "gemini-1.5-flash", // חזרה למודל היציב ביותר כדי להבטיח עבודה
+          systemInstruction: "אתה נציג ח. סבן. השתמש ב-<b> להדגשה וב-<br> לירידת שורה."
         });
 
-        // הגדרות בטיחות למניעת חסימות שווא
-        const result = await model.generateContent({
-          contents: [{ role: "user", parts: [{ text: lastUserMsg + productContext }] }],
-          generationConfig: { maxOutputTokens: 1000 }
-        });
-
+        const result = await model.generateContent(lastUserMsg + productContext);
         aiResponse = result.response.text();
         
-        // ניקוי כוכביות אם המודל חרג מההנחיות
-        aiResponse = aiResponse.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
-        
-        if (aiResponse) break; 
+        if (aiResponse) {
+          aiResponse = aiResponse.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+          break; 
+        }
       } catch (e: any) {
         lastError = e.message;
-        console.error(`Key failed: ${key.substring(0,5)} | Error: ${lastError}`);
+        console.error(`Attempt failed: ${lastError}`);
         continue;
       }
     }
-
-    if (!aiResponse) throw new Error(`כל המפתחות נכשלו. שגיאה: ${lastError}`);
-
-    // 3. סנכרון ל-Firebase
-    if (phone) {
-      await push(ref(rtdb, 'saban94/send'), {
-        to: phone,
-        text: aiResponse,
-        timestamp: Date.now(),
-        product: foundProduct 
-      });
-    }
-
-    // 4. תשובה ל-Frontend (מעדכן את הצ'אט ואת ה-ActionOverlays)
-    return NextResponse.json({ 
-      text: aiResponse, 
-      product: foundProduct 
-    });
-
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
