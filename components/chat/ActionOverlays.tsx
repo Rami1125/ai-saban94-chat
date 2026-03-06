@@ -10,11 +10,18 @@ export function ActionOverlays() {
   const [status, setStatus] = useState<"idle" | "success">("idle");
 
   useEffect(() => {
-    const handleOpen = (e: any) => {
-      setProduct(e.detail.product || null);
-      setActiveType(e.detail.type);
-      setStatus("idle");
-    };
+const handleProductShare = async () => {
+  const messageData = {
+    to: "972508861080", // המספר המעודכן שביקשת
+    text: `🏗️ *ח. סבן - כרטיס מוצר*\n*מוצר:* ${product?.product_name}\n*מחיר:* ${product?.price}₪`,
+    timestamp: Date.now(),
+    type: "product_card"
+  };
+
+  // דחיפה ל-Firebase
+  await push(ref(rtdb, 'saban94/send'), messageData);
+  setStatus("success");
+};
     window.addEventListener('open-action-overlay', handleOpen);
     return () => window.removeEventListener('open-action-overlay', handleOpen);
   }, []);
