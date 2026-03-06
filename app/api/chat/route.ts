@@ -8,15 +8,15 @@ export async function POST(req: Request) {
   try {
     const { messages, userId, phone } = await req.json();
 
-    // 1. ניהול מאגר המפתחות (Key Pool) מהעדכונים האחרונים
-    const rawPool = process.env.GOOGLE_AI_KEY_POOL || process.env.GEMINI_API_KEY || "";
-    const keyPool = rawPool.split(',').map(k => k.trim()).filter(k => k.length > 0);
+    // 1. חילוץ מפתחות - תמיכה גם ב-Pool וגם במפתח בודד
+    const rawKeys = process.env.GOOGLE_AI_KEY_POOL || process.env.GEMINI_API_KEY || "";
+    const keyPool = rawKeys.split(',').map(k => k.trim()).filter(k => k.length > 0);
 
     if (keyPool.length === 0) {
-      return NextResponse.json({ error: "No API Keys found" }, { status: 500 });
+      return NextResponse.json({ error: "Configuration Error: No API Keys found" }, { status: 500 });
     }
 
-    // 2. שליפת ה-System Prompt מ-Supabase
+    // 2. שליפת הוראות מערכת מ-Supabase
     const { data: aiConfig } = await supabase
       .from('saban_unified_knowledge')
       .select('content')
@@ -28,38 +28,34 @@ export async function POST(req: Request) {
     let responseText = "";
     let lastError = "";
 
-    // 3. לוגיקת דילוג (Failover) עם מודל Gemini 3.1 Flash-Lite
+    // 3. ניסיון דילוג בין מפתחות
     for (const apiKey of keyPool) {
       try {
         const genAI = new GoogleGenerativeAI(apiKey);
-        
-        // עדכון למודל החדש ביותר לפי ההכרזה מ-3 במרץ 2026
+        // שימוש במודל Gemini 3.1 Flash-Lite לפי העדכון האחרון
         const model = genAI.getGenerativeModel({ 
-          model: "gemini-3.1-flash-lite-preview", 
+          model: "gemini-3.1-flash-lite-preview",
           systemInstruction: systemInstruction 
         });
 
-        const chat = model.startChat({
-          history: messages.slice(0, -1).map((m: any) => ({
-            role: m.role === 'user' ? 'user' : 'model',
-            parts: [{ text: m.content }],
-          })),
-        });
+        const lastMsg = messages[messages.length - 1].content;
+        const result = await model.generateContent(lastMsg);
+        const response = await result.response;
+        responseText = response.text();
 
-        const lastMessage = messages[messages.length - 1].content;
-        const result = await chat.sendMessage(lastMessage);
-        responseText = result.response.text();
-
-        if (responseText) break;
+        if (responseText) break; 
       } catch (e: any) {
         lastError = e.message;
+        console.error(`Key failure: ${lastError}`);
         continue;
       }
     }
 
-    if (!responseText) throw new Error(`All keys failed: ${lastError}`);
+    if (!responseText) {
+      return NextResponse.json({ error: `All keys in pool failed. Last error: ${lastError}` }, { status: 500 });
+    }
 
-    // 4. הזרקה לווטסאפ (Firebase)
+    // 4. הזרקה ל-Firebase עבור JONI
     if (phone) {
       await push(ref(rtdb, 'saban94/send'), {
         to: phone,
@@ -68,15 +64,14 @@ export async function POST(req: Request) {
       });
     }
 
-    // 5. שמירת היסטוריה
-    await supabase.from('chat_history').insert([
-      { user_id: userId, query: messages[messages.length - 1].content, response: responseText }
-    ]);
-
     return NextResponse.json({ text: responseText });
 
   } catch (error: any) {
+    // החזרת השגיאה המדויקת ל-SHAK במקום הודעה כללית
     console.error("Critical Bridge Error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ 
+      error: "Critical Bridge Failure", 
+      details: error.message 
+    }, { status: 500 });
   }
 }
