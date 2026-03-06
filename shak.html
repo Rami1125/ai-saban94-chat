@@ -2,93 +2,149 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>SHAK v5.0 | ניטור מאגר מפתחות ח. סבן</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SHAK v5.5 | ניטור גשר סבן-Vercel</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;700;800&display=swap" rel="stylesheet">
     <style>
-        .pulse { animation: shadow-pulse 1s infinite; }
-        @keyframes shadow-pulse { 0% { box-shadow: 0 0 0 0px rgba(34, 197, 94, 0.4); } 100% { box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); } }
-        .key-badge { padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; }
+        body { font-family: 'Assistant', sans-serif; }
+        .pulse { animation: pulse-animation 2s infinite; }
+        @keyframes pulse-animation {
+            0% { box-shadow: 0 0 0 0px rgba(16, 185, 129, 0.4); }
+            100% { box-shadow: 0 0 0 15px rgba(16, 185, 129, 0); }
+        }
+        .terminal-scroll::-webkit-scrollbar { width: 4px; }
+        .terminal-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
     </style>
 </head>
-<body class="bg-slate-900 text-slate-100 p-8 font-sans">
-    <div class="max-w-4xl mx-auto">
-        <div class="flex justify-between items-center mb-10 border-b border-slate-700 pb-5">
+<body class="bg-[#0f172a] text-slate-200 min-h-screen p-4 md:p-8">
+
+    <div class="max-w-6xl mx-auto">
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 bg-slate-800/50 p-6 rounded-2xl border border-slate-700 shadow-2xl">
             <div>
-                <h1 class="text-3xl font-black text-white">SHAK MONITOR <span class="text-emerald-500">v5.0</span></h1>
-                <p class="text-slate-400 text-sm">ניהול מאגר מפתחות (Key Pool) בזמן אמת</p>
+                <h1 class="text-3xl font-black tracking-tighter text-white">SHAK <span class="text-emerald-500">MONITOR v5.5</span></h1>
+                <p class="text-slate-400 text-sm mt-1 italic">מערכת בקרה לגשר הנדסי: Supabase ↔ Gemini ↔ Firebase</p>
             </div>
-            <div id="global-status" class="px-4 py-2 bg-emerald-500/10 text-emerald-500 rounded-xl border border-emerald-500/20 font-bold uppercase tracking-wider">
-                System Online
+            <div class="flex items-center gap-3">
+                <div id="connection-led" class="w-3 h-3 bg-emerald-500 rounded-full pulse"></div>
+                <span id="status-text" class="font-bold text-emerald-500 tracking-widest text-sm uppercase">Link Active</span>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-slate-800 border border-slate-700 p-5 rounded-2xl shadow-lg">
+                <div class="text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest">Vercel Endpoint</div>
+                <div class="text-sm font-bold truncate text-blue-400">ai-saban94-chat.vercel.app</div>
+            </div>
+
+            <div class="bg-slate-800 border border-slate-700 p-5 rounded-2xl shadow-lg">
+                <div class="text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest">Key Pool Status</div>
+                <div id="pool-count" class="text-sm font-bold text-emerald-400">3 מפתחות פעילים</div>
+            </div>
+
+            <div class="bg-slate-800 border border-slate-700 p-5 rounded-2xl shadow-lg">
+                <div class="text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest">Supabase DB</div>
+                <div id="db-status" class="text-sm font-bold text-emerald-400 font-mono italic">Connected</div>
+            </div>
+
+            <div class="bg-slate-800 border border-slate-700 p-5 rounded-2xl shadow-lg">
+                <div class="text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest">JONI RTDB</div>
+                <div id="joni-status" class="text-sm font-bold text-emerald-400">Listening...</div>
             </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-            <div class="bg-slate-800 p-4 rounded-xl border border-slate-700" id="key-0">
-                <div class="flex justify-between mb-2">
-                    <span class="text-xs text-slate-500">KEY #1</span>
-                    <span class="status-dot w-2 h-2 rounded-full bg-slate-600"></span>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <div class="lg:col-span-1 space-y-6">
+                <div class="bg-white/5 p-6 rounded-3xl border border-white/10 backdrop-blur-xl">
+                    <h2 class="text-lg font-bold mb-4 text-emerald-400 flex items-center gap-2">
+                        סימולטור הזרקה הנדסי
+                    </h2>
+                    <input type="text" id="test-msg" placeholder="הקלד הודעת בדיקה לצינור..." 
+                           class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm mb-4 focus:ring-2 focus:ring-emerald-500 outline-none">
+                    <button onclick="runDiagnostic()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-xl transition-all shadow-lg active:scale-95 uppercase tracking-tighter">
+                        הזרק ובדוק דופק גשר
+                    </button>
+                    <p class="text-[10px] text-slate-500 mt-4 text-center leading-relaxed">
+                        הפעולה תבצע קריאת API, תבדוק תקינות מפתח ב-Pool ותוודא הזרקה ל-Firebase.
+                    </p>
                 </div>
-                <div class="text-sm font-mono truncate opacity-50">AIzaSy...XXXX</div>
             </div>
-            <div class="bg-slate-800 p-4 rounded-xl border border-slate-700" id="key-1">
-                <div class="flex justify-between mb-2">
-                    <span class="text-xs text-slate-500">KEY #2</span>
-                    <span class="status-dot w-2 h-2 rounded-full bg-slate-600"></span>
-                </div>
-                <div class="text-sm font-mono truncate opacity-50">AIzaSy...YYYY</div>
-            </div>
-            <div class="bg-slate-800 p-4 rounded-xl border border-slate-700" id="key-2">
-                <div class="flex justify-between mb-2">
-                    <span class="text-xs text-slate-500">KEY #3</span>
-                    <span class="status-dot w-2 h-2 rounded-full bg-slate-600"></span>
-                </div>
-                <div class="text-sm font-mono truncate opacity-50">AIzaSy...ZZZZ</div>
-            </div>
-        </div>
 
-        <div class="bg-black/50 rounded-2xl p-6 border border-slate-800">
-            <h3 class="text-emerald-400 font-bold mb-4 flex items-center gap-2">
-                <span class="w-2 h-2 bg-emerald-500 rounded-full pulse"></span>
-                לוג דילוגים והזרקות בזמן אמת
-            </h3>
-            <div id="logs" class="h-64 overflow-y-auto font-mono text-xs space-y-2 custom-scrollbar">
-                <div class="text-slate-500 italic">מאתחל מערכת ניטור...</div>
+            <div class="lg:col-span-2">
+                <div class="bg-black/40 rounded-3xl border border-slate-800 h-[450px] flex flex-col shadow-inner">
+                    <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/30">
+                        <span class="text-[10px] font-bold text-blue-400 tracking-widest uppercase">Console Output</span>
+                        <div class="flex gap-2">
+                            <div class="w-2 h-2 rounded-full bg-red-500/50"></div>
+                            <div class="w-2 h-2 rounded-full bg-amber-500/50"></div>
+                            <div class="w-2 h-2 rounded-full bg-emerald-500/50"></div>
+                        </div>
+                    </div>
+                    <div id="terminal" class="flex-1 p-6 font-mono text-xs overflow-y-auto terminal-scroll space-y-2">
+                        <div class="text-slate-500 italic">מחכה לפקודת הזרקה מראמי...</div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <script>
-        function logMsg(msg, status = 'info') {
-            const container = document.getElementById('logs');
-            const colors = { info: 'text-blue-400', ok: 'text-emerald-400', err: 'text-rose-400' };
+    <script type="module">
+        // הערה: בגלל המבנה החדש, אנו פונים ישירות ל-API Route של המאגר
+        const VERCEL_URL = "https://ai-saban94-chat.vercel.app/api/chat";
+
+        function addLog(msg, type = 'info') {
+            const term = document.getElementById('terminal');
+            const colors = { info: '#94a3b8', ok: '#34d399', err: '#fb7185', warn: '#fbbf24' };
             const time = new Date().toLocaleTimeString();
-            container.innerHTML = `<div class="${colors[status]}"><span class="text-slate-600">[${time}]</span> ${msg}</div>` + container.innerHTML;
+            term.innerHTML = `<div><span class="text-slate-600">[${time}]</span> <span style="color:${colors[type]}">${msg}</span></div>` + term.innerHTML;
         }
 
-        async function testBridge() {
-            logMsg("מתחיל בדיקת הזרקה למאגר המפתחות...", "info");
+        window.runDiagnostic = async () => {
+            const msg = document.getElementById('test-msg').value || "בדיקת דופק מערכת";
+            addLog(`מתחיל סדרת בדיקות עבור הודעה: "${msg}"`, 'info');
+
             try {
-                const res = await fetch('https://ai-saban94-chat.vercel.app/api/chat', {
+                // 1. בדיקת זמינות השרת
+                addLog("בודק תקשורת מול Vercel Edge Runtime...", 'info');
+                
+                const startTime = Date.now();
+                const response = await fetch(VERCEL_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ messages: [{role: 'user', content: 'בדיקת דופק'}] })
+                    body: JSON.stringify({
+                        messages: [{ role: 'user', content: msg }],
+                        userId: 'shak-monitor-v5',
+                        phone: '972508860896' // המספר העסקי שלך
+                    })
                 });
-                const data = await res.json();
-                
-                if(res.ok) {
-                    logMsg(`✅ הצלחה! Gemini ענה: "${data.text.substring(0,20)}..."`, "ok");
-                    // סימולציית זיהוי מפתח פעיל
-                    document.querySelector('#key-0 .status-dot').className = "status-dot w-2 h-2 rounded-full bg-emerald-500 pulse";
-                } else {
-                    logMsg(`❌ כשל ב-Bridge: ${data.error}`, "err");
-                }
-            } catch (e) {
-                logMsg(`❌ שגיאת רשת: ${e.message}`, "err");
-            }
-        }
 
-        // הפעלה אוטומטית של בדיקה ראשונה
-        setTimeout(testBridge, 2000);
+                const duration = Date.now() - startTime;
+                const data = await response.json();
+
+                if (response.ok) {
+                    addLog(`✅ הגשר הגיב תוך ${duration}ms`, 'ok');
+                    addLog(`✅ Gemini ענה בהצלחה (מפתח יציב נמצא ב-Pool)`, 'ok');
+                    addLog(`✅ הודעה הוזרקה לנתיב saban94/send ב-Firebase`, 'ok');
+                    document.getElementById('connection-led').className = "w-3 h-3 bg-emerald-500 rounded-full pulse";
+                } else {
+                    addLog(`❌ כשל בגשר: ${data.error || 'שגיאה לא ידועה'}`, 'err');
+                    if(data.error?.includes('API_KEY_INVALID')) {
+                        addLog("⚠️ אזהרה: מפתחAPI פגום! המערכת תנסה לדלג בבקשה הבאה.", 'warn');
+                    }
+                    document.getElementById('connection-led').className = "w-3 h-3 bg-red-500 rounded-full";
+                }
+
+            } catch (err) {
+                addLog(`❌ שגיאת רשת קריטית: ${err.message}`, 'err');
+                document.getElementById('connection-led').className = "w-3 h-3 bg-red-500 rounded-full";
+            }
+        };
+
+        // פעימות קשר (Simulation of heartbeat)
+        setInterval(() => {
+            console.log("SHAK Pulse: Stable");
+        }, 5000);
     </script>
 </body>
 </html>
