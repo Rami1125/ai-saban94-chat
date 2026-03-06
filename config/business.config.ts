@@ -3,14 +3,8 @@ const getEnv = (key: string, defaultValue: string): string => {
   // בודק קודם את המשתנה הציבורי של Next.js, אחר כך את המשתנה הרגיל
   const value = process.env[`NEXT_PUBLIC_${key}`] || process.env[key];
   
-  if (!value) {
-    // מציג אזהרה רק ב-Development כדי לא ללכלך את ה-Production
-    if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') {
-      console.warn(`[Config]: ${key} is missing, using default.`);
-    }
-    return defaultValue;
-  }
-  return value;
+  // מחזיר את הערך או את ברירת המחדל בשקט - אין צורך באזהרות כשיש ברירות מחדל תקינות
+  return value || defaultValue;
 };
 
 export const businessConfig = {
