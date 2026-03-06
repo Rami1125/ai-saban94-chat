@@ -7,71 +7,64 @@ import { NextResponse } from "next/server";
 export async function POST(req: Request) {
   try {
     const { messages, userId, phone } = await req.json();
+    const lastUserMsg = messages[messages.length - 1].content;
 
-    // 1. חילוץ מפתחות - תמיכה גם ב-Pool וגם במפתח בודד
-    const rawKeys = process.env.GOOGLE_AI_KEY_POOL || process.env.GEMINI_API_KEY || "";
-    const keyPool = rawKeys.split(',').map(k => k.trim()).filter(k => k.length > 0);
+    // 1. חיפוש מוצר במלאי (Supabase Inventory)
+    // אנחנו מחפשים התאמה בשם המוצר לפי מה שהלקוח כתב
+    const { data: products } = await supabase
+      .from('inventory')
+      .select('*')
+      .textSearch('name', lastUserMsg, { 
+        config: 'hebrew',
+        type: 'websearch' 
+      })
+      .limit(1);
 
-    if (keyPool.length === 0) {
-      return NextResponse.json({ error: "Configuration Error: No API Keys found" }, { status: 500 });
+    let productContext = "";
+    let productCardForWhatsApp = "";
+
+    if (products && products.length > 0) {
+      const p = products[0];
+      // מידע ש-Gemini יקרא כדי לענות
+      productContext = `\n[מידע מהמלאי: נמצא מוצר ${p.name}, מחיר: ${p.price}₪, תיאור: ${p.description}]`;
+      
+      // כרטיס מעוצב שיוזרק לווטסאפ
+      productCardForWhatsApp = `\n\n📦 *כרטיס מוצר מצאתי עבורך:* \n━━━━━━━━━━━━\n*${p.name}*\n💰 *מחיר:* ${p.price}₪\n📝 *תיאור:* ${p.description}\n🖼️ *תמונה:* ${p.image_url || 'אין תמונה זמינה'}\n━━━━━━━━━━━━`;
     }
 
-    // 2. שליפת הוראות מערכת מ-Supabase
-    const { data: aiConfig } = await supabase
-      .from('saban_unified_knowledge')
-      .select('content')
-      .eq('type', 'system_prompt')
-      .single();
-
-    const systemInstruction = aiConfig?.content || "אתה עוזר מקצועי של ח. סבן חומרי בניין.";
-
-    let responseText = "";
-    let lastError = "";
-
-    // 3. ניסיון דילוג בין מפתחות
-    for (const apiKey of keyPool) {
+    // 2. אתחול Gemini 3.1 Flash-Lite עם הקשר המלאי
+    const rawKeys = process.env.GOOGLE_AI_KEY_POOL || process.env.GEMINI_API_KEY || "";
+    const keyPool = rawKeys.split(',').map(k => k.trim());
+    
+    let aiResponse = "";
+    for (const key of keyPool) {
       try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        // שימוש במודל Gemini 3.1 Flash-Lite לפי העדכון האחרון
+        const genAI = new GoogleGenerativeAI(key);
         const model = genAI.getGenerativeModel({ 
           model: "gemini-3.1-flash-lite-preview",
-          systemInstruction: systemInstruction 
+          systemInstruction: "אתה איש מכירות של ח. סבן. אם יש מידע על מוצר, השתמש בו כדי לענות בצורה מכירתית."
         });
 
-        const lastMsg = messages[messages.length - 1].content;
-        const result = await model.generateContent(lastMsg);
-        const response = await result.response;
-        responseText = response.text();
-
-        if (responseText) break; 
-      } catch (e: any) {
-        lastError = e.message;
-        console.error(`Key failure: ${lastError}`);
-        continue;
-      }
+        const result = await model.generateContent(lastUserMsg + productContext);
+        aiResponse = result.response.text();
+        if (aiResponse) break;
+      } catch (e) { continue; }
     }
 
-    if (!responseText) {
-      return NextResponse.json({ error: `All keys in pool failed. Last error: ${lastError}` }, { status: 500 });
-    }
+    const finalMessage = aiResponse + productCardForWhatsApp;
 
-    // 4. הזרקה ל-Firebase עבור JONI
+    // 3. הזרקה לצינור ה-Firebase עבור JONI
     if (phone) {
       await push(ref(rtdb, 'saban94/send'), {
         to: phone,
-        text: responseText,
+        text: finalMessage,
         timestamp: Date.now()
       });
     }
 
-    return NextResponse.json({ text: responseText });
+    return NextResponse.json({ text: finalMessage, product: products?.[0] || null });
 
   } catch (error: any) {
-    // החזרת השגיאה המדויקת ל-SHAK במקום הודעה כללית
-    console.error("Critical Bridge Error:", error);
-    return NextResponse.json({ 
-      error: "Critical Bridge Failure", 
-      details: error.message 
-    }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
