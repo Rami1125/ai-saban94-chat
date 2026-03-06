@@ -9,26 +9,21 @@ export async function POST(req: Request) {
     const { messages, userId, phone } = await req.json();
     const lastUserMsg = messages[messages.length - 1].content;
 
-    // 1. חיפוש מוצר ב-Inventory (Supabase) - שליפה לפי מילות מפתח
+    // 1. שליפת מידע מה-Inventory (ללא שינוי בדינמיקה)
     const { data: products } = await supabase
       .from('inventory')
       .select('*')
-      .textSearch('name', lastUserMsg, { 
-        config: 'hebrew',
-        type: 'websearch' 
-      })
+      .textSearch('product_name', lastUserMsg, { config: 'hebrew', type: 'websearch' })
       .limit(1);
 
     let productContext = "";
     let foundProduct = null;
-
     if (products && products.length > 0) {
       foundProduct = products[0];
-      // הקשר טכני ל-Gemini כדי שידע להסביר על המוצר הספציפי שנמצא
-      productContext = `\n[מידע טכני מהמלאי: שם: ${foundProduct.name}, מחיר: ${foundProduct.price}₪, SKU: ${foundProduct.sku}, תכונות: ${foundProduct.description}]`;
+      productContext = `\n[מצאתי במלאי: ${foundProduct.product_name}, מחיר: ${foundProduct.price}₪, SKU: ${foundProduct.sku}]`;
     }
 
-    // 2. אתחול Gemini 3.1 Flash-Lite (המוח החדש)
+    // 2. אתחול ה-AI עם הנחיית עיצוב HTML
     const rawKeys = process.env.GOOGLE_AI_KEY_POOL || process.env.GEMINI_API_KEY || "";
     const keyPool = rawKeys.split(',').map(k => k.trim());
     
@@ -38,32 +33,34 @@ export async function POST(req: Request) {
         const genAI = new GoogleGenerativeAI(key);
         const model = genAI.getGenerativeModel({ 
           model: "gemini-3.1-flash-lite-preview",
-          systemInstruction: "אתה מומחה חומרי בניין בח. סבן. ענה במקצועיות, תמציתיות ובגובה העיניים. אם נמצא מוצר במלאי, הסבר עליו בקצרה."
+          systemInstruction: `אתה נציג ח. סבן. 
+          חוק עיצוב קריטי: אל תשתמש בסימני ** להדגשה. 
+          במקום זה, השתמש בתגיות <b>טקסט מודגש</b> עבור שמות מוצרים, מחירים או דגשים חשובים. 
+          השתמש ב-<br> לירידת שורה.`
         });
 
         const result = await model.generateContent(lastUserMsg + productContext);
         aiResponse = result.response.text();
+        
+        // ניקוי שאריות כוכביות אם המודל שכח את עצמו
+        aiResponse = aiResponse.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+        
         if (aiResponse) break;
       } catch (e) { continue; }
     }
 
-    // 3. הזרקה לווטסאפ (טקסט בלבד לצינור של JONI)
-    if (phone && aiResponse) {
-      const whatsappText = foundProduct 
-        ? `${aiResponse}\n\n📦 *מוצר במלאי:* ${foundProduct.name}\n💰 *מחיר:* ${foundProduct.price}₪\n🖼️ ${foundProduct.image_url}`
-        : aiResponse;
-
+    // 3. הזרקה לווטסאפ (ללא שינוי) ולממשק
+    if (phone) {
       await push(ref(rtdb, 'saban94/send'), {
         to: phone,
-        text: whatsappText,
+        text: aiResponse,
         timestamp: Date.now()
       });
     }
 
-    // 4. החזרת תשובה לממשק ה-Web (כולל אובייקט המוצר להצגת ה-ProductCard)
     return NextResponse.json({ 
       text: aiResponse, 
-      product: foundProduct // כאן הממשק יקבל את הנתונים וירנדר את ה-ProductCard ששלחת
+      product: foundProduct 
     });
 
   } catch (error: any) {
