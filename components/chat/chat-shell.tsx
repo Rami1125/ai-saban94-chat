@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react"
 import { MessageSquareDashed, Sparkles } from "lucide-react"
 import { MessageList } from "./message-list"
-import { Composer } from "./composer"
+import { Composer } from "@/components/chat/Composer";
 import { Button } from "@/components/ui/button"
 
 export function ChatShell() {
