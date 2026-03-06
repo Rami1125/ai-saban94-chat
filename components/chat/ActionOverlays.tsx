@@ -50,7 +50,7 @@ export function ActionOverlays() {
         type: "product_card"
       };
 
-      await push(ref(rtdb, 'saban94/send'), messageData);
+      await push(ref(rtdb, 'saban94/pipeline'), messageData);
       setStatus("success");
     } catch (error) {
       console.error("שגיאה בשליחה ל-Firebase:", error);
