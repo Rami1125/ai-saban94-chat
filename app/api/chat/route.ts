@@ -65,7 +65,7 @@ const modelPool = [
             חוקי פורמט:
             - הדגשות ב-<b> בלבד.
             - ירידת שורה ב-<br>.
-            - בסוף כל הודעה חובה לכתוב: sent via JONI`
+            - בסוף כל הודעה חובה לכתוב: תודה מסבן-AI`
           });
 
           const prompt = foundProduct 
