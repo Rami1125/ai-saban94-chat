@@ -4,40 +4,10 @@ import { rtdb } from "@/lib/firebase";
 import { ref, push } from "firebase/database";
 import { NextResponse } from "next/server";
 
-/**
- * פונקציית עזר לשליחה רשמית דרך Infobip
- */
-async function sendOfficialWhatsApp(to: string, text: string) {
-  const url = `https://${process.env.INFOBIP_BASE_URL}/whatsapp/1/message/text`;
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `App ${process.env.INFOBIP_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        messages: [{
-          from: "447860099299", 
-          to: to.replace('+', ''),
-          content: { text: text }
-        }]
-      })
-    });
-    return await response.json();
-  } catch (err) {
-    console.error("Infobip Error:", err);
-    return null;
-  }
-}
-
-/**
- * פונקציית עזר להזרקת הודעה לנתיב הצינור החדש ב-Firebase עבור JONI
- */
+// פונקציית עזר להזרקת הודעה ל-JONI
 async function pushToPipeline(to: string, text: string, productData: any = null) {
-  const cleanPhone = to.replace('+', '');
+  const cleanPhone = to.replace('+', '').trim();
   const pipelineRef = ref(rtdb, 'saban94/pipeline'); 
-  
   await push(pipelineRef, {
     to: cleanPhone,
     text: text,
@@ -49,95 +19,89 @@ async function pushToPipeline(to: string, text: string, productData: any = null)
 
 export async function POST(req: Request) {
   try {
-    const { messages, userId, phone } = await req.json();
+    const { messages, phone } = await req.json();
     
-    // 1. שליפת ספר החוקים וההנחיות מה-Supabase (התשתית החדשה שלך)
+    // 1. שליפת חוקים מ-Supabase (המוח של רמי)
     const { data: dbRules } = await supabase
       .from('system_rules')
       .select('instruction')
       .eq('is_active', true);
-
     const customInstructions = dbRules?.map(r => r.instruction).join("\n") || "";
 
-    // 2. חיפוש מוצר ב-Inventory לפי הקשר השיחה
-    const contextSearch = messages.slice(-3).map((m: any) => m.content).join(" ");
+    // 2. זיהוי מוצר מהמלאי
+    const lastUserMsg = messages[messages.length - 1].content;
     const { data: products } = await supabase
       .from('inventory')
       .select('*')
-      .textSearch('product_name', contextSearch, { config: 'hebrew', type: 'websearch' })
+      .textSearch('product_name', lastUserMsg, { config: 'hebrew', type: 'websearch' })
       .limit(1);
+    const foundProduct = products?.[0] || null;
 
-    const foundProduct = products && products.length > 0 ? products[0] : null;
-    const productContext = foundProduct 
-      ? `\n[הקשר מוצר מהמלאי: ${foundProduct.product_name}, מחיר: ${foundProduct.price}₪]` 
-      : "";
-
-    // 3. מודלים ודילוג מעודכן 2026
+    // 3. בריכת מודלים יציבה (בלי סיומות בעייתיות)
     const modelPool = [
-      "gemini-3.1-flash-lite-preview", 
-      "gemini-3.1-flash-preview",      
-      "gemini-1.5-flash-latest"        
+      "gemini-1.5-flash", 
+      "gemini-1.5-pro",
+      "gemini-pro"
     ];
 
+    // 4. בריכת מפתחות (מ-Environment Variables)
     const rawKeys = process.env.GOOGLE_AI_KEY_POOL || process.env.GEMINI_API_KEY || "";
-    const keyPool = rawKeys.split(',').map(k => k.trim());
-    const lastUserMsg = messages[messages.length - 1].content;
+    const keyPool = rawKeys.split(',').map(k => k.trim()).filter(k => k !== "");
     
     let aiResponse = "";
     let lastError = "";
 
-    // 4. לוגיקת ה-AI עם הזרקת ספר החוקים
+    // 5. מנגנון הדילוג (Failover Logic)
     for (const key of keyPool) {
-      if (!key) continue;
       const genAI = new GoogleGenerativeAI(key);
-
+      
       for (const modelName of modelPool) {
         try {
           const model = genAI.getGenerativeModel({ 
             model: modelName,
-            systemInstruction: `אתה נציג רשמי של ח. סבן 1994 בע"מ. עליך לפעול בדיוק לפי ספר החוקים הבא:
+            systemInstruction: `אתה נציג רשמי של ח. סבן 1994 בע"מ.
+            הנחיות מחייבות מבעל הבית:
             ${customInstructions}
             
-            דגשי פורמט:
-            - השתמש ב-<b> להדגשה וב-<br> לירידת שורה.
-            - אל תשתמש בסימני כוכבית (**).
-            - תמיד חתום בסוף ב: sent via JONI`
+            חוקי פורמט:
+            - הדגשות ב-<b> בלבד.
+            - ירידת שורה ב-<br>.
+            - בסוף כל הודעה חובה לכתוב: sent via JONI`
           });
 
-          const result = await model.generateContent(lastUserMsg + productContext);
+          const prompt = foundProduct 
+            ? `${lastUserMsg}\n(מידע מהמלאי: ${foundProduct.product_name}, מחיר: ${foundProduct.price}₪)`
+            : lastUserMsg;
+
+          const result = await model.generateContent(prompt);
           aiResponse = result.response.text();
           
           if (aiResponse) break; 
         } catch (e: any) {
           lastError = e.message;
-          console.warn(`Model ${modelName} failed: ${lastError}`);
+          console.warn(`ניסיון כשל עם ${modelName}: ${lastError}`);
           continue; 
         }
       }
       if (aiResponse) break; 
     }
 
-    if (!aiResponse) throw new Error(`כשלו כל ניסיונות ה-AI. שגיאה: ${lastError}`);
+    if (!aiResponse) {
+      return NextResponse.json({ error: "כל המודלים והמפתחות כשלו. בדוק מפתחות API ב-Vercel." }, { status: 500 });
+    }
 
-    // 5. ניקוי ועיבוד סופי של הטקסט
+    // 6. ניקוי כוכביות (ליתר ביטחון)
     aiResponse = aiResponse.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
 
-    // 6. הפעלת הצינור (Infobip + JONI)
+    // 7. הזרקה ל-JONI ולסטודיו
     if (phone) {
-      if (foundProduct) {
-        const officialMsg = `🏗️ *ח. סבן - כרטיס מוצר*\n*מוצר:* ${foundProduct.product_name}\n*מחיר:* ${foundProduct.price}₪\n\nשלום, מצורפים הפרטים שביקשת.`;
-        // שליחה למספר ספציפי או לטלפון של הלקוח
-        await sendOfficialWhatsApp(phone, officialMsg);
-      }
-
-      // הזרקה ל-Pipeline עבור התוסף ו-Studio
       await pushToPipeline(phone, aiResponse, foundProduct);
     }
 
     return NextResponse.json({ text: aiResponse, product: foundProduct });
 
   } catch (error: any) {
-    console.error("API Error:", error);
+    console.error("Critical Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
