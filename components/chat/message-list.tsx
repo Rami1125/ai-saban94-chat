@@ -7,7 +7,14 @@ import { ProductCard } from "./ProductCard";
 import { useChatActions } from "@/context/ChatActionsContext";
 
 export function MessageList() {
-  const { messages, isLoading, handleSendMessage } = useChatActions();
+  // חילוץ בטוח של הפונקציות והנתונים
+  const chatActions = useChatActions();
+  
+  // הגנה: אם Context לא זמין, נמנע קריסה
+  const messages = chatActions?.messages || [];
+  const isLoading = chatActions?.isLoading || false;
+  const handleSendMessage = chatActions?.handleSendMessage;
+
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -16,23 +23,23 @@ export function MessageList() {
     }
   }, [messages, isLoading]);
 
-  // פונקציה לניהול הלחיצה על כפתורי הפעולה
   const onQuickReplyClick = (action: string, product?: any) => {
     if (action === "הצעת מחיר מדויקת" && product) {
-      // פתיחת דף המוצר (ה-Sheet שבנינו)
       window.dispatchEvent(new CustomEvent('open-product-sheet', { detail: product }));
-    } else {
-      // שליחת טקסט לבוט (לבדיקת מלאי או נציג)
+    } else if (typeof handleSendMessage === 'function') {
+      // בדיקה שהפונקציה קיימת לפני הפעלה - זה פותר את ה-TypeError
       handleSendMessage(action);
+    } else {
+      console.error("handleSendMessage is not defined in ChatActionsContext");
     }
   };
 
   return (
     <div ref={scrollRef} className="h-full overflow-y-auto p-4 space-y-8 custom-scrollbar">
       <AnimatePresence initial={false}>
-        {messages.map((message, index) => (
+        {messages.map((message: any, index: number) => (
           <motion.div
-            key={message.id}
+            key={message.id || index}
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
@@ -53,13 +60,12 @@ export function MessageList() {
 
                 {message.product && <ProductCard product={message.product} />}
 
-                {/* הכפתורים הופכים לפעילים כאן */}
                 {message.role === 'assistant' && index === messages.length - 1 && !isLoading && (
                   <div className="flex flex-wrap gap-2 mt-2">
                     {[
                       { label: "הצעת מחיר מדויקת", action: "הצעת מחיר מדויקת" },
-                      { label: "בדיקת זמינות מלאי", action: "האם המוצר זמין במחסן עכשיו?" },
-                      { label: "דבר עם נציג", action: "אני רוצה לדבר עם נציג אנושי" }
+                      { label: "בדיקת זמינות מלאי", action: "בדיקת זמינות מלאי" },
+                      { label: "דבר עם נציג", action: "דבר עם נציג" }
                     ].map((btn) => (
                       <button 
                         key={btn.label}
