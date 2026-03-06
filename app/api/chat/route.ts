@@ -7,22 +7,46 @@ import { NextResponse } from "next/server";
 export async function POST(req: Request) {
   try {
     const { messages, userId, phone } = await req.json();
-    const lastUserMsg = messages[messages.length - 1].content;
+    
+    // 1. ליטוש: במקום לחפש רק בהודעה האחרונה, נחפש ב-3 ההודעות האחרונות
+    // כדי לא לאבד את הקשר המוצר (Context)
+    const contextSearch = messages.slice(-3).map((m: any) => m.content).join(" ");
 
-    // 1. שליפת מידע מה-Inventory (ללא שינוי בדינמיקה)
     const { data: products } = await supabase
       .from('inventory')
       .select('*')
-      .textSearch('product_name', lastUserMsg, { config: 'hebrew', type: 'websearch' })
+      // חיפוש על פני כל ההקשר האחרון
+      .textSearch('product_name', contextSearch, { 
+        config: 'hebrew', 
+        type: 'websearch' 
+      })
       .limit(1);
 
     let productContext = "";
     let foundProduct = null;
+
     if (products && products.length > 0) {
       foundProduct = products[0];
-      productContext = `\n[מצאתי במלאי: ${foundProduct.product_name}, מחיר: ${foundProduct.price}₪, SKU: ${foundProduct.sku}]`;
+      productContext = `\n[מידע מעודכן על המוצר שזוהה בשיחה: ${foundProduct.product_name}, מחיר: ${foundProduct.price}₪, SKU: ${foundProduct.sku}]`;
     }
 
+    // 2. אתחול ה-AI (המשך הקוד שלך ללא שינוי בדינמיקה)
+    const rawKeys = process.env.GOOGLE_AI_KEY_POOL || process.env.GEMINI_API_KEY || "";
+    const keyPool = rawKeys.split(',').map(k => k.trim());
+    
+    let aiResponse = "";
+    // ... לוגיקת ה-AI שלך ...
+
+    // 3. החזרת תשובה עם המוצר העדכני ביותר שנמצא
+    return NextResponse.json({ 
+      text: aiResponse, 
+      product: foundProduct // זה מה שיעדכן את ה-ActionOverlays למוצר הנכון (לוח גבס)
+    });
+
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
     // 2. אתחול ה-AI עם הנחיית עיצוב HTML
     const rawKeys = process.env.GOOGLE_AI_KEY_POOL || process.env.GEMINI_API_KEY || "";
     const keyPool = rawKeys.split(',').map(k => k.trim());
