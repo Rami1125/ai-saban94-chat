@@ -37,9 +37,13 @@ export async function POST(req: Request) {
       try {
         const genAI = new GoogleGenerativeAI(key);
         const model = genAI.getGenerativeModel({ 
-          model: "gemini-1.5-flash", // וודא שהמודל תואם לגרסה שלך
-          systemInstruction: `אתה נציג ח. סבן. אל תשתמש ב-** להדגשה. השתמש ב-<b>טקסט</b> וב-<br> לירידת שורה.`
-        });
+        model: "gemini-1.5-flash-latest", // שימוש בגרסת ה-latest
+       // הוספת הגדרות בטיחות מקלות כדי שגוגל לא יחסום תשובה בגלל "תוכן רגיש" בטעות
+       safetySettings: [
+       { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+       { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+  ]
+});
 
         const result = await model.generateContent(lastUserMsg + productContext);
         aiResponse = result.response.text();
