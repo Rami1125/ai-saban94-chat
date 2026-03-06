@@ -61,9 +61,9 @@ export async function POST(req: Request) {
     }
 
     // 4. החזרת תשובה לממשק ה-Web (כולל אובייקט המוצר להצגת ה-ProductCard)
-   return NextResponse.json({ 
-   text: aiResponse, 
-   product: products && products.length > 0 ? products[0] : nullששלחת
+    return NextResponse.json({ 
+      text: aiResponse, 
+      product: foundProduct // כאן הממשק יקבל את הנתונים וירנדר את ה-ProductCard ששלחת
     });
 
   } catch (error: any) {
