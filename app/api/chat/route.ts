@@ -74,8 +74,9 @@ export async function POST(req: Request) {
 
     // 3. מודלים ודילוג מעודכן 2026
     const modelPool = [
-      "gemini-2.0-flash-exp", // המהיר והחכם ביותר כרגע
-      "gemini-1.5-flash-latest"
+     "gemini-1.5-flash", 
+     "gemini-1.5-pro",
+     "gemini-pro"
     ];
 
     const rawKeys = process.env.GOOGLE_AI_KEY_POOL || process.env.GEMINI_API_KEY || "";
