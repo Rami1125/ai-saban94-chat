@@ -20,7 +20,6 @@ export function MessageList() {
     }
   }, [messages, isLoading]);
 
-  // הפונקציה הקריטית: מעבירה את ה-product המדויק מההודעה ל-Overlay
   const onQuickReplyClick = (label: string, actionType: string, product?: any) => {
     const mapping: any = {
       "quote": "quote",
@@ -30,12 +29,8 @@ export function MessageList() {
     };
 
     if (mapping[actionType]) {
-      // כאן אנחנו מזריקים את הנתונים ל-Event
       window.dispatchEvent(new CustomEvent('open-action-overlay', { 
-        detail: { 
-          type: mapping[actionType], 
-          product: product // זה שולח את השם "סיקה סרם 500", תמונה, וכיסוי
-        } 
+        detail: { type: mapping[actionType], product } 
       }));
     } else if (typeof handleSendMessage === 'function') {
       handleSendMessage(label);
@@ -66,10 +61,8 @@ export function MessageList() {
                   <div dangerouslySetInnerHTML={{ __html: message.content }} />
                 </div>
 
-                {/* כרטיס המוצר המקצועי */}
                 {message.product && <ProductCard product={message.product} />}
 
-                {/* כפתורי פעולה - כאן מועבר הקשר המוצר */}
                 {message.role === 'assistant' && index === messages.length - 1 && !isLoading && (
                   <div className="flex flex-wrap gap-2 mt-2">
                     <ActionButton 
@@ -80,7 +73,8 @@ export function MessageList() {
                     />
                     <ActionButton 
                       icon={<Ruler size={14} />} 
-                      label="מחשבון מ\"ר" 
+                      {/* התיקון כאן: שימוש בגרש בודד למילה מ"ר כדי לא לשבור את המחרוזת */}
+                      label="מחשבון מ'ר" 
                       onClick={() => onQuickReplyClick("מחשבון", "calculator", message.product)}
                       variant="indigo"
                     />
