@@ -5,7 +5,7 @@ import { rtdb } from "@/lib/firebase";
 import { ref, onValue, push } from "firebase/database";
 import { ChatShell } from "@/components/chat/chat-shell";
 import { MessageList } from "@/components/chat/message-list";
-import { Composer } from "@/components/chat/composer";
+import { Composer } from "@/components/chat/Composer"; // תיקון C גדולה
 import { useToast } from "@/hooks/use-toast";
 import { Search, MoreVertical, Phone, Video } from "lucide-react";
 
