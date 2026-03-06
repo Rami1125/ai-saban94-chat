@@ -38,12 +38,12 @@ export async function POST(req: Request) {
     const foundProduct = products?.[0] || null;
 
     // 3. בריכת מודלים יציבה (בלי סיומות בעייתיות)
-    const modelPool = [
-      "gemini-1.5-flash", 
-      "gemini-1.5-pro",
-      "gemini-pro"
-    ];
-
+// הוספת הקידומת models/ פותרת את שגיאת ה-404 בגרסת v1beta
+const modelPool = [
+  "models/gemini-1.5-flash", 
+  "models/gemini-1.5-pro",
+  "models/gemini-pro"
+];
     // 4. בריכת מפתחות (מ-Environment Variables)
     const rawKeys = process.env.GOOGLE_AI_KEY_POOL || process.env.GEMINI_API_KEY || "";
     const keyPool = rawKeys.split(',').map(k => k.trim()).filter(k => k !== "");
