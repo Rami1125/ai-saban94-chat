@@ -4,7 +4,10 @@ import { rtdb } from "@/lib/firebase";
 import { ref, push } from "firebase/database";
 import { NextResponse } from "next/server";
 
-// פונקציית עזר לשליחה רשמית דרך Infobip
+/**
+ * פונקציית עזר לשליחה רשמית דרך Infobip
+ * משתמשת ב-API Key וב-Base URL שהגדרת ב-Vercel
+ */
 async function sendOfficialWhatsApp(to: string, text: string) {
   const url = `https://${process.env.INFOBIP_BASE_URL}/whatsapp/1/message/text`;
   try {
@@ -16,7 +19,7 @@ async function sendOfficialWhatsApp(to: string, text: string) {
       },
       body: JSON.stringify({
         messages: [{
-          from: "447860099299", // המספר שקיבלת ב-Sandbox
+          from: "447860099299", // מספר ה-Sandbox של Infobip
           to: to.replace('+', ''),
           content: { text: text }
         }]
@@ -29,11 +32,27 @@ async function sendOfficialWhatsApp(to: string, text: string) {
   }
 }
 
+/**
+ * פונקציית עזר להזרקת הודעה לנתיב הצינור החדש ב-Firebase
+ */
+async function pushToPipeline(to: string, text: string, productData: any = null) {
+  const cleanPhone = to.replace('+', '');
+  const pipelineRef = ref(rtdb, 'saban94/pipeline'); // הנתיב החדש שנבנה מ-0
+  
+  await push(pipelineRef, {
+    to: cleanPhone,
+    text: text,
+    product: productData,
+    timestamp: Date.now(),
+    status: "pending"
+  });
+}
+
 export async function POST(req: Request) {
   try {
     const { messages, userId, phone } = await req.json();
     
-    // 1. שמירה על הקשר (Context) - חיפוש מוצר ב-3 הודעות אחרונות
+    // 1. חיפוש מוצר ב-Inventory לפי הקשר השיחה
     const contextSearch = messages.slice(-3).map((m: any) => m.content).join(" ");
     const { data: products } = await supabase
       .from('inventory')
@@ -46,7 +65,7 @@ export async function POST(req: Request) {
       ? `\n[הקשר מוצר נוכחי: ${foundProduct.product_name}, מחיר: ${foundProduct.price}₪]` 
       : "";
 
-    // 2. רשימת מודלים לדילוג (מעודכן ל-2026)
+    // 2. רשימת מודלים לדילוג (Failover) מעודכן ל-2026
     const modelPool = [
       "gemini-3.1-flash-lite-preview", 
       "gemini-3.1-flash-preview",      
@@ -60,7 +79,7 @@ export async function POST(req: Request) {
     let aiResponse = "";
     let lastError = "";
 
-    // 3. מנגנון הדילוג הכפול
+    // 3. מנגנון הדילוג על מפתחות ומודלים
     for (const key of keyPool) {
       if (!key) continue;
       const genAI = new GoogleGenerativeAI(key);
@@ -88,25 +107,18 @@ export async function POST(req: Request) {
       if (aiResponse) break; 
     }
 
-    if (!aiResponse) throw new Error(`נכשלו כל ניסיונות החיבור. שגיאה: ${lastError}`);
+    if (!aiResponse) throw new Error(`כל ניסיונות ה-AI נכשלו. שגיאה אחרונה: ${lastError}`);
 
-    // 4. שליחה רב-ערוצית (Infobip + JONI)
+    // 4. הפעלה של "הצינור הכפול" (Infobip + JONI)
     if (phone) {
-      const cleanPhone = phone.replace('+', '');
-      
-      // א. אם יש מוצר מזוהה - שלח כרטיס רשמי דרך Infobip (למספר שביקשת)
+      // א. שליחה רשמית במידה וזוהה מוצר
       if (foundProduct) {
-        const officialMsg = `🏗️ *ח. סבן - כרטיס מוצר*\n*מוצר:* ${foundProduct.product_name}\n*מחיר:* ${foundProduct.price}₪\n\nשלום, מצורפים הפרטים לבקשתך.`;
+        const officialMsg = `🏗️ *ח. סבן - כרטיס מוצר*\n*מוצר:* ${foundProduct.product_name}\n*מחיר:* ${foundProduct.price}₪\n\nשלום, מצורפים הפרטים שביקשת.`;
         await sendOfficialWhatsApp("972508861080", officialMsg);
       }
 
-      // ב. סנכרון ל-Firebase עבור JONI (הערוץ החינמי)
-      await push(ref(rtdb, 'saban94/send'), {
-        to: cleanPhone,
-        text: aiResponse,
-        timestamp: Date.now(),
-        product: foundProduct
-      });
+      // ב. הזרקה לנתיב הצינור החדש saban94/pipeline עבור JONI
+      await pushToPipeline(phone, aiResponse, foundProduct);
     }
 
     return NextResponse.json({ text: aiResponse, product: foundProduct });
