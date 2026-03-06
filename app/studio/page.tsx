@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useState } from 'react';
-import { rtdb } from "@/lib/firebase"; // וודא שהנתיב תקין אצלך
-import { supabase } from "@/lib/supabase"; // וודא שהנתיב ל-Supabase Client תקין
+import { rtdb } from "@/lib/firebase"; 
+import { supabase } from "@/lib/supabase"; 
 import { ref, onValue, limitToLast, query } from "firebase/database";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -106,7 +106,6 @@ export default function SabanStudio() {
         {/* צד ימין: ניהול חוקים ולוגים */}
         <div className="lg:col-span-8 space-y-6">
           
-          {/* הוספת חוק חדש לספר */}
           <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 shadow-xl">
             <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
               <span className="text-yellow-500">📚</span> הוספת הנחיה לספר החוקים (Gemini)
@@ -115,7 +114,7 @@ export default function SabanStudio() {
               <input 
                 value={newRule}
                 onChange={(e) => setNewRule(e.target.value)}
-                placeholder="למשל: תמיד להציע הובלת מנוף אם הלקוח מזמין מעל 10 בלות..."
+                placeholder="למשל: תמיד להציע הובלת מנוף..."
                 className="flex-1 bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm outline-none focus:ring-2 focus:ring-yellow-500"
               />
               <button 
@@ -128,7 +127,6 @@ export default function SabanStudio() {
             </div>
           </div>
 
-          {/* רשימת חוקים קיימים */}
           <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 h-[250px] overflow-y-auto">
             <h4 className="text-sm font-bold text-slate-400 mb-4 italic">חוקים פעילים בספר:</h4>
             <div className="space-y-2">
@@ -141,12 +139,14 @@ export default function SabanStudio() {
             </div>
           </div>
 
-          {/* לוגים בזמן אמת */}
+          {/* לוגים - כאן היה התיקון בשורה 149 */}
           <div className="bg-black/40 rounded-3xl p-6 border border-slate-800 h-[200px] font-mono text-[10px] overflow-y-auto">
             <h3 className="text-blue-400 font-bold mb-2 uppercase tracking-widest">System Live Stream</h3>
             {messages.slice().reverse().map((msg, i) => (
               <div key={i} className="mb-1 text-slate-500">
-                <span className="text-green-500">[{new Date(msg.timestamp).toLocaleTimeString()}]</span> PUSH_TO_JONI -> {msg.to.slice(0,5)}...
+                <span className="text-green-500">[{new Date(msg.timestamp).toLocaleTimeString()}]</span> 
+                {" PUSH_TO_JONI => "} 
+                {msg.to ? msg.to.slice(0, 5) : "Unknown"}...
               </div>
             ))}
           </div>
