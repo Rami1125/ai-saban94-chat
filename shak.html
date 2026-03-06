@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>SHAK v5.0 | ניטור מאגר מפתחות ח. סבן</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .pulse { animation: shadow-pulse 1s infinite; }
+        @keyframes shadow-pulse { 0% { box-shadow: 0 0 0 0px rgba(34, 197, 94, 0.4); } 100% { box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); } }
+        .key-badge { padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 p-8 font-sans">
+    <div class="max-w-4xl mx-auto">
+        <div class="flex justify-between items-center mb-10 border-b border-slate-700 pb-5">
+            <div>
+                <h1 class="text-3xl font-black text-white">SHAK MONITOR <span class="text-emerald-500">v5.0</span></h1>
+                <p class="text-slate-400 text-sm">ניהול מאגר מפתחות (Key Pool) בזמן אמת</p>
+            </div>
+            <div id="global-status" class="px-4 py-2 bg-emerald-500/10 text-emerald-500 rounded-xl border border-emerald-500/20 font-bold uppercase tracking-wider">
+                System Online
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            <div class="bg-slate-800 p-4 rounded-xl border border-slate-700" id="key-0">
+                <div class="flex justify-between mb-2">
+                    <span class="text-xs text-slate-500">KEY #1</span>
+                    <span class="status-dot w-2 h-2 rounded-full bg-slate-600"></span>
+                </div>
+                <div class="text-sm font-mono truncate opacity-50">AIzaSy...XXXX</div>
+            </div>
+            <div class="bg-slate-800 p-4 rounded-xl border border-slate-700" id="key-1">
+                <div class="flex justify-between mb-2">
+                    <span class="text-xs text-slate-500">KEY #2</span>
+                    <span class="status-dot w-2 h-2 rounded-full bg-slate-600"></span>
+                </div>
+                <div class="text-sm font-mono truncate opacity-50">AIzaSy...YYYY</div>
+            </div>
+            <div class="bg-slate-800 p-4 rounded-xl border border-slate-700" id="key-2">
+                <div class="flex justify-between mb-2">
+                    <span class="text-xs text-slate-500">KEY #3</span>
+                    <span class="status-dot w-2 h-2 rounded-full bg-slate-600"></span>
+                </div>
+                <div class="text-sm font-mono truncate opacity-50">AIzaSy...ZZZZ</div>
+            </div>
+        </div>
+
+        <div class="bg-black/50 rounded-2xl p-6 border border-slate-800">
+            <h3 class="text-emerald-400 font-bold mb-4 flex items-center gap-2">
+                <span class="w-2 h-2 bg-emerald-500 rounded-full pulse"></span>
+                לוג דילוגים והזרקות בזמן אמת
+            </h3>
+            <div id="logs" class="h-64 overflow-y-auto font-mono text-xs space-y-2 custom-scrollbar">
+                <div class="text-slate-500 italic">מאתחל מערכת ניטור...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function logMsg(msg, status = 'info') {
+            const container = document.getElementById('logs');
+            const colors = { info: 'text-blue-400', ok: 'text-emerald-400', err: 'text-rose-400' };
+            const time = new Date().toLocaleTimeString();
+            container.innerHTML = `<div class="${colors[status]}"><span class="text-slate-600">[${time}]</span> ${msg}</div>` + container.innerHTML;
+        }
+
+        async function testBridge() {
+            logMsg("מתחיל בדיקת הזרקה למאגר המפתחות...", "info");
+            try {
+                const res = await fetch('https://ai-saban94-chat.vercel.app/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ messages: [{role: 'user', content: 'בדיקת דופק'}] })
+                });
+                const data = await res.json();
+                
+                if(res.ok) {
+                    logMsg(`✅ הצלחה! Gemini ענה: "${data.text.substring(0,20)}..."`, "ok");
+                    // סימולציית זיהוי מפתח פעיל
+                    document.querySelector('#key-0 .status-dot').className = "status-dot w-2 h-2 rounded-full bg-emerald-500 pulse";
+                } else {
+                    logMsg(`❌ כשל ב-Bridge: ${data.error}`, "err");
+                }
+            } catch (e) {
+                logMsg(`❌ שגיאת רשת: ${e.message}`, "err");
+            }
+        }
+
+        // הפעלה אוטומטית של בדיקה ראשונה
+        setTimeout(testBridge, 2000);
+    </script>
+</body>
+</html>
