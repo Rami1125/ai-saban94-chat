@@ -1,152 +1,148 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { ChatWindow } from "@/components/ChatWindow";
-import { Composer } from "@/components/chat/Composer"; 
-import { SafeIcon } from "@/components/SafeIcon";
-import { SafeChatIcon } from "@/components/SafeChatIcon";
-import { useConfig } from "@/context/BusinessConfigContext";
-import { useChatActions } from "@/context/ChatActionsContext";
-import { ProductCard } from "@/components/chat/ProductCard";
+import React, { useState, useEffect, useRef } from "react";
+import { rtdb } from "@/lib/firebase"; // הגשר שבנינו
+import { ref, onValue, push, serverTimestamp as rtdbTimestamp } from "firebase/database";
 import { supabase } from "@/lib/supabase";
-import { Product } from "@/types";
-import { motion, AnimatePresence } from "framer-motion";
+import { ChatShell } from "@/components/chat/chat-shell";
+import { MessageList } from "@/components/chat/message-list";
+import { Composer } from "@/components/chat/composer";
+import { useToast } from "@/hooks/use-toast";
+import { Search, MoreVertical, Phone, Video, CheckCheck } from "lucide-react";
 
-type TabType = "chat" | "catalog" | "inventory";
+export default function WhatsAppClonePage() {
+  const [messages, setMessages] = useState<any[]>([]);
+  const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
+  
+  // הגדרת משתמש וטלפון (רמי - במציאות זה יגיע מ-Auth/URL)
+  const phone = "972508860896"; 
+  const userId = "saban-admin";
 
-export default function SabanEnterpriseDashboard() {
-  const config = useConfig();
-  const { messages } = useChatActions();
-  const [activeTab, setActiveTab] = useState<TabType>("chat");
-  const [mounted, setMounted] = useState(false);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-
+  // 1. האזנה בזמן אמת לצינור ה-Firebase (Realtime)
   useEffect(() => {
-    setMounted(true);
-    fetchData();
-  }, []);
+    const chatRef = ref(rtdb, `saban94`);
+    
+    const unsubscribe = onValue(chatRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const incoming = data.incoming ? Object.values(data.incoming) : [];
+        const outgoing = data.send ? Object.values(data.send) : [];
+        
+        // איחוד וסידור הודעות לפי זמן
+        const allMsgs = [...incoming, ...outgoing]
+          .filter((m: any) => m.from === phone || m.to === phone || m.receiver === phone)
+          .sort((a: any, b: any) => (a.timestamp || 0) - (b.timestamp || 0));
+        
+        setMessages(allMsgs.map(m => ({
+          id: m.timestamp?.toString() || Math.random().toString(),
+          content: m.text || m.content,
+          role: (m.from === phone || !m.to) ? 'user' : 'assistant',
+          createdAt: new Date(m.timestamp)
+        })));
+      }
+    });
 
-  async function fetchData() {
-    setLoading(true);
-    const { data } = await supabase.from("inventory").select("*").order("product_name");
-    if (data) setProducts(data);
-    setLoading(false);
-  }
+    return () => unsubscribe();
+  }, [phone]);
 
-  if (!mounted) return null;
+  // 2. פונקציית שליחה משולבת (Gemini + Firebase)
+  const handleSendMessage = async (content: string) => {
+    if (!content.trim()) return;
+    setIsLoading(true);
+
+    try {
+      // א. הזרקה ל-Firebase (כדי ש-JONI ישלח ללקוח)
+      await push(ref(rtdb, 'saban94/send'), {
+        to: phone,
+        text: content,
+        timestamp: Date.now(),
+        from: "admin-panel"
+      });
+
+      // ב. קריאה למוח של Gemini (דרך ה-API שבנינו)
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [...messages, { role: 'user', content }],
+          phone: phone,
+          userId: userId
+        })
+      });
+
+      if (!response.ok) throw new Error("כשל במוח של Gemini");
+
+    } catch (error: any) {
+      toast({
+        title: "שגיאת שליחה",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+      setInput("");
+    }
+  };
 
   return (
-    <main className="min-h-screen bg-[#F1F5F9] flex h-screen overflow-hidden font-sans select-none" dir="rtl">
-      
-      {/* Sidebar - מיתוג יוקרתי */}
-      <aside className="hidden lg:flex flex-col w-72 bg-[#0B2C63] text-white p-8 space-y-10 shadow-2xl z-50">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-gradient-to-tr from-blue-400 to-blue-600 rounded-2xl shadow-lg rotate-3">
-            <SafeIcon name="HardHat" className="text-white" size={28} />
+    <div className="flex h-screen bg-[#f0f2f5] dark:bg-zinc-950 overflow-hidden">
+      {/* Sidebar - רשימת שיחות (מעוצב כ-Whatsapp) */}
+      <aside className="w-80 border-e bg-white dark:bg-zinc-900 hidden md:flex flex-col">
+        <header className="p-4 bg-[#f0f2f5] dark:bg-zinc-800 flex justify-between items-center">
+          <div className="w-10 h-10 bg-slate-300 rounded-full"></div>
+          <div className="flex gap-4 text-gray-500">
+            <MoreVertical size={20} />
           </div>
-          <div>
-            <h2 className="font-black text-2xl tracking-tighter leading-none">ח. סבן</h2>
-            <span className="text-[10px] text-blue-300 font-bold uppercase tracking-[0.2em]">Building AI</span>
+        </header>
+        <div className="p-2">
+          <div className="bg-gray-100 dark:bg-zinc-800 rounded-lg flex items-center px-3 py-2">
+            <Search size={18} className="text-gray-400" />
+            <input placeholder="חפש שיחה..." className="bg-transparent border-none text-sm focus:outline-none px-2 w-full" />
           </div>
         </div>
-
-        <nav className="flex-1 space-y-2">
-          <TabButton active={activeTab === 'chat'} icon={<SafeChatIcon size={20}/>} label="יועץ חכם" onClick={() => setActiveTab('chat')} />
-          <TabButton active={activeTab === 'catalog'} icon={<SafeIcon name="Grid" size={20}/>} label="קטלוג דיגיטלי" onClick={() => setActiveTab('catalog')} />
-          <TabButton active={activeTab === 'inventory'} icon={<SafeIcon name="Table" size={20}/>} label="ניהול מלאי" onClick={() => setActiveTab('inventory')} />
-        </nav>
-
-        <div className="bg-white/5 p-5 rounded-[24px] border border-white/10 backdrop-blur-sm">
-          <div className="flex items-center gap-2 mb-2 text-green-400">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-            <span className="text-[10px] font-black uppercase">Live Connection</span>
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-4 border-b bg-emerald-50 dark:bg-emerald-900/10 cursor-pointer">
+            <div className="font-bold text-sm">{phone}</div>
+            <div className="text-xs text-gray-500 truncate">הודעה אחרונה בצינור...</div>
           </div>
-          <p className="text-[11px] text-blue-100 leading-relaxed font-medium">המערכת מחוברת למסד הנתונים המאוחד. כל המידע מעודכן לשנת 2026.</p>
         </div>
       </aside>
 
-      {/* Main Content Area */}
-      <section className="flex-1 flex flex-col bg-slate-50 relative h-full">
-        
-        {/* Header פרימיום */}
-        <header className="h-20 bg-white/70 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-8 z-40">
-          <div>
-            <h1 className="text-xl font-black text-slate-900">
-              {activeTab === 'chat' ? 'Saban Intelligent Assistant' : activeTab === 'catalog' ? 'Product Catalog' : 'Inventory Management'}
-            </h1>
-            <p className="text-[11px] text-slate-400 font-bold">ברוך הבא, מנהל מערכת</p>
+      {/* Main Chat Area */}
+      <main className="flex-1 flex flex-col relative bg-[#e5ddd5] dark:bg-zinc-950 chat-bg-pattern">
+        <header className="p-3 bg-[#f0f2f5] dark:bg-zinc-900 border-b flex justify-between items-center z-10 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-emerald-600 rounded-full flex items-center justify-center text-white font-bold">ס</div>
+            <div>
+              <div className="font-bold text-sm">ח. סבן - {phone}</div>
+              <div className="text-[10px] text-emerald-600 font-bold">מחובר לצינור JONI</div>
+            </div>
           </div>
-          <div className="flex gap-4">
-             <div className="bg-slate-100 px-4 py-2 rounded-2xl text-[11px] font-black text-slate-600 border border-slate-200 uppercase">
-               {products.length} Products
-             </div>
+          <div className="flex gap-5 text-gray-500">
+            <Video size={20} className="cursor-pointer" />
+            <Phone size={20} className="cursor-pointer" />
+            <Search size={20} className="cursor-pointer" />
           </div>
         </header>
 
-        <div className="flex-1 overflow-hidden relative flex flex-col">
-          <AnimatePresence mode="wait">
-            {activeTab === 'chat' && (
-              <motion.div initial={{ opacity:0, x: 20 }} animate={{ opacity:1, x:0 }} exit={{ opacity:0, x:-20 }} className="flex-1 flex flex-col h-full max-w-6xl w-full mx-auto p-4 lg:p-6 overflow-hidden">
-                <div className="flex-1 bg-white rounded-[40px] shadow-2xl border border-slate-100 overflow-hidden relative">
-                  <ChatWindow />
-                </div>
-                <div className="mt-4 bg-white p-6 rounded-[40px] shadow-xl border border-slate-100">
-                  <Composer />
-                </div>
-              </motion.div>
-            )}
-
-            {activeTab === 'catalog' && (
-              <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} className="flex-1 overflow-y-auto p-8 custom-scrollbar grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
-                 {loading ? <div className="col-span-full text-center py-20 font-black text-slate-300">טוען נתונים...</div> : products.map(p => <ProductCard key={p.sku} product={p} />)}
-              </motion.div>
-            )}
-
-            {activeTab === 'inventory' && (
-              <motion.div initial={{ opacity:0, scale: 0.95 }} animate={{ opacity:1, scale: 1 }} className="flex-1 p-8 overflow-hidden flex flex-col h-full">
-                <div className="bg-white rounded-[32px] shadow-2xl border border-slate-200 overflow-hidden flex-1 flex flex-col">
-                  <div className="overflow-auto custom-scrollbar flex-1">
-                    <table className="w-full text-right border-collapse">
-                      <thead className="sticky top-0 bg-slate-50 z-10 border-b border-slate-200">
-                        <tr>
-                          <th className="p-5 text-[10px] font-black uppercase text-slate-400">מק"ט</th>
-                          <th className="p-5 text-[10px] font-black uppercase text-slate-400">שם המוצר</th>
-                          <th className="p-5 text-[10px] font-black uppercase text-slate-400 text-center">מחיר</th>
-                          <th className="p-5 text-[10px] font-black uppercase text-slate-400 text-center">סטטוס</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {products.map(p => (
-                          <tr key={p.sku} className="hover:bg-blue-50/50 transition-colors group">
-                            <td className="p-5 font-mono font-bold text-blue-600">{p.sku}</td>
-                            <td className="p-5 font-black text-slate-800">{p.product_name}</td>
-                            <td className="p-5 text-center font-black">₪{p.price || '--'}</td>
-                            <td className="p-5 text-center"><span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter italic">Available</span></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+        {/* הודעות */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+          <ChatShell>
+            <MessageList messages={messages} />
+          </ChatShell>
         </div>
-      </section>
-    </main>
-  );
-}
 
-// רכיב עזר לכפתורי הניווט
-function TabButton({ active, icon, label, onClick }: { active: boolean, icon: React.ReactNode, label: string, onClick: () => void }) {
-  return (
-    <button 
-      onClick={onClick} 
-      className={`w-full flex items-center gap-4 p-4 rounded-2xl font-black text-sm transition-all duration-300 ${active ? 'bg-white text-[#0B2C63] shadow-xl translate-x-[-8px]' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
-    >
-      {icon}
-      <span>{label}</span>
-    </button>
+        {/* שדה כתיבה */}
+        <footer className="p-3 bg-[#f0f2f5] dark:bg-zinc-900 flex items-center gap-2">
+          <Composer 
+            onSend={handleSendMessage} 
+            placeholder="הקלד הודעה לצינור..."
+            disabled={isLoading}
+          />
+        </div>
+      </main>
+    </div>
   );
 }
