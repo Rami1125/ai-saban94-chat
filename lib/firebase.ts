@@ -11,7 +11,7 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
-// אתחול חכם שמונע שגיאות של Next.js בעת טעינה מחדש (Hot Reload)
+// אתחול מונע שגיאות ב-Next.js
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const rtdb = getDatabase(app);
 
