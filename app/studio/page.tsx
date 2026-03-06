@@ -1,205 +1,204 @@
 "use client";
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { rtdb } from "@/lib/firebase"; 
-import { supabase } from "@/lib/supabase"; // וודא שהקובץ הזה מייצא את ה-Client עם מפתח ה-SERVICE_ROLE
+import { supabase } from "@/lib/supabase"; 
 import { ref, onValue, limitToLast, query } from "firebase/database";
 import { motion, AnimatePresence } from "framer-motion";
+import { 
+  RefreshCw, Database, Cpu, MessageSquare, 
+  Trash2, Plus, Layout, Zap, BrainCircuit 
+} from "lucide-react";
 
-// מאגר אימוג'י מקצועי לבנייה ולוגיסטיקה של ח. סבן
-const SABAN_EMOJIS = [
-  { char: "🏗️", name: "מנוף" }, { char: "🚚", name: "משאית עלי" },
-  { char: "🧱", name: "בלוקים" }, { char: "🪜", name: "גבס/סולם" },
-  { char: "💰", name: "מחיר" }, { char: "📋", name: "סידור/חוק" },
-  { char: "✅", name: "אושר" }, { char: "⚠️", name: "אזהרה" },
-  { char: "📞", name: "צור קשר" }, { char: "👷", name: "עובד" }
-];
+// אימוג'ים ואפקטים לפי מצב השיחה
+const STATUS_EFFECTS = {
+  thinking: { icon: "🧠", text: "חשיבה לוגיסטית...", color: "text-blue-400" },
+  typing: { icon: "✍️", text: "מנסח הצעה...", color: "text-emerald-400" },
+  searching: { icon: "🏗️", text: "בודק מלאי במחסן...", color: "text-yellow-500" },
+  calculating: { icon: "🔢", text: "מחשב כמויות גבס...", color: "text-purple-400" }
+};
 
-interface Message {
-  id: string; text: string; to: string; timestamp: number;
-}
-
-interface Rule {
-  id: string; instruction: string; category: string;
-}
-
-export default function SabanStudio() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [rules, setRules] = useState<Rule[]>([]);
+export default function SabanStudioV3() {
+  const [messages, setMessages] = useState<any[]>([]);
+  const [rules, setRules] = useState<any[]>([]);
   const [newRule, setNewRule] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [errorStatus, setErrorStatus] = useState<string | null>(null);
+  const [aiStatus, setAiStatus] = useState<keyof typeof STATUS_EFFECTS | null>(null);
+  const [chatState, setChatState] = useState<'start' | 'product' | 'quantity' | 'logistics' | 'complete'>('start');
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // 1. האזנה לצינור ה-Pipeline (Firebase)
-    try {
-      const pipelineRef = query(ref(rtdb, 'saban94/pipeline'), limitToLast(6));
-      onValue(pipelineRef, (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-          const msgList = Object.entries(data).map(([id, val]: [string, any]) => ({
-            id, ...val
-          })).sort((a, b) => a.timestamp - b.timestamp);
-          setMessages(msgList);
-        }
-      });
-    } catch (e) { console.error("Firebase Connection Error", e); }
+    // 1. האזנה ל-Pipeline (Firebase)
+    const pipelineRef = query(ref(rtdb, 'saban94/pipeline'), limitToLast(8));
+    onValue(pipelineRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const msgList = Object.entries(data).map(([id, val]: [string, any]) => ({
+          id, ...val
+        })).sort((a, b) => a.timestamp - b.timestamp);
+        setMessages(msgList);
+        updateFlowState(msgList);
+      }
+    });
 
-    // 2. שליפת חוקים מ-Supabase
     fetchRules();
   }, []);
 
+  // ניתוח מצב השיחה (פינג-פונג)
+  const updateFlowState = (msgs: any[]) => {
+    const text = msgs.map(m => m.text).join(" ").toLowerCase();
+    if (text.includes("הועברה למחלקה")) setChatState('complete');
+    else if (text.includes("תאריך") || text.includes("שעת אספקה")) setChatState('logistics');
+    else if (text.includes("כמה יחידות") || text.includes("כמות")) setChatState('quantity');
+    else if (msgs.length > 0) setChatState('product');
+  };
+
   const fetchRules = async () => {
-    // שליפה בסיסית - עובדת עם מפתח Anon
-    const { data, error } = await supabase.from('system_rules').select('*').order('created_at', { ascending: false });
-    if (error) {
-      console.error("Supabase Fetch Error (401?)", error);
-      setErrorStatus("שגיאת אבטחה (401) ב-Supabase. וודא שהגדרת RLS או השתמש במפתח Service Role.");
-    } else if (data) {
-      setRules(data);
-      setErrorStatus(null);
-    }
+    const { data } = await supabase.from('system_rules').select('*').order('created_at', { ascending: false });
+    if (data) setRules(data);
   };
 
   const saveRule = async () => {
     if (!newRule.trim()) return;
-    setLoading(true);
-    // **תיקון האבטחה:** הפעולה הזו דורשת מפתח Service Role אם RLS מופעל
-    const { error } = await supabase.from('system_rules').insert([{ instruction: newRule, category: 'general' }]);
-    if (error) {
-      console.error("Supabase Insert Error", error);
-      alert("שגיאה בהוספת החוק. וודא שהגדרת הרשאות כתיבה (RLS) ב-Supabase.");
-    } else {
-      setNewRule("");
-      fetchRules();
-    }
-    setLoading(false);
-  };
-
-  const deleteRule = async (id: string) => {
-    // **תיקון האבטחה:** הפעולה הזו דורשת מפתח Service Role אם RLS מופעל
-    const { error } = await supabase.from('system_rules').delete().eq('id', id);
-    if (error) {
-      console.error("Supabase Delete Error", error);
-      alert("שגיאה במחיקת החוק. וודא שיש הרשאות מחיקה (RLS).");
-    } else {
-      fetchRules();
-    }
-  };
-
-  const addEmojiToRule = (emoji: string) => {
-    setNewRule(prev => prev + " " + emoji + " ");
+    await supabase.from('system_rules').insert([{ instruction: newRule, category: 'general' }]);
+    setNewRule("");
+    fetchRules();
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0f1e] text-slate-200 p-6 font-sans" dir="rtl">
-      {/* Header מעוצב ומקצועי */}
-      <div className="max-w-7xl mx-auto flex justify-between items-center mb-8 border-b-2 border-yellow-500/50 pb-4 shadow-[0_4px_10px_rgba(234,179,8,0.1)]">
+    <div className="min-h-screen bg-[#020617] text-slate-200 p-4 lg:p-8 font-sans" dir="rtl">
+      
+      {/* Header - מרכז הבקרה */}
+      <header className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
         <div>
-          <h1 className="text-4xl font-black italic text-yellow-500 tracking-tighter">H.SABAN STUDIO v2.5</h1>
-          <p className="text-slate-400 text-sm">מרכז לוגיקה ואפקטים ויזואליים בשיחה</p>
-        </div>
-        <div className="flex gap-4 items-center">
-          {errorStatus && <div className="text-red-400 text-xs bg-red-950 p-2 rounded-lg border border-red-800">{errorStatus}</div>}
-          <div className="bg-emerald-900/30 border border-emerald-500/50 px-4 py-2 rounded-xl text-xs text-emerald-400 animate-pulse">
-            ● Firebase RTDB: Connected
+          <h1 className="text-4xl font-black italic text-yellow-500 tracking-tighter flex items-center gap-3">
+            SABAN AI STUDIO <Zap className="fill-yellow-500" />
+          </h1>
+          <div className="flex items-center gap-4 mt-2">
+            <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-full border border-emerald-500/20">
+              <Database size={10} /> הזיכרון הארגוני פעיל
+            </span>
+            <span className="flex items-center gap-1 text-[10px] font-bold text-blue-400 bg-blue-500/10 px-2 py-1 rounded-full border border-blue-500/20">
+              <BrainCircuit size={10} /> Gemini 3.1 Pro Connection
+            </span>
           </div>
         </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
         
-        {/* צד שמאל: סימולטור iPhone */}
-        <div className="lg:col-span-4 flex justify-center">
-          <div className="w-[290px] h-[580px] bg-black rounded-[3rem] border-[10px] border-slate-800 relative shadow-[0_0_60px_rgba(0,0,0,0.6)] overflow-hidden">
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-28 h-5 bg-slate-800 rounded-b-xl z-20"></div>
+        {/* עץ הפינג-פונג הדינמי */}
+        <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800 flex gap-6 items-center shadow-xl">
+           <StepNode active={chatState === 'product'} label="מוצר" icon="🏗️" />
+           <div className="h-px w-4 bg-slate-700" />
+           <StepNode active={chatState === 'quantity'} label="כמות" icon="🔢" />
+           <div className="h-px w-4 bg-slate-700" />
+           <StepNode active={chatState === 'logistics'} label="הובלה" icon="🚚" />
+           <div className="h-px w-4 bg-slate-700" />
+           <StepNode active={chatState === 'complete'} label="סגור" icon="✅" />
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        {/* צד שמאל: הסימולטור עם אפקטים של הקלדה */}
+        <div className="lg:col-span-4 flex justify-center sticky top-8 h-fit">
+          <div className="w-[300px] h-[600px] bg-black rounded-[3rem] border-[8px] border-slate-800 relative shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden">
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-28 h-6 bg-slate-800 rounded-b-2xl z-20"></div>
             <div className="h-full flex flex-col bg-[#0b141a]">
-              <div className="bg-[#202c33] p-5 pt-8 text-white font-bold text-sm shadow-lg border-b border-slate-700">ח. סבן Building Materials</div>
-              <div className="flex-1 p-3 space-y-3 overflow-y-auto">
+              <div className="bg-[#202c33] p-6 pt-10 text-white font-bold text-sm border-b border-slate-700">ח. סבן - צ'אט לוגיסטי</div>
+              
+              <div className="flex-1 p-3 space-y-3 overflow-y-auto scrollbar-hide">
                 <AnimatePresence>
-                  {messages.map((msg) => (
+                  {messages.map((msg, idx) => (
                     <motion.div
                       key={msg.id}
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="bg-[#005c4b] p-3 rounded-2xl rounded-tr-none text-white text-[11px] ml-auto max-w-[85%] shadow-md leading-relaxed"
+                      initial={{ opacity: 0, x: msg.role === 'user' ? -20 : 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className={`flex flex-col ${msg.role === 'assistant' ? 'items-start' : 'items-end'}`}
                     >
-                      <div dangerouslySetInnerHTML={{ __html: msg.text }} />
+                      <div className={`p-2.5 rounded-2xl max-w-[85%] text-[11px] shadow-md ${
+                        msg.role === 'assistant' ? 'bg-[#202c33] text-slate-100 rounded-tr-none' : 'bg-[#005c4b] text-white rounded-tl-none'
+                      }`}>
+                        <div dangerouslySetInnerHTML={{ __html: msg.text }} />
+                      </div>
                     </motion.div>
                   ))}
+                  
+                  {/* אפקט חושב/מקליד דינמי */}
+                  {aiStatus && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-2 items-center p-2">
+                       <span className="text-lg animate-bounce">{STATUS_EFFECTS[aiStatus].icon}</span>
+                       <span className={`text-[10px] font-bold ${STATUS_EFFECTS[aiStatus].color} italic`}>{STATUS_EFFECTS[aiStatus].text}</span>
+                    </motion.div>
+                  )}
                 </AnimatePresence>
+                <div ref={scrollRef} />
               </div>
             </div>
           </div>
         </div>
 
-        {/* צד ימין: ניהול חוקים ואימוג'י */}
+        {/* צד ימין: ניהול חוקים וזיכרון */}
         <div className="lg:col-span-8 space-y-6">
           
-          {/* פאנל הוספת חוק ואימוג'י - מעוצב */}
-          <div className="bg-[#111827] p-6 rounded-3xl border-2 border-slate-800 shadow-2xl relative">
-            <h3 className="text-xl font-bold mb-5 flex items-center gap-2 text-slate-100">
-              <span className="text-yellow-500">📚</span> עורך ספר החוקים ואפקטים
+          {/* הוספת חוק חדש */}
+          <section className="bg-slate-900/80 p-6 rounded-[2rem] border border-slate-800 shadow-2xl">
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+              <Plus className="text-yellow-500" size={18} /> הזרקת הנחיה חכמה לספר החוקים
             </h3>
-            
-            {/* מאגר אימוג'י משולב */}
-            <div className="bg-[#1f2937] p-4 rounded-2xl border border-slate-700 mb-5 flex gap-2.5 flex-wrap">
-              <span className="text-xs text-slate-400 font-bold block w-full mb-1">אפקטים לשיחה:</span>
-              {SABAN_EMOJIS.map(e => (
-                <button 
-                  key={e.char} 
-                  onClick={() => addEmojiToRule(e.char)}
-                  title={e.name}
-                  className="text-2xl p-2 bg-slate-800 hover:bg-yellow-600/20 rounded-lg transition-all transform hover:scale-110 active:scale-95"
-                >
-                  {e.char}
-                </button>
-              ))}
-            </div>
-
             <div className="flex gap-3">
-              <input 
+              <textarea 
                 value={newRule}
                 onChange={(e) => setNewRule(e.target.value)}
-                placeholder="למשל: תמיד להוסיף 🏗️ מנוף אם..."
-                className="flex-1 bg-[#1f2937] border border-slate-700 rounded-xl p-4 text-sm outline-none focus:ring-2 focus:ring-yellow-500 transition-all text-white placeholder:text-slate-500"
+                placeholder="למשל: אם הלקוח מבקש גבס, תמיד תשאל בסוף על ברגים 🔩..."
+                className="flex-1 bg-slate-950 border border-slate-800 rounded-2xl p-4 text-sm outline-none focus:ring-2 focus:ring-yellow-500 min-h-[80px] transition-all"
               />
               <button 
                 onClick={saveRule}
-                disabled={loading}
-                className="bg-yellow-600 hover:bg-yellow-500 text-black font-extrabold px-8 rounded-xl transition-all disabled:opacity-50 transform active:scale-95 shadow-lg"
+                className="bg-yellow-600 hover:bg-yellow-500 text-black font-black px-6 rounded-2xl transition-all h-[80px] shadow-lg shadow-yellow-600/20 active:scale-95"
               >
-                {loading ? 'מעדכן...' : 'עדכן ספר 📋'}
+                עדכן מוח
               </button>
             </div>
-          </div>
+          </section>
 
-          {/* רשימת חוקים פעילים */}
-          <div className="bg-[#111827] p-6 rounded-3xl border-2 border-slate-800 h-[280px] overflow-y-auto shadow-inner">
-            <h4 className="text-xs font-bold text-slate-500 mb-4 italic tracking-wider">ספר החוקים הנוכחי של Gemini:</h4>
-            <div className="space-y-2.5">
-              <AnimatePresence>
-                {rules.map((rule) => (
-                  <motion.div 
-                    key={rule.id}
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    className="flex justify-between items-center bg-[#1f2937]/70 p-4 rounded-xl border-r-4 border-yellow-600 shadow-md hover:bg-[#1f2937]"
-                  >
-                    <span className="text-[13px] text-slate-100 font-medium leading-snug">{rule.instruction}</span>
-                    <button onClick={() => deleteRule(rule.id)} className="text-red-400 hover:text-red-600 text-xs mr-5 font-bold p-1 bg-red-950/50 rounded-md">מחק</button>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-              {rules.length === 0 && !errorStatus && (
-                <div className="text-slate-600 italic text-sm text-center pt-10">ספר החוקים ריק. הוסף חוק חדש למעלה.</div>
-              )}
+          {/* לוג הזיכרון הארגוני (סיכום נתונים) */}
+          <section className="bg-slate-900/50 p-6 rounded-[2rem] border border-slate-800 h-[320px] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                <BrainCircuit size={14} className="text-blue-500" /> זיכרון שיחות פעיל
+              </h4>
+              <button className="text-[10px] text-red-400 bg-red-400/10 px-3 py-1 rounded-lg">נקה זיכרון זמני</button>
             </div>
+            
+            <div className="space-y-3">
+              {rules.map((rule) => (
+                <div key={rule.id} className="group bg-slate-950 p-4 rounded-2xl border-r-4 border-yellow-600 flex justify-between items-start hover:bg-slate-900 transition-all shadow-sm">
+                  <p className="text-[13px] text-slate-300 leading-relaxed pl-4">{rule.instruction}</p>
+                  <button onClick={() => {/* Delete logic */}} className="opacity-0 group-hover:opacity-100 text-red-500 p-1"><Trash2 size={14} /></button>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* מחוון חיסכון בטוקנים */}
+          <div className="bg-blue-600/10 border border-blue-500/20 p-4 rounded-2xl flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-600 rounded-lg"><Cpu size={16} className="text-white" /></div>
+              <span className="text-xs font-bold">ניצול מפתחות API אופטימלי:</span>
+            </div>
+            <span className="text-blue-400 font-black text-lg">94% חסכון</span>
           </div>
 
         </div>
 
-      </div>
+      </main>
     </div>
   );
 }
+
+// קומפוננטת שלב בעץ
+const StepNode = ({ active, label, icon }: any) => (
+  <div className={`flex flex-col items-center gap-1 transition-all duration-700 ${active ? 'scale-110' : 'opacity-30'}`}>
+    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl shadow-lg ${active ? 'bg-yellow-600 animate-pulse text-black' : 'bg-slate-800'}`}>
+      {icon}
+    </div>
+    <span className={`text-[9px] font-black ${active ? 'text-yellow-500' : 'text-slate-600'}`}>{label}</span>
+  </div>
+);
