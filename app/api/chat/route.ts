@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabase } from "@/lib/supabase";
 import { rtdb } from "@/lib/firebase";
-import { ref, push, update } from "firebase/database";
+import { ref, push, update, get, set } from "firebase/database";
 import { NextResponse } from "next/server";
 
 // 1. פונקציות עזר לניהול ה-Dashboard והדיווח
@@ -38,6 +38,21 @@ export async function POST(req: Request) {
   try {
     const { messages, phone, user_id } = await req.json();
     const lastUserMsg = messages[messages.length - 1].content;
+
+    // --- מנגנון מניעת כפילויות (Deduplication) ---
+    const cleanPhone = phone ? phone.replace('+', '').trim() : "anonymous";
+    const msgHash = Buffer.from(`${cleanPhone}_${lastUserMsg.substring(0, 30)}`).toString('base64');
+    const lockRef = ref(rtdb, `saban94/temp_locks/${msgHash}`);
+    
+    const lockSnap = await get(lockRef);
+    if (lockSnap.exists()) {
+      const lockTime = lockSnap.val();
+      if (Date.now() - lockTime < 5000) { // נעילה ל-5 שניות
+        return NextResponse.json({ text: "", status: "duplicate_ignored" });
+      }
+    }
+    await set(lockRef, Date.now()); // יצירת הנעילה
+    // -------------------------------------------
 
     // 2. שליפת DNA ובדיקת מפתחות מה-Supabase
     const { data: config } = await supabase.from('system_rules')
@@ -84,7 +99,6 @@ export async function POST(req: Request) {
           aiResponse = result.response.text();
 
           if (aiResponse) {
-            // עדכון הדאשבורד בזמן אמת
             await Promise.all([
               updateDashboardQuota(i + 1, modelName, "SUCCESS"),
               logToDailyChat(lastUserMsg, user_id)
@@ -92,7 +106,7 @@ export async function POST(req: Request) {
             break outerLoop; 
           }
         } catch (e: any) {
-          console.warn(`Key ${i+1} Model ${modelName} Quota Exceeded`);
+          console.warn(`Key ${i+1} failed`);
           await updateDashboardQuota(i + 1, modelName, "QUOTA_EXCEEDED");
           continue;
         }
@@ -100,13 +114,12 @@ export async function POST(req: Request) {
     }
 
     // 6. הזרקת לינקים ומשלוח ל-Pipeline
-    if (foundProduct) {
+    if (foundProduct && aiResponse) {
       const link = foundProduct.product_magic_link || `https://sidor.vercel.app/product-pages/index.html?id=${foundProduct.sku}`;
       aiResponse = aiResponse.replace("MAGIC_URL", link) + (stockAlert ? `\n${stockAlert}` : "");
     }
 
-    if (phone) {
-      const cleanPhone = phone.replace('+', '').trim();
+    if (phone && aiResponse) {
       await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), { text: aiResponse, timestamp: Date.now() });
     }
 
