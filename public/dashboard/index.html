@@ -3,15 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Saban AI | מערכת ניטור</title>
+    <title>Saban AI | Monitor</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;700&display=swap');
         body { font-family: 'Assistant', sans-serif; background: #f8fafc; color: #1e293b; }
         .card { background: white; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
-        .btn-primary { background: #059669; color: white; transition: all 0.2s; }
-        .btn-primary:hover { background: #047857; transform: translateY(-1px); }
     </style>
 </head>
 <body class="p-4 md:p-8">
@@ -19,28 +17,24 @@
     <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
         <div>
             <h1 class="text-3xl font-bold text-slate-900">H.SABAN <span class="text-emerald-600">AI Monitor</span></h1>
-            <p class="text-slate-500 font-medium">ניהול מכסות, סוכנים ותקשורת יומית</p>
+            <p class="text-slate-500 font-medium">ניהול מכסות ותקשורת יומית</p>
         </div>
         <div class="flex gap-3">
-            <button id="re-sync-btn" class="flex items-center gap-2 px-5 py-2.5 btn-primary rounded-xl font-bold text-sm">
+            <button id="re-sync-btn" class="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 transition">
                 <i data-lucide="refresh-cw" class="w-4 h-4"></i>
                 סנכרון נתונים
             </button>
-            <div class="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl">
-                <div class="w-2.5 h-2.5 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
-                <span class="text-sm font-bold text-slate-700">מערכת פעילה</span>
-            </div>
         </div>
     </div>
 
     <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div class="card p-6 rounded-2xl border-r-4 border-r-emerald-500">
             <div class="text-slate-500 text-sm mb-1">מפתחות API</div>
-            <div class="text-3xl font-bold">4/4 <span class="text-xs text-emerald-600 font-normal">פעילים</span></div>
+            <div class="text-3xl font-bold">4/4</div>
         </div>
         <div class="card p-6 rounded-2xl border-r-4 border-r-blue-500">
             <div class="text-slate-500 text-sm mb-1">מודל עבודה</div>
-            <div class="text-xl font-bold truncate">Gemini 3.1 Lite</div>
+            <div class="text-xl font-bold">Gemini 3.1 Lite</div>
         </div>
         <div class="card p-6 rounded-2xl border-r-4 border-r-amber-500">
             <div class="text-slate-500 text-sm mb-1">חסימות מכסה</div>
@@ -53,23 +47,12 @@
     </div>
 
     <div class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        <div class="lg:col-span-2 space-y-8">
-            <div class="card rounded-3xl p-6">
-                <h2 class="text-xl font-bold mb-6 flex items-center gap-2 text-slate-800">
-                    <i data-lucide="shield-check" class="text-emerald-600"></i> סטטוס בריכת מפתחות
-                </h2>
-                <div id="keys-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    </div>
-            </div>
-
-            <div class="card rounded-3xl p-6">
-                <h2 class="text-xl font-bold mb-6 flex items-center gap-2 text-slate-800">
-                    <i data-lucide="message-square" class="text-blue-600"></i> תקשורת יומית (Chat Sidor)
-                </h2>
-                <div id="chat-traffic" class="space-y-4 max-h-[400px] overflow-y-auto pr-2">
-                    <div class="text-center py-10 text-slate-400">טוען שיחות אחרונות...</div>
-                </div>
+        <div class="lg:col-span-2 card rounded-3xl p-6">
+            <h2 class="text-xl font-bold mb-6 flex items-center gap-2 text-slate-800">
+                <i data-lucide="message-square" class="text-blue-600"></i> תקשורת יומית (Chat Sidor)
+            </h2>
+            <div id="chat-traffic" class="space-y-4 max-h-[500px] overflow-y-auto pr-2">
+                <div class="text-center py-10 text-slate-400 font-bold">ממתין להודעות ראשונות...</div>
             </div>
         </div>
 
@@ -78,30 +61,29 @@
                 <i data-lucide="terminal" class="text-slate-600"></i> לוגים טכניים
             </h2>
             <div id="logs-container" class="space-y-3">
-                <div class="text-center py-10 text-slate-400 text-sm">ממתין לפעילות...</div>
+                <div class="text-center py-10 text-slate-400 text-sm italic">אין לוגים ב-24 השעות האחרונות</div>
             </div>
         </div>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getDatabase, ref, onValue, query, limitToLast, get } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+        import { getDatabase, ref, onValue, query, limitToLast } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-const firebaseConfig = {
-    apiKey: "AIzaSyAg1mkCCOs1A7inc4HfPmTND2t26zbgf9A",
-    authDomain: "whatsapp-8ffd1.firebaseapp.com",
-    // שים לב: וודא שאין רווחים לפני או אחרי הכתובת
-    databaseURL: "https://whatsapp-8ffd1-default-rtdb.europe-west1.firebasedatabase.app", 
-    projectId: "whatsapp-8ffd1",
-    storageBucket: "whatsapp-8ffd1.firebasestorage.app",
-    messagingSenderId: "248003330797",
-    appId: "1:248003330797:web:db93f4c5b223bfa647c2e4"
-};
+        const firebaseConfig = {
+            apiKey: "AIzaSyAg1mkCCOs1A7inc4HfPmTND2t26zbgf9A",
+            authDomain: "whatsapp-8ffd1.firebaseapp.com",
+            databaseURL: "https://whatsapp-8ffd1-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "whatsapp-8ffd1",
+            storageBucket: "whatsapp-8ffd1.firebasestorage.app",
+            messagingSenderId: "248003330797",
+            appId: "1:248003330797:web:db93f4c5b223bfa647c2e4"
+        };
 
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
-        // 1. משיכת לוגים של מכסות
+        // משיכת לוגי מכסות
         onValue(query(ref(db, 'saban94/dashboard/quota_logs'), limitToLast(20)), (snap) => {
             const data = snap.val();
             if(!data) return;
@@ -112,62 +94,33 @@ const firebaseConfig = {
                 if(log.status !== 'SUCCESS') errs++;
                 container.innerHTML += `
                     <div class="p-3 bg-white rounded-xl border border-slate-200 text-xs shadow-sm">
-                        <div class="flex justify-between font-bold mb-1">
-                            <span class="${log.status === 'SUCCESS' ? 'text-emerald-600' : 'text-amber-600'}">KEY ${log.key_index}</span>
-                            <span class="text-slate-400">${new Date(log.timestamp).toLocaleTimeString('he-IL')}</span>
-                        </div>
+                        <span class="font-bold ${log.status === 'SUCCESS' ? 'text-emerald-600' : 'text-amber-600'}">KEY ${log.key_index}</span>
                         <div class="text-slate-600">${log.model} - ${log.status}</div>
-                    </div>
-                `;
+                    </div>`;
             });
             document.getElementById('error-count').innerText = errs;
         });
 
-        // 2. משיכת תקשורת יומית (Chat)
+        // משיכת שיחות (צד לקוח)
         onValue(query(ref(db, 'chat-sidor'), limitToLast(10)), (snap) => {
             const data = snap.val();
             const container = document.getElementById('chat-traffic');
-            if(!data) {
-                container.innerHTML = '<div class="text-center text-slate-400">אין שיחות היום</div>';
-                return;
-            }
+            if(!data) return;
             container.innerHTML = '';
             let count = 0;
             Object.values(data).reverse().forEach(chat => {
                 count++;
                 container.innerHTML += `
-                    <div class="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm flex gap-3">
-                        <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
-                            <i data-lucide="user" class="w-5 h-5 text-slate-400"></i>
-                        </div>
-                        <div>
-                            <div class="text-sm font-bold text-slate-900">${chat.user_name || 'לקוח'} <span class="text-[10px] text-slate-400 font-normal mr-2">${new Date(chat.timestamp).toLocaleTimeString('he-IL')}</span></div>
-                            <div class="text-sm text-slate-600 mt-1 leading-relaxed">${chat.text.substring(0, 100)}...</div>
-                        </div>
-                    </div>
-                `;
+                    <div class="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
+                        <div class="text-sm font-bold text-slate-900">${chat.user_name || 'לקוח'} <span class="text-[10px] text-slate-400 mr-2">${new Date(chat.timestamp).toLocaleTimeString('he-IL')}</span></div>
+                        <div class="text-sm text-slate-600 mt-1">${chat.text}</div>
+                    </div>`;
             });
             document.getElementById('success-count').innerText = count;
             lucide.createIcons();
         });
 
-        // רענון ידני
         document.getElementById('re-sync-btn').addEventListener('click', () => location.reload());
-
-        // רינדור מפתחות (דמה לצורך העיצוב)
-        const keysList = document.getElementById('keys-list');
-        for(let i=1; i<=4; i++) {
-            keysList.innerHTML += `
-                <div class="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                    <div class="flex items-center gap-3">
-                        <div class="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-700">${i}</div>
-                        <div class="text-sm font-bold text-slate-800">מפתח חשבון ${i}</div>
-                    </div>
-                    <div class="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg">ONLINE</div>
-                </div>
-            `;
-        }
-
         lucide.createIcons();
     </script>
 </body>
