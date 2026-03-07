@@ -4,24 +4,6 @@ import { rtdb } from "@/lib/firebase";
 import { ref, push } from "firebase/database";
 import { NextResponse } from "next/server";
 
-// פונקציית עזר להזרקת הודעה ל-JONI
-async function pushToPipeline(to: string, text: string, productData: any = null) {
-  const cleanPhone = to.replace('+', '').trim();
-  const pipelineRef = ref(rtdb, 'saban94/pipeline'); 
-  await push(pipelineRef, {
-    to: cleanPhone,
-    text: text,
-    product: productData,
-    timestamp: Date.now(),
-    status: "pending"
-  });
-}
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { supabase } from "@/lib/supabase";
-import { rtdb } from "@/lib/firebase";
-import { ref, push } from "firebase/database";
-import { NextResponse } from "next/server";
-
 // פונקציית עזר להזרקת הודעה ל-JONI Pipeline
 async function pushToPipeline(to: string, text: string, productData: any = null) {
   const cleanPhone = to.replace('+', '').trim();
@@ -57,9 +39,9 @@ export async function POST(req: Request) {
 
     // 3. בריכת מודלים Gemini 3.1 (מרץ 2026)
     const modelPool = [
-      "gemini-3.1-flash-lite-preview", // הכי מהיר וחסכוני
-      "gemini-3.1-pro-preview",       // ללוגיקה מורכבת
-      "gemini-3-flash-preview"        // גיבוי יציב
+      "gemini-3.1-flash-lite-preview",
+      "gemini-3.1-pro-preview",
+      "gemini-3-flash-preview"
     ];
 
     // 4. ניהול בריכת מפתחות (Failover)
@@ -85,16 +67,9 @@ export async function POST(req: Request) {
             
             חוקי פורמט והנעה לפעולה (CTA):
             - השתמש ב-<b> להדגשות וב-<br> לירידת שורה.
-            - אל תכתוב "תודה מסבן-AI" או משפטי סיום קבועים.
-            - בסיום כל תשובה, הוסף הנעה לפעולה רלוונטית:
-              * מוצרים: "להוסיף את המשטחים האלה לסידור של מחר?"
-              * לוגיסטיקה: "הפרטים עודכנו, תרצה מספר הובלה?"
-              * כללי: "צריך עזרה עם מוצר משלים נוסף?"
-            
-            - אם קיבלת לינק מוצר (product_magic_link), הזרק אותו ככפתור HTML בדיוק כך:
-              <a href="MAGIC_URL" style="display:block; background:#22c55e; color:white; padding:12px; border-radius:15px; text-align:center; text-decoration:none; font-weight:bold; margin-top:15px; border:2px solid #16a34a;">👁️ לצפייה במפרט טכני ומחיר</a>
-            
-            - חתימה בסוף ההודעה (טקסט קטן): Sent via JONI-Pipeline`
+            - בסיום כל תשובה, הוסף הנעה לפעולה רלוונטית לפי ההקשר.
+            - אם נמצא לינק מוצר, הזרק אותו ככפתור HTML עם MAGIC_URL.
+            - חתימה בסוף ההודעה: Sent via JONI-Pipeline`
           });
 
           const prompt = foundProduct 
@@ -113,19 +88,20 @@ export async function POST(req: Request) {
       if (aiResponse) break; 
     }
 
-    // 6. הזרקת לינק הקסם האמיתי לתוך הכפתור
+    if (!aiResponse) {
+        throw new Error("AI failed to generate response: " + lastError);
+    }
+
+    // 6. הזרקת לינק הקסם וניקוי HTML
     if (foundProduct && foundProduct.product_magic_link) {
         aiResponse = aiResponse.replace("MAGIC_URL", foundProduct.product_magic_link);
     }
-
-    // 7. ניקוי כוכביות Markdown ל-HTML תקני
     aiResponse = aiResponse.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
 
-    // 8. שליחה ל-Pipeline של JONI ותיעוד ב-Firebase
+    // 7. שליחה ל-Pipeline ותיעוד
     if (phone) {
       await pushToPipeline(phone, aiResponse, foundProduct);
       
-      // תיעוד בצאט-סידור המאוחד
       const chatSidorRef = ref(rtdb, 'chat-sidor');
       await push(chatSidorRef, {
           text: aiResponse,
@@ -138,9 +114,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ text: aiResponse, product: foundProduct });
 
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
     console.error("Critical Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
