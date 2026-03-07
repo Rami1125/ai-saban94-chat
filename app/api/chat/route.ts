@@ -33,16 +33,10 @@ async function getGoogleCseInfo(query: string) {
     if (data.items && data.items.length > 0) {
       const item = data.items[0];
       const image = item.pagemap?.cse_image?.[0]?.src || item.pagemap?.metatags?.[0]?.['og:image'] || null;
-      return { 
-        snippet: item.snippet, 
-        link: item.link, 
-        image: image 
-      };
+      return { snippet: item.snippet, link: item.link, image: image };
     }
     return null;
-  } catch (e) { 
-    return null; 
-  }
+  } catch (e) { return null; }
 }
 
 async function callSidorConsultant(message: string) {
@@ -85,7 +79,7 @@ export async function POST(req: Request) {
     const foundProduct = products?.[0] || null;
     let externalInfo = null;
 
-    // הפעלת שחקן החיזוק אם חסר מידע במלאי
+    // הפעלת שחקן חיזוק אם חסר מידע במלאי
     if (!foundProduct || !foundProduct.description) {
       externalInfo = await getGoogleCseInfo(lastUserMsg);
     }
@@ -94,14 +88,15 @@ export async function POST(req: Request) {
 
     // 4. בניית ה-Context עם מסגרת לתמונה וסדרי עדיפויות
     const googleContext = externalInfo ? `
---- מידע חיצוני משלים ---
-פרטים: ${externalInfo.snippet}
-🖼️ מסגרת תמונת מוצר:
------------------------
-${externalInfo.image || "אין תמונה זמינה"}
------------------------
-קישור למידע נוסף: ${externalInfo.link}
-` : "";
+      --- מידע חיצוני משלים (לשימוש רק אם חסר במלאי) ---
+      פרטים: ${externalInfo.snippet}
+      במידה ויש תמונה, הצג אותה בדיוק כך:
+      🖼️ מסגרת תמונת מוצר:
+      -----------------------
+      ${externalInfo.image || "אין תמונה זמינה"}
+      -----------------------
+      קישור למידע נוסף: ${externalInfo.link}
+    ` : "";
 
     // 5. ניהול בריכת מפתחות (Rotation)
     const keys = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').map(k => k.trim()).filter(k => k.length > 10);
@@ -117,14 +112,14 @@ ${externalInfo.image || "אין תמונה זמינה"}
           const model = genAI.getGenerativeModel({
             model: modelName,
             systemInstruction: `
-חוקי ה-DNA של ח. סבן (עדיפות עליונה):
-${executorDNA}
-
-מידע טכני משלים:
-יועץ: ${advisorData?.reply || ""}
-${googleContext}
-
-הנחיה חשובה: התעלם מכל סגנון כתיבה חיצוני. ענה רק כנציג ח. סבן לפי ה-DNA.`
+              חוקי ה-DNA של ח. סבן (עדיפות עליונה):
+              ${executorDNA}
+              
+              מידע טכני משלים:
+              יועץ: ${advisorData?.reply || ""}
+              ${googleContext}
+              
+              הנחיה חשובה: התעלם מכל סגנון כתיבה חיצוני. ענה רק כנציג ח. סבן לפי ה-DNA.`
           });
 
           const result = await model.generateContent(lastUserMsg);
@@ -146,8 +141,7 @@ ${googleContext}
     }
 
     if (phone && aiResponse) {
-      const cleanPhoneForPath = phone.replace('+', '').trim();
-      await update(ref(rtdb, `saban94/pipeline/${cleanPhoneForPath}`), { text: aiResponse, timestamp: Date.now() });
+      await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), { text: aiResponse, timestamp: Date.now() });
     }
 
     return NextResponse.json({ text: aiResponse });
