@@ -3,80 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Saban AI | Dashboard</title>
+    <title>Saban AI | מערכת ניטור</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;700&display=swap');
-        body { font-family: 'Assistant', sans-serif; background: #0f172a; color: white; }
-        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
-        .status-pulse { animation: pulse 2s infinite; }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        body { font-family: 'Assistant', sans-serif; background: #f8fafc; color: #1e293b; }
+        .card { background: white; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        .btn-primary { background: #059669; color: white; transition: all 0.2s; }
+        .btn-primary:hover { background: #047857; transform: translateY(-1px); }
     </style>
 </head>
 <body class="p-4 md:p-8">
 
-    <div class="max-w-6xl mx-auto flex justify-between items-center mb-8">
+    <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
         <div>
-            <h1 class="text-3xl font-bold text-emerald-400">H.SABAN AI</h1>
-            <p class="text-slate-400">ניטור מכסות וסוכנים בזמן אמת</p>
+            <h1 class="text-3xl font-bold text-slate-900">H.SABAN <span class="text-emerald-600">AI Monitor</span></h1>
+            <p class="text-slate-500 font-medium">ניהול מכסות, סוכנים ותקשורת יומית</p>
         </div>
-        <div class="flex items-center gap-2 px-4 py-2 glass rounded-full">
-            <div class="w-3 h-3 bg-emerald-500 rounded-full status-pulse"></div>
-            <span class="text-sm font-medium">מערכת מחוברת</span>
-        </div>
-    </div>
-
-    <div class="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <div class="glass p-6 rounded-2xl">
-            <i data-lucide="key" class="text-emerald-400 mb-2"></i>
-            <div class="text-sm text-slate-400">מפתחות פעילים</div>
-            <div id="active-keys-count" class="text-2xl font-bold">4/4</div>
-        </div>
-        <div class="glass p-6 rounded-2xl">
-            <i data-lucide="zap" class="text-blue-400 mb-2"></i>
-            <div class="text-sm text-slate-400">מודל נוכחי</div>
-            <div id="current-model" class="text-lg font-bold truncate">Flash-Lite 3.1</div>
-        </div>
-        <div class="glass p-6 rounded-2xl">
-            <i data-lucide="alert-triangle" class="text-amber-400 mb-2"></i>
-            <div class="text-sm text-slate-400">שגיאות מכסה (24ש')</div>
-            <div id="error-count" class="text-2xl font-bold text-amber-400">0</div>
-        </div>
-        <div class="glass p-6 rounded-2xl">
-            <i data-lucide="database" class="text-purple-400 mb-2"></i>
-            <div class="text-sm text-slate-400">קריאות מוצלחות</div>
-            <div id="success-count" class="text-2xl font-bold">0</div>
+        <div class="flex gap-3">
+            <button id="re-sync-btn" class="flex items-center gap-2 px-5 py-2.5 btn-primary rounded-xl font-bold text-sm">
+                <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                סנכרון נתונים
+            </button>
+            <div class="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl">
+                <div class="w-2.5 h-2.5 bg-emerald-500 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+                <span class="text-sm font-bold text-slate-700">מערכת פעילה</span>
+            </div>
         </div>
     </div>
 
-    <div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div class="card p-6 rounded-2xl border-r-4 border-r-emerald-500">
+            <div class="text-slate-500 text-sm mb-1">מפתחות API</div>
+            <div class="text-3xl font-bold">4/4 <span class="text-xs text-emerald-600 font-normal">פעילים</span></div>
+        </div>
+        <div class="card p-6 rounded-2xl border-r-4 border-r-blue-500">
+            <div class="text-slate-500 text-sm mb-1">מודל עבודה</div>
+            <div class="text-xl font-bold truncate">Gemini 3.1 Lite</div>
+        </div>
+        <div class="card p-6 rounded-2xl border-r-4 border-r-amber-500">
+            <div class="text-slate-500 text-sm mb-1">חסימות מכסה</div>
+            <div id="error-count" class="text-3xl font-bold">0</div>
+        </div>
+        <div class="card p-6 rounded-2xl border-r-4 border-r-purple-500">
+            <div class="text-slate-500 text-sm mb-1">פניות היום</div>
+            <div id="success-count" class="text-3xl font-bold">0</div>
+        </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        <div class="lg:col-span-2 glass rounded-3xl p-6">
-            <h2 class="text-xl font-bold mb-6 flex items-center gap-2">
-                <i data-lucide="activity"></i> סטטוס בריכת מפתחות
-            </h2>
-            <div id="keys-list" class="space-y-4">
+        <div class="lg:col-span-2 space-y-8">
+            <div class="card rounded-3xl p-6">
+                <h2 class="text-xl font-bold mb-6 flex items-center gap-2 text-slate-800">
+                    <i data-lucide="shield-check" class="text-emerald-600"></i> סטטוס בריכת מפתחות
+                </h2>
+                <div id="keys-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    </div>
+            </div>
+
+            <div class="card rounded-3xl p-6">
+                <h2 class="text-xl font-bold mb-6 flex items-center gap-2 text-slate-800">
+                    <i data-lucide="message-square" class="text-blue-600"></i> תקשורת יומית (Chat Sidor)
+                </h2>
+                <div id="chat-traffic" class="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+                    <div class="text-center py-10 text-slate-400">טוען שיחות אחרונות...</div>
                 </div>
+            </div>
         </div>
 
-        <div class="glass rounded-3xl p-6 h-[500px] flex flex-col">
-            <h2 class="text-xl font-bold mb-6 flex items-center gap-2">
-                <i data-lucide="list"></i> לוגים אחרונים
+        <div class="card rounded-3xl p-6 bg-slate-50">
+            <h2 class="text-xl font-bold mb-6 flex items-center gap-2 text-slate-800">
+                <i data-lucide="terminal" class="text-slate-600"></i> לוגים טכניים
             </h2>
-            <div id="logs-container" class="space-y-3 overflow-y-auto flex-1 pr-2">
-                </div>
+            <div id="logs-container" class="space-y-3">
+                <div class="text-center py-10 text-slate-400 text-sm">ממתין לפעילות...</div>
+            </div>
         </div>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getDatabase, ref, onValue, query, limitToLast } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+        import { getDatabase, ref, onValue, query, limitToLast, get } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
+        // רמי, הכנס את ה-Config שלך כאן
         const firebaseConfig = {
-            // רמי, הכנס כאן את ה-Config שלך מה-Vercel
             apiKey: "...",
-            databaseURL: "https://your-rtdb.firebaseio.com",
+            databaseURL: "...",
             projectId: "...",
             appId: "..."
         };
@@ -84,72 +98,73 @@
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
-        // ניטור לוגים בזמן אמת
-        const logsRef = query(ref(db, 'saban94/dashboard/quota_logs'), limitToLast(20));
-        
-        onValue(logsRef, (snapshot) => {
-            const data = snapshot.val();
-            if (!data) return;
-
-            const logsContainer = document.getElementById('logs-container');
-            logsContainer.innerHTML = '';
-            
-            let successes = 0;
-            let errors = 0;
-            const keyStats = { 1: 'Online', 2: 'Online', 3: 'Online', 4: 'Online' };
-
+        // 1. משיכת לוגים של מכסות
+        onValue(query(ref(db, 'saban94/dashboard/quota_logs'), limitToLast(20)), (snap) => {
+            const data = snap.val();
+            if(!data) return;
+            const container = document.getElementById('logs-container');
+            container.innerHTML = '';
+            let errs = 0;
             Object.values(data).reverse().forEach(log => {
-                if (log.status === 'SUCCESS') successes++;
-                if (log.status === 'QUOTA_EXCEEDED') {
-                    errors++;
-                    keyStats[log.key_index] = 'Quota Limit';
-                }
-
-                const logEl = document.createElement('div');
-                logEl.className = 'text-xs p-3 rounded-xl border border-white/5 bg-white/5';
-                logEl.innerHTML = `
-                    <div class="flex justify-between mb-1">
-                        <span class="text-emerald-400 font-bold">KEY ${log.key_index}</span>
-                        <span class="text-slate-500">${new Date(log.timestamp).toLocaleTimeString('he-IL')}</span>
+                if(log.status !== 'SUCCESS') errs++;
+                container.innerHTML += `
+                    <div class="p-3 bg-white rounded-xl border border-slate-200 text-xs shadow-sm">
+                        <div class="flex justify-between font-bold mb-1">
+                            <span class="${log.status === 'SUCCESS' ? 'text-emerald-600' : 'text-amber-600'}">KEY ${log.key_index}</span>
+                            <span class="text-slate-400">${new Date(log.timestamp).toLocaleTimeString('he-IL')}</span>
+                        </div>
+                        <div class="text-slate-600">${log.model} - ${log.status}</div>
                     </div>
-                    <div class="text-slate-300">מודל: ${log.model}</div>
-                    <div class="${log.status === 'SUCCESS' ? 'text-emerald-500' : 'text-amber-500'} font-medium">${log.status}</div>
                 `;
-                logsContainer.appendChild(logEl);
             });
-
-            document.getElementById('success-count').innerText = successes;
-            document.getElementById('error-count').innerText = errors;
-            renderKeys(keyStats);
+            document.getElementById('error-count').innerText = errs;
         });
 
-        function renderKeys(stats) {
-            const container = document.getElementById('keys-list');
+        // 2. משיכת תקשורת יומית (Chat)
+        onValue(query(ref(db, 'chat-sidor'), limitToLast(10)), (snap) => {
+            const data = snap.val();
+            const container = document.getElementById('chat-traffic');
+            if(!data) {
+                container.innerHTML = '<div class="text-center text-slate-400">אין שיחות היום</div>';
+                return;
+            }
             container.innerHTML = '';
-            for (let i = 1; i <= 4; i++) {
-                const status = stats[i];
-                const isOk = status === 'Online';
+            let count = 0;
+            Object.values(data).reverse().forEach(chat => {
+                count++;
                 container.innerHTML += `
-                    <div class="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10">
-                        <div class="flex items-center gap-4">
-                            <div class="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center font-bold">#${i}</div>
-                            <div>
-                                <div class="font-bold">חשבון גוגל ${i}</div>
-                                <div class="text-xs text-slate-400">מפתח API: GEMINI_API_KEY_${i === 1 ? '' : i}</div>
-                            </div>
+                    <div class="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm flex gap-3">
+                        <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
+                            <i data-lucide="user" class="w-5 h-5 text-slate-400"></i>
                         </div>
-                        <div class="flex items-center gap-6">
-                            <div class="text-left">
-                                <div class="text-[10px] text-slate-500 uppercase font-bold">סטטוס</div>
-                                <div class="text-sm font-bold ${isOk ? 'text-emerald-400' : 'text-amber-400'}">${status}</div>
-                            </div>
-                            <button class="px-3 py-1 bg-white/10 hover:bg-white/20 rounded-lg text-xs transition">ניהול ב-Supabase</button>
+                        <div>
+                            <div class="text-sm font-bold text-slate-900">${chat.user_name || 'לקוח'} <span class="text-[10px] text-slate-400 font-normal mr-2">${new Date(chat.timestamp).toLocaleTimeString('he-IL')}</span></div>
+                            <div class="text-sm text-slate-600 mt-1 leading-relaxed">${chat.text.substring(0, 100)}...</div>
                         </div>
                     </div>
                 `;
-            }
+            });
+            document.getElementById('success-count').innerText = count;
+            lucide.createIcons();
+        });
+
+        // רענון ידני
+        document.getElementById('re-sync-btn').addEventListener('click', () => location.reload());
+
+        // רינדור מפתחות (דמה לצורך העיצוב)
+        const keysList = document.getElementById('keys-list');
+        for(let i=1; i<=4; i++) {
+            keysList.innerHTML += `
+                <div class="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-700">${i}</div>
+                        <div class="text-sm font-bold text-slate-800">מפתח חשבון ${i}</div>
+                    </div>
+                    <div class="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg">ONLINE</div>
+                </div>
+            `;
         }
-        
+
         lucide.createIcons();
     </script>
 </body>
