@@ -87,13 +87,16 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, onValue, query, limitToLast, get } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-        // רמי, הכנס את ה-Config שלך כאן
-        const firebaseConfig = {
-            apiKey: "...",
-            databaseURL: "...",
-            projectId: "...",
-            appId: "..."
-        };
+const firebaseConfig = {
+    apiKey: "AIzaSyAg1mkCCOs1A7inc4HfPmTND2t26zbgf9A",
+    authDomain: "whatsapp-8ffd1.firebaseapp.com",
+    // שים לב: וודא שאין רווחים לפני או אחרי הכתובת
+    databaseURL: "https://whatsapp-8ffd1-default-rtdb.europe-west1.firebasedatabase.app", 
+    projectId: "whatsapp-8ffd1",
+    storageBucket: "whatsapp-8ffd1.firebasestorage.app",
+    messagingSenderId: "248003330797",
+    appId: "1:248003330797:web:db93f4c5b223bfa647c2e4"
+};
 
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
