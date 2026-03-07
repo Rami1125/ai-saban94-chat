@@ -37,7 +37,7 @@ export async function POST(req: Request) {
       .limit(1);
     const foundProduct = products?.[0] || null;
 
-    // 3. בריכת מודלים Gemini 3.1 (מרץ 2026)
+    // 3. בריכת מודלים Gemini 3.1
     const modelPool = [
       "gemini-3.1-flash-lite-preview",
       "gemini-3.1-pro-preview",
@@ -67,9 +67,12 @@ export async function POST(req: Request) {
             
             חוקי פורמט והנעה לפעולה (CTA):
             - השתמש ב-<b> להדגשות וב-<br> לירידת שורה.
-            - בסיום כל תשובה, הוסף הנעה לפעולה רלוונטית לפי ההקשר.
-            - אם נמצא לינק מוצר, הזרק אותו ככפתור HTML עם MAGIC_URL.
-            - חתימה בסוף ההודעה: Sent via JONI-Pipeline`
+            - בסיום כל תשובה, הוסף הנעה לפעולה רלוונטית לפי ההקשר (למשל: "להוסיף לסידור?").
+            
+            - אם נמצא לינק מוצר (MAGIC_URL), הזרק את הכפתור הבא בדיוק כך:
+            <a href="MAGIC_URL" style="display:block; background:#059669; color:white; padding:12px; border-radius:15px; text-align:center; text-decoration:none; font-weight:bold; margin-top:15px; border:2px solid #10b981;">👁️ לצפייה במפרט טכני ומחשבון כמויות</a>
+            
+            - חתימה בסוף ההודעה: H.SABAN 1994 | AI Logistics System`
           });
 
           const prompt = foundProduct 
@@ -92,13 +95,18 @@ export async function POST(req: Request) {
         throw new Error("AI failed to generate response: " + lastError);
     }
 
-    // 6. הזרקת לינק הקסם וניקוי HTML
+    // 6. הזרקת לינק הקסם הדינמי וניקוי HTML
     if (foundProduct && foundProduct.product_magic_link) {
         aiResponse = aiResponse.replace("MAGIC_URL", foundProduct.product_magic_link);
+    } else if (foundProduct) {
+        // גיבוי אם הלינק חסר בטבלה
+        const fallbackUrl = `https://sidor.vercel.app/product-pages/index.html?id=${foundProduct.sku}`;
+        aiResponse = aiResponse.replace("MAGIC_URL", fallbackUrl);
     }
-    aiResponse = aiResponse.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+    
+    aiResponse = aiResponse.replace(/\*\?(.*?)\*\*/g, '<b>$1</b>');
 
-    // 7. שליחה ל-Pipeline ותיעוד
+    // 7. שליחה ל-Pipeline ותיעוד בצאט המאוחד
     if (phone) {
       await pushToPipeline(phone, aiResponse, foundProduct);
       
