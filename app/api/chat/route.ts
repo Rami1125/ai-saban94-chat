@@ -10,16 +10,21 @@ async function pushToPipeline(to: string, text: string, productData: any = null)
   await push(pipelineRef, { to: cleanPhone, text, product: productData, timestamp: Date.now(), status: "pending" });
 }
 
-// פונקציית התקשורת בין סוכנים
+// תקשורת חסינה עם היועץ
 async function callSidorConsultant(message: string) {
   try {
     const res = await fetch(`https://sidor.vercel.app/api/gemini`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message })
+      body: JSON.stringify({ message }),
+      signal: AbortSignal.timeout(5000) // מפסיק אחרי 5 שניות כדי לא לתקוע את השרת
     });
+    if (!res.ok) return null;
     return await res.json();
-  } catch (e) { return null; }
+  } catch (e) { 
+    console.error("Consultant Timeout/Fail");
+    return null; 
+  }
 }
 
 export async function POST(req: Request) {
