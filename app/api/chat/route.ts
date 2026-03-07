@@ -4,15 +4,22 @@ import { rtdb } from "@/lib/firebase";
 import { ref, push } from "firebase/database";
 import { NextResponse } from "next/server";
 
+// פונקציית עזר להזרקת הודעה ל-JONI Pipeline
 async function pushToPipeline(to: string, text: string, productData: any = null) {
   const cleanPhone = to.replace('+', '').trim();
   const pipelineRef = ref(rtdb, 'saban94/pipeline'); 
-  await push(pipelineRef, { to: cleanPhone, text, product: productData, timestamp: Date.now(), status: "pending" });
+  await push(pipelineRef, { 
+    to: cleanPhone, 
+    text: text, 
+    product: productData, 
+    timestamp: Date.now(), 
+    status: "pending" 
+  });
 }
 
+// פונקציית התקשורת עם ה"יועץ" (SIDOR)
 async function callSidorConsultant(message: string) {
   try {
-    // הוספת Timeout קצר כדי שהצ'אט לא יתקע אם היועץ לא זמין
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2000); 
 
@@ -28,20 +35,21 @@ async function callSidorConsultant(message: string) {
     return await res.json();
   } catch (e) { 
     console.error("Advisor Communication Failed or Timed out");
-    return null; // ממשיך הלאה גם אם היועץ נפל
+    return null; 
   }
 }
+
 export async function POST(req: Request) {
   try {
     const { messages, phone, user_id } = await req.json();
     const lastUserMsg = messages[messages.length - 1].content;
 
-    // 1. שליפת חוקי ה-DNA של הביצועיסט
+    // 1. שליפת חוקי ה-DNA של הביצועיסט מה-Supabase
     const { data: rules } = await supabase.from('system_rules')
       .select('instruction').eq('agent_type', 'executor').eq('is_active', true);
     const executorDNA = rules?.map(r => r.instruction).join("\n") || "";
 
-    // 2. התייעצות טכנית
+    // 2. התייעצות טכנית עם היועץ ב-SIDOR
     let technicalInsight = "";
     if (lastUserMsg.includes("איך") || lastUserMsg.includes("כמה") || lastUserMsg.length > 30) {
         const advisorResponse = await callSidorConsultant(lastUserMsg);
@@ -66,34 +74,59 @@ export async function POST(req: Request) {
       }
     }
 
-    // 4. הפעלת מודל Gemini
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-    const model = genAI.getGenerativeModel({
-      model: "gemini-3.1-flash-lite-preview",
-      systemInstruction: `אתה נציג ח. סבן. הנחיות ביצוע: ${executorDNA}
-      מידע טכני מהיועץ: ${technicalInsight}
-      - במידה ויש התראת מלאי, שלב אותה בצורה ברורה.
-      - אם זו רשימה, שלח לינק לתיקוף: https://sidor.vercel.app/validation/
-      - חתימה: H.SABAN 1994 | AI Logistics System`
-    });
+    // 4. בריכת מודלים Gemini 3.1 (Failover) לניצול מכסה מקסימלית
+    const modelPool = [
+      "gemini-3.1-flash-lite-preview", // עדיפות 1: הכי חסכוני ומהיר
+      "gemini-3.1-flash-preview",      // עדיפות 2: יציב
+      "gemini-3.1-pro-preview"         // עדיפות 3: חכם
+    ];
 
-    const result = await model.generateContent(lastUserMsg + (stockAlert ? `\nהערת מלאי חשובה: ${stockAlert}` : ""));
-    let aiResponse = result.response.text();
+    let aiResponse = "";
+    const apiKey = process.env.GEMINI_API_KEY || "";
 
-    // 5. הזרקת לינקים וניקוי
+    for (const modelName of modelPool) {
+      try {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          systemInstruction: `אתה נציג ח. סבן 1994. זהות המשתמש: ${user_id || 'לקוח'}.
+          הנחיות ביצוע: ${executorDNA}
+          מידע טכני מהיועץ (SIDOR): ${technicalInsight}
+          - במידה ויש התראת מלאי, שלב אותה בצורה ברורה בתוך התשובה.
+          - אם זו רשימת מוצרים, שלח לינק לתיקוף: https://sidor.vercel.app/validation/
+          - חתימה מחויבת: H.SABAN 1994 | AI Logistics System`,
+          generationConfig: { temperature: 0.7, maxOutputTokens: 1000 }
+        });
+
+        const result = await model.generateContent(
+          lastUserMsg + (stockAlert ? `\nהערת מלאי קריטית: ${stockAlert}` : "")
+        );
+        
+        aiResponse = result.response.text();
+        if (aiResponse) break; 
+      } catch (e) {
+        console.warn(`Model ${modelName} reached quota, trying next...`);
+        continue;
+      }
+    }
+
+    if (!aiResponse) {
+      aiResponse = "רמי, המערכת עמוסה כרגע. אני מעבד את הבקשה שלך באופן ידני, נא להמתין.";
+    }
+
+    // 5. הזרקת לינקים, ניקוי והתראות מלאי
     if (foundProduct) {
       const link = foundProduct.product_magic_link || `https://sidor.vercel.app/product-pages/index.html?id=${foundProduct.sku}`;
       aiResponse = aiResponse.replace("MAGIC_URL", link);
-    }
-    
-    // אם ה-AI לא שילב את ההתראה באופן טבעי, נוסיף אותה בסוף
-    if (stockAlert && !aiResponse.includes("מלשינון")) {
-      aiResponse += stockAlert;
+      
+      if (stockAlert && !aiResponse.includes("מלאי") && !aiResponse.includes("מלשינון")) {
+        aiResponse += stockAlert;
+      }
     }
 
     aiResponse = aiResponse.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
 
-    // 6. שליחה ל-Pipeline
+    // 6. שליחה ל-Pipeline ותיעוד ב-RTDB
     if (phone) {
       await pushToPipeline(phone, aiResponse, foundProduct);
       const chatRef = ref(rtdb, 'chat-sidor');
@@ -101,7 +134,9 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ text: aiResponse });
+
   } catch (error: any) {
+    console.error("Critical Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
