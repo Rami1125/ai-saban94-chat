@@ -34,10 +34,12 @@ async function getGoogleCseInfo(query: string) {
     
     if (data.items && data.items.length > 0) {
       const item = data.items[0];
+      // שליפת תמונה בצורה בטוחה מה-Pagemap
+      const image = item.pagemap?.cse_image?.[0]?.src || item.pagemap?.metatags?.[0]?.['og:image'] || null;
       return {
         snippet: item.snippet,
         link: item.link,
-        image: item.pagemap?.cse_image?.[0]?.src || null
+        image: image
       };
     }
     return null;
@@ -66,29 +68,23 @@ export async function POST(req: Request) {
     const { messages, phone, user_id } = await req.json();
     const lastUserMsg = messages[messages.length - 1].content;
 
-    // --- מנגנון מניעת כפילויות (Deduplication) ---
+    // --- מנגנון מניעת כפילויות ---
     const cleanPhone = phone ? phone.replace('+', '').trim() : "anonymous";
     const msgHash = Buffer.from(`${cleanPhone}_${lastUserMsg.substring(0, 30)}`).toString('base64');
     const lockRef = ref(rtdb, `saban94/temp_locks/${msgHash}`);
     
     const lockSnap = await get(lockRef);
-    if (lockSnap.exists()) {
-      const lockTime = lockSnap.val();
-      if (Date.now() - lockTime < 5000) {
-        return NextResponse.json({ text: "", status: "duplicate_ignored" });
-      }
+    if (lockSnap.exists() && (Date.now() - lockSnap.val() < 5000)) {
+      return NextResponse.json({ text: "", status: "duplicate_ignored" });
     }
     await set(lockRef, Date.now());
-    // -------------------------------------------
 
-    // 2. שליפת DNA ובדיקת מפתחות מה-Supabase
-    const { data: config } = await supabase.from('system_rules')
-      .select('instruction, agent_type, is_active');
-    
+    // 2. שליפת DNA ובדיקת מפתחות
+    const { data: config } = await supabase.from('system_rules').select('instruction, agent_type, is_active');
     const executorDNA = config?.filter(r => r.agent_type === 'executor' && r.is_active).map(r => r.instruction).join("\n") || "";
     const activeKeysConfig = config?.filter(r => r.agent_type === 'api_key_status');
 
-    // 3. התייעצות טכנית, בדיקת מלאי וחיפוש גוגל (חיזוק) במקביל
+    // 3. חיפושים במקביל
     let [advisorData, { data: products }] = await Promise.all([
       callSidorConsultant(lastUserMsg),
       supabase.from('inventory').select('*, stock_quantity, product_magic_link, sku').textSearch('product_name', lastUserMsg, { config: 'hebrew' }).limit(1)
@@ -97,7 +93,6 @@ export async function POST(req: Request) {
     const foundProduct = products?.[0] || null;
     let externalInfo = null;
 
-    // הפעלת שחקן החיזוק אם אין מוצר או חסר מידע
     if (!foundProduct || !foundProduct.description) {
       externalInfo = await getGoogleCseInfo(lastUserMsg);
     }
@@ -108,20 +103,22 @@ export async function POST(req: Request) {
       stockAlert = stock <= 0 ? `⚠️ חסר במלאי!` : stock < 10 ? `⚠️ רק ${stock} יחידות נותרו!` : "";
     }
 
-    // 4. ניהול בריכת מפתחות (GOOGLE_AI_KEY_POOL)
+    // --- עדכון ה-googleContext להזרקת תמונה אמיתית ---
+    const googleContext = externalInfo 
+      ? `\nמידע טכני משלים מגוגל: ${externalInfo.snippet}
+         חשוב: אם יש לינק לתמונה, הצג אותו בפורמט: "תמונת המוצר: ${externalInfo.image || externalInfo.link}".
+         אל תמציא לינקים, השתמש רק בלינק שסופק.` 
+      : "";
+
+    // 4. ניהול בריכת מפתחות
     const keyPoolString = process.env.GOOGLE_AI_KEY_POOL || "";
     const keys = keyPoolString.split(',').map(k => k.trim()).filter(k => k.length > 10);
     const modelPool = ["gemini-3.1-flash-lite-preview", "gemini-3.1-flash-preview", "gemini-3.1-pro-preview"];
     let aiResponse = "";
 
-    const googleContext = externalInfo 
-      ? `\nמידע משלים מגוגל: ${externalInfo.snippet}. תמונה/קישור: ${externalInfo.image || externalInfo.link}` 
-      : "";
-
-    // 5. לוגיקת רוטציה (מפתח -> מודל)
+    // 5. לוגיקת רוטציה
     outerLoop: for (let i = 0; i < keys.length; i++) {
-      const isKeyDisabled = activeKeysConfig?.find(k => k.instruction === `KEY_${i+1}`)?.is_active === false;
-      if (isKeyDisabled) continue;
+      if (activeKeysConfig?.find(k => k.instruction === `KEY_${i+1}`)?.is_active === false) continue;
 
       const genAI = new GoogleGenerativeAI(keys[i]);
       for (const modelName of modelPool) {
