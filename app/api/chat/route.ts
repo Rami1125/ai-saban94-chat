@@ -23,7 +23,9 @@ async function callSidorConsultant(message: string) {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2000); 
-    const res = await fetch(`https://sidor.vercel.app/api/gemini`, {
+    // שימוש ב-URL API סטנדרטי
+    const apiUrl = new URL(`https://sidor.vercel.app/api/gemini`);
+    const res = await fetch(apiUrl.toString(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message }),
@@ -39,9 +41,11 @@ export async function POST(req: Request) {
     const { messages, phone, user_id } = await req.json();
     const lastUserMsg = messages[messages.length - 1].content;
 
-    // --- מנגנון מניעת כפילויות (Deduplication) ---
+    // --- מנגנון מניעת כפילויות (Deduplication) - תיקון ל-Web Standard ---
     const cleanPhone = phone ? phone.replace('+', '').trim() : "anonymous";
-    const msgHash = Buffer.from(`${cleanPhone}_${lastUserMsg.substring(0, 30)}`).toString('base64');
+    const rawHash = `${cleanPhone}_${lastUserMsg.substring(0, 30)}`;
+    const msgHash = btoa(encodeURIComponent(rawHash)).replace(/[/+=]/g, ""); 
+    
     const lockRef = ref(rtdb, `saban94/temp_locks/${msgHash}`);
     
     const lockSnap = await get(lockRef);
@@ -54,18 +58,19 @@ export async function POST(req: Request) {
     await set(lockRef, Date.now()); // יצירת הנעילה
     // -------------------------------------------
 
-    // 2. שליפת DNA ובדיקת מפתחות מה-Supabase
-    const { data: config } = await supabase.from('system_rules')
-      .select('instruction, agent_type, is_active');
+    // 2. שליפת DNA, מלאי והתייעצות במקביל (אופטימיזציית ביצועים)
+    const [advisorData, productsResult, configResult] = await Promise.all([
+      callSidorConsultant(lastUserMsg),
+      supabase.from('inventory').select('*, stock_quantity, product_magic_link, sku')
+        .textSearch('product_name', lastUserMsg, { config: 'hebrew' }).limit(1),
+      supabase.from('system_rules').select('instruction, agent_type, is_active')
+    ]);
+    
+    const config = configResult.data;
+    const products = productsResult.data;
     
     const executorDNA = config?.filter(r => r.agent_type === 'executor' && r.is_active).map(r => r.instruction).join("\n") || "";
     const activeKeysConfig = config?.filter(r => r.agent_type === 'api_key_status');
-
-    // 3. התייעצות טכנית ובדיקת מלאי במקביל
-    const [advisorData, { data: products }] = await Promise.all([
-      callSidorConsultant(lastUserMsg),
-      supabase.from('inventory').select('*, stock_quantity, product_magic_link, sku').textSearch('product_name', lastUserMsg, { config: 'hebrew' }).limit(1)
-    ]);
 
     const foundProduct = products?.[0] || null;
     let stockAlert = "";
@@ -78,7 +83,7 @@ export async function POST(req: Request) {
     const keyPoolString = process.env.GOOGLE_AI_KEY_POOL || "";
     const keys = keyPoolString.split(',').map(k => k.trim()).filter(k => k.length > 10);
     
-    const modelPool = ["gemini-3.1-flash-lite-preview", "gemini-3.1-flash-preview", "gemini-3.1-pro-preview"];
+    const modelPool = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]; // שמות מודלים מעודכנים
     let aiResponse = "";
 
     // 5. לוגיקת רוטציה (מפתח -> מודל)
@@ -106,7 +111,7 @@ export async function POST(req: Request) {
             break outerLoop; 
           }
         } catch (e: any) {
-          console.warn(`Key ${i+1} failed`);
+          console.warn(`Key ${i+1} with model ${modelName} failed`);
           await updateDashboardQuota(i + 1, modelName, "QUOTA_EXCEEDED");
           continue;
         }
@@ -123,7 +128,7 @@ export async function POST(req: Request) {
       await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), { text: aiResponse, timestamp: Date.now() });
     }
 
-    return NextResponse.json({ text: aiResponse });
+    return NextResponse.json({ text: aiResponse || "מצטער, חלה שגיאה בעיבוד הבקשה." });
 
   } catch (error: any) {
     console.error("Critical Error:", error.message);
