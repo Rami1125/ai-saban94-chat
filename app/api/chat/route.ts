@@ -1,13 +1,51 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabase } from "@/lib/supabase";
 import { rtdb } from "@/lib/firebase";
-import { ref, push, update } from "firebase/database";
+import { ref, push, update, get, set } from "firebase/database";
 import { NextResponse } from "next/server";
 
-// 1. פונקציות עזר לניהול ה-Pipeline והדאשבורד
+// 1. פונקציות עזר לניהול ה-Dashboard והדיווח
 async function updateDashboardQuota(keyIndex: number, modelName: string, status: string) {
   const dashRef = ref(rtdb, `saban94/dashboard/quota_logs/${Date.now()}`);
   await update(dashRef, { key_index: keyIndex, model: modelName, status, timestamp: Date.now() });
+}
+
+async function logToDailyChat(message: string, userId: string) {
+  const chatRef = ref(rtdb, 'chat-sidor');
+  await push(chatRef, {
+    text: message,
+    user_name: userId || 'לקוח',
+    timestamp: Date.now()
+  });
+}
+
+// שחקן חיזוק: מנוע חיפוש גוגל מותאם (CSE)
+async function getGoogleCseInfo(query: string) {
+  const cx = "1340c66f5e73a4076";
+  const apiKey = process.env.GOOGLE_SEARCH_API_KEY;
+  
+  if (!apiKey) return null;
+
+  try {
+    const res = await fetch(
+      `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${cx}&q=${encodeURIComponent(query)}&num=1`
+    );
+    const data = await res.json();
+    
+    if (data.items && data.items.length > 0) {
+      const item = data.items[0];
+      // שליפת תמונה בצורה בטוחה מה-Pagemap
+      const image = item.pagemap?.cse_image?.[0]?.src || item.pagemap?.metatags?.[0]?.['og:image'] || null;
+      return {
+        snippet: item.snippet,
+        link: item.link,
+        image: image
+      };
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
 }
 
 async function callSidorConsultant(message: string) {
@@ -30,76 +68,90 @@ export async function POST(req: Request) {
     const { messages, phone, user_id } = await req.json();
     const lastUserMsg = messages[messages.length - 1].content;
 
-    // 2. שליפת חוקי ה-DNA ובדיקת "כפתור כיבוי ידני" למפתחות מה-Supabase
-    const { data: config } = await supabase.from('system_rules')
-      .select('instruction, agent_type, is_active');
+    // --- מנגנון מניעת כפילויות ---
+    const cleanPhone = phone ? phone.replace('+', '').trim() : "anonymous";
+    const msgHash = Buffer.from(`${cleanPhone}_${lastUserMsg.substring(0, 30)}`).toString('base64');
+    const lockRef = ref(rtdb, `saban94/temp_locks/${msgHash}`);
     
+    const lockSnap = await get(lockRef);
+    if (lockSnap.exists() && (Date.now() - lockSnap.val() < 5000)) {
+      return NextResponse.json({ text: "", status: "duplicate_ignored" });
+    }
+    await set(lockRef, Date.now());
+
+    // 2. שליפת DNA ובדיקת מפתחות
+    const { data: config } = await supabase.from('system_rules').select('instruction, agent_type, is_active');
     const executorDNA = config?.filter(r => r.agent_type === 'executor' && r.is_active).map(r => r.instruction).join("\n") || "";
     const activeKeysConfig = config?.filter(r => r.agent_type === 'api_key_status');
 
-    // 3. התייעצות טכנית ובדיקת מלאי (מלשינון)
-    const [advisorData, { data: products }] = await Promise.all([
+    // 3. חיפושים במקביל
+    let [advisorData, { data: products }] = await Promise.all([
       callSidorConsultant(lastUserMsg),
-      supabase.from('inventory').select('*, stock_quantity').textSearch('product_name', lastUserMsg, { config: 'hebrew' }).limit(1)
+      supabase.from('inventory').select('*, stock_quantity, product_magic_link, sku').textSearch('product_name', lastUserMsg, { config: 'hebrew' }).limit(1)
     ]);
 
     const foundProduct = products?.[0] || null;
+    let externalInfo = null;
+
+    if (!foundProduct || !foundProduct.description) {
+      externalInfo = await getGoogleCseInfo(lastUserMsg);
+    }
+
     let stockAlert = "";
     if (foundProduct) {
       const stock = foundProduct.stock_quantity || 0;
       stockAlert = stock <= 0 ? `⚠️ חסר במלאי!` : stock < 10 ? `⚠️ רק ${stock} יחידות נותרו!` : "";
     }
 
-    // 4. בריכת מפתחות (4 חשבונות) ומודלים (2026)
-    const keys = [
-      process.env.GEMINI_API_KEY,
-      process.env.GEMINI_API_KEY_2,
-      process.env.GEMINI_API_KEY_3,
-      process.env.GEMINI_API_KEY_4
-    ].filter(Boolean);
+    // --- עדכון ה-googleContext להזרקת תמונה אמיתית ---
+    const googleContext = externalInfo 
+      ? `\nמידע טכני משלים מגוגל: ${externalInfo.snippet}
+         חשוב: אם יש לינק לתמונה, הצג אותו בפורמט: "תמונת המוצר: ${externalInfo.image || externalInfo.link}".
+         אל תמציא לינקים, השתמש רק בלינק שסופק.` 
+      : "";
 
+    // 4. ניהול בריכת מפתחות
+    const keyPoolString = process.env.GOOGLE_AI_KEY_POOL || "";
+    const keys = keyPoolString.split(',').map(k => k.trim()).filter(k => k.length > 10);
     const modelPool = ["gemini-3.1-flash-lite-preview", "gemini-3.1-flash-preview", "gemini-3.1-pro-preview"];
-    
     let aiResponse = "";
 
-    // 5. לוגיקת רוטציה חכמה (מפתח -> מודל)
+    // 5. לוגיקת רוטציה
     outerLoop: for (let i = 0; i < keys.length; i++) {
-      // בדיקה אם המפתח כבוי ידנית ב-Supabase
-      const isKeyDisabled = activeKeysConfig?.find(k => k.instruction === `KEY_${i+1}`)?.is_active === false;
-      if (isKeyDisabled) continue;
+      if (activeKeysConfig?.find(k => k.instruction === `KEY_${i+1}`)?.is_active === false) continue;
 
-      const genAI = new GoogleGenerativeAI(keys[i] as string);
-
+      const genAI = new GoogleGenerativeAI(keys[i]);
       for (const modelName of modelPool) {
         try {
           const model = genAI.getGenerativeModel({
             model: modelName,
-            systemInstruction: `${executorDNA}\nיועץ: ${advisorData?.reply || ""}\nמלאי: ${stockAlert}\nחתימה: H.SABAN 1994`
+            systemInstruction: `${executorDNA}\nיועץ: ${advisorData?.reply || ""}${googleContext}\nמלאי: ${stockAlert}\nחתימה: H.SABAN 1994`
           });
 
           const result = await model.generateContent(lastUserMsg);
           aiResponse = result.response.text();
 
           if (aiResponse) {
-            await updateDashboardQuota(i + 1, modelName, "SUCCESS");
+            await Promise.all([
+              updateDashboardQuota(i + 1, modelName, "SUCCESS"),
+              logToDailyChat(lastUserMsg, user_id)
+            ]);
             break outerLoop; 
           }
         } catch (e: any) {
-          console.warn(`Key ${i+1} Model ${modelName} failed`);
           await updateDashboardQuota(i + 1, modelName, "QUOTA_EXCEEDED");
           continue;
         }
       }
     }
 
-    // 6. הזרקת לינקים ושליחה ל-Pipeline
-    if (foundProduct) {
+    // 6. הזרקת לינקים ומשלוח ל-Pipeline
+    if (foundProduct && aiResponse) {
       const link = foundProduct.product_magic_link || `https://sidor.vercel.app/product-pages/index.html?id=${foundProduct.sku}`;
       aiResponse = aiResponse.replace("MAGIC_URL", link) + (stockAlert ? `\n${stockAlert}` : "");
     }
 
-    if (phone) {
-      const cleanPhone = phone.replace('+', '').trim();
+    if (phone && aiResponse) {
       await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), { text: aiResponse, timestamp: Date.now() });
     }
 
