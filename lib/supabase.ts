@@ -11,19 +11,28 @@ if (!supabaseUrl || !supabaseKey) {
 
 /**
  * יצירת הלקוח - סנכרון DNA ומלשינון מלאי.
- * הגדרת persistSession: false קריטית ליישומי Edge/API כדי למנוע דליפות זיכרון.
+ * משלב הגדרות Edge/API יחד עם יכולות Real-time לקופה המהירה.
  */
 export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
-    persistSession: false,
+    persistSession: false, // מניעת דליפות זיכרון ביישומי Edge/API
     autoRefreshToken: false,
   },
   db: {
     schema: 'public',
   },
+  // --- תוספת עבור הקופה המהירה (Real-time) ---
+  realtime: {
+    params: {
+      eventsPerSecond: 10,
+    },
+  },
 });
 
 // 3. פונקציית עזר לבדיקת מוכנות המערכת בדאשבורד
 export const isSupabaseReady = () => {
-  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY));
+  return !!(
+    process.env.NEXT_PUBLIC_SUPABASE_URL && 
+    (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+  );
 };
