@@ -1,119 +1,138 @@
 "use client";
-
-import React, { useEffect, useState } from "react";
-import { 
-  MessageSquare, Package, AlertTriangle, Activity, 
-  RefreshCw, Sparkles, Database, ExternalLink, Loader2 
-} from "lucide-react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
-// הוספת ה-export default היא קריטית לפתרון שגיאת ה-Build
-export default function SabanAdminDashboard() {
-  const [stats, setStats] = useState({ totalChats: 0, totalProducts: 0, missingMedia: 0, loading: true });
-  const [recentChats, setRecentChats] = useState<any[]>([]);
-  const [isEnriching, setIsEnriching] = useState(false);
+// שימוש ב-export default חובה ב-Next.js App Router
+export default function AdminDashboard() {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const fetchData = async () => {
-    setStats(prev => ({ ...prev, loading: true }));
-    try {
-      const { count: cCount } = await supabase.from('chat_history').select('*', { count: 'exact', head: true });
-      const { count: pCount } = await supabase.from('inventory').select('*', { count: 'exact', head: true });
-      const { count: mCount } = await supabase.from('inventory').select('*', { count: 'exact', head: true }).or('image_url.is.null,image_url.eq.""');
-      const { data: chats } = await supabase.from('chat_history').select('*').order('created_at', { ascending: false }).limit(5);
-
-      setStats({ 
-        totalChats: cCount || 0, 
-        totalProducts: pCount || 0, 
-        missingMedia: mCount || 0, 
-        loading: false 
-      });
-      setRecentChats(chats || []);
-    } catch (error) {
-      console.error("Error fetching admin stats:", error);
-      setStats(prev => ({ ...prev, loading: false }));
-    }
+  const fetchOrders = async () => {
+    const { data, error } = await supabase
+      .from('fast_checkout_orders')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (!error) setOrders(data || []);
+    setLoading(false);
   };
 
-  const handleEnrich = async () => {
-    setIsEnriching(true);
-    try {
-      const res = await fetch('/api/enrich-all', { method: 'POST' });
-      const data = await res.json();
-      if (data.success) {
-        alert(`עודכנו ${data.updated?.length || 0} מוצרים בהצלחה!`);
-        fetchData();
-      } else {
-        alert("שגיאת סוכן: " + data.error);
-      }
-    } catch (e) {
-      alert("תקשורת נכשלה");
-    } finally {
-      setIsEnriching(false);
-    }
-  };
+  useEffect(() => {
+    fetchOrders();
 
-  useEffect(() => { 
-    fetchData(); 
+    // האזנה לשינויים בזמן אמת
+    const sub = supabase
+      .channel('admin-orders-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'fast_checkout_orders' }, fetchOrders)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(sub);
+    };
   }, []);
 
+  const updatePriceAndNotify = async (id: string) => {
+    const price = prompt("הכנס מחיר סופי כולל גיוון (₪):");
+    if (!price) return;
+
+    await supabase.from('fast_checkout_orders').update({ 
+      final_price: parseFloat(price), 
+      status: 'PRICE_UPDATED' 
+    }).eq('id', id);
+    
+    fetchOrders();
+  };
+
+  const approveOrder = async (id: string) => {
+    const confirmed = confirm("האם החיוב בוצע בהצלחה בקומקס?");
+    if (!confirmed) return;
+
+    await supabase.from('fast_checkout_orders').update({ 
+      status: 'READY',
+      card_cvv: null // מחיקת CVV מטעמי אבטחה בסיום
+    }).eq('id', id);
+
+    fetchOrders();
+  };
+
+  if (loading) return <div className="p-10 text-center">טוען הזמנות...</div>;
+
   return (
-    <div className="min-h-screen bg-[#020617] text-white p-8 space-y-10 text-right" dir="rtl">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-black tracking-tighter uppercase italic text-blue-500">Saban Admin</h1>
-        <button onClick={fetchData} className="bg-white/10 p-3 rounded-xl hover:bg-white/20 transition-all">
-          <RefreshCw size={20} className={stats.loading ? "animate-spin" : ""} />
-        </button>
-      </div>
+    <div className="p-6 bg-slate-100 min-h-screen" dir="rtl">
+      <div className="max-w-5xl mx-auto">
+        <header className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-black text-slate-800">ניהול קופה מהירה - ח. סבן</h1>
+          <Badge variant="outline" className="bg-white">{orders.length} הזמנות במערכת</Badge>
+        </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <StatCard title="שיחות AI" value={stats.totalChats} color="text-blue-400" />
-        <StatCard title="מוצרים במלאי" value={stats.totalProducts} color="text-emerald-400" />
-        <StatCard title="מדיה חסרה" value={stats.missingMedia} color="text-amber-400" highlight={stats.missingMedia > 0} />
-      </div>
+        <div className="grid gap-6">
+          {orders.map((order) => (
+            <Card key={order.id} className={`border-r-8 ${order.status === 'READY' ? 'border-r-green-500' : 'border-r-blue-500'}`}>
+              <CardHeader className="pb-2">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle className="text-xl">{order.customer_name}</CardTitle>
+                    <p className="text-sm text-slate-500 font-mono">ID: {order.customer_id} | טל: {order.phone}</p>
+                  </div>
+                  <Badge className={order.status === 'READY' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}>
+                    {order.status}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="bg-slate-50 p-3 rounded-md mb-4 border">
+                  <h4 className="font-bold text-sm mb-2 border-b pb-1">רשימת מוצרים להכנה:</h4>
+                  {order.items && Array.isArray(order.items) ? (
+                    order.items.map((item: any, i: number) => (
+                      <p key={i} className="text-sm text-slate-700">
+                        • <span className="font-semibold">{item.sku}</span> | {item.name} | 
+                        <span className="bg-yellow-100 px-1 rounded mx-1">כמות: {item.qty}</span>
+                        {item.tint_code && <span className="text-red-600 font-bold"> [גוון: {item.tint_code}]</span>}
+                      </p>
+                    ))
+                  ) : <p className="text-sm italic">אין מוצרים ברשימה</p>}
+                </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <Card className="lg:col-span-2 bg-slate-900/50 border-white/5 rounded-[30px]">
-          <CardHeader className="border-b border-white/5 text-white">
-            <CardTitle className="text-lg font-black flex items-center gap-2 justify-end">
-               ניטור פעילות <Activity className="text-blue-500" />
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-6 space-y-4">
-            {recentChats.map(chat => (
-              <div key={chat.id} className="p-4 bg-white/5 rounded-2xl border border-white/5 flex justify-between items-center">
-                <span className="text-[10px] text-slate-500">{new Date(chat.created_at).toLocaleDateString()}</span>
-                <p className="text-sm font-bold truncate ml-4">{chat.query}</p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+                <div className="flex flex-wrap gap-4 items-center justify-between">
+                  <div className="bg-red-50 p-3 rounded border border-red-100">
+                    <p className="text-xs text-red-400 font-bold mb-1">פרטי אשראי לחיוב בקומקס:</p>
+                    <p className="font-mono text-lg font-bold text-red-700">
+                      {order.card_number} <span className="mx-2 text-slate-300">|</span> 
+                      CVV: <span className="underline">{order.card_cvv || 'נמחק'}</span>
+                    </p>
+                  </div>
 
-        <div className="bg-gradient-to-br from-blue-600 to-indigo-800 p-8 rounded-[40px] shadow-2xl flex flex-col justify-between">
-          <div>
-            <Sparkles className="mb-4" />
-            <h3 className="text-xl font-black mb-2">סוכן העשרה פעיל</h3>
-            <p className="text-sm text-blue-100">נמצאו {stats.missingMedia} פריטים ללא תמונה. Gemini מוכן לסריקה.</p>
-          </div>
-          <button 
-            onClick={handleEnrich} 
-            disabled={isEnriching}
-            className="w-full bg-white text-blue-900 py-4 rounded-2xl font-black text-sm mt-8 transition-all active:scale-95 disabled:opacity-50"
-          >
-            {isEnriching ? <Loader2 className="animate-spin mx-auto" size={20} /> : "הפעל סוכן העשרה"}
-          </button>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => updatePriceAndNotify(order.id)}
+                      className="border-blue-600 text-blue-600 hover:bg-blue-50"
+                    >
+                      עדכן מחיר גיוון
+                    </Button>
+                    <Button 
+                      onClick={() => approveOrder(order.id)}
+                      className="bg-green-600 hover:bg-green-700 text-white font-bold"
+                      disabled={order.status === 'READY'}
+                    >
+                      {order.status === 'READY' ? 'הזמנה הושלמה' : 'חייבתי - אשר איסוף'}
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+
+          {orders.length === 0 && (
+            <div className="text-center py-20 bg-white rounded-lg border-2 border-dashed">
+              <p className="text-slate-400 font-medium">אין הזמנות חדשות כרגע</p>
+            </div>
+          )}
         </div>
       </div>
-    </div>
-  );
-}
-
-function StatCard({ title, value, color, highlight }: any) {
-  return (
-    <div className={`p-8 rounded-[35px] border ${highlight ? 'bg-amber-500/10 border-amber-500/20' : 'bg-slate-900/50 border-white/5'}`}>
-      <p className="text-xs font-bold text-slate-500 mb-1">{title}</p>
-      <p className={`text-4xl font-black ${color}`}>{value}</p>
     </div>
   );
 }
