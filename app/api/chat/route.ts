@@ -46,17 +46,14 @@ export async function POST(req: Request) {
     const executorDNA = config?.filter(r => r.agent_type === 'executor' && r.is_active).map(r => r.instruction).join("\n") || "";
     const activeKeysConfig = config?.filter(r => r.agent_type === 'api_key_status');
 
-// 3. חיפוש גמיש רב-עמודתי (שם, מק"ט ומילות מפתח)
-    const noiseWords = ['אני', 'רוצה', 'לגבי', 'בנושא', 'מחפש', 'צריך', 'מעוניין', 'האם', 'שלום', 'הזמנת'];
-    const searchTerms = lastUserMsg
-      .replace(/[^\u0590-\u05FF0-9\s]/g, ' ') // משאיר רק עברית ומספרים
+// 3. חיפוש גמיש רב-עמודתי
+    const rawWords = lastUserMsg
+      .replace(/[^\u0590-\u05FF0-9\s]/g, ' ')
       .split(/\s+/)
-      .filter(word => word.length >= 2 && !noiseWords.includes(word));
+      .filter(word => word.length >= 2 && !['אני', 'רוצה', 'לגבי', 'בנושא', 'מחפש'].includes(word));
 
-    console.log("🔍 מילות מפתח לחיפוש:", searchTerms);
-
-    // בניית תנאי חיפוש דינמי: כל מילה נבדקת ב-3 עמודות שונות
-    const conditions = searchTerms.map(word => 
+    // בונה שאילתה שמחפשת כל מילה ב-3 עמודות שונות
+    const conditions = rawWords.map(word => 
       `product_name.ilike.%${word}%,sku.ilike.%${word}%,keywords.ilike.%${word}%`
     ).join(',');
 
@@ -65,21 +62,9 @@ export async function POST(req: Request) {
       supabase.from('inventory')
         .select('*, stock_quantity, product_magic_link, sku')
         .or(conditions || `product_name.ilike.%${lastUserMsg}%`)
-        .order('stock_quantity', { ascending: false }) // מוצרים עם מלאי קופצים להתחלה
+        .order('stock_quantity', { ascending: false }) // מוצר עם מלאי יקפוץ ראשון
         .limit(1)
     ]);
-
-    console.log("📦 תוצאה שנמצאה במלאי:", products?.[0]?.product_name || "לא נמצא כלום");
-
-    const foundProduct = products?.[0] || null;
-    let stockAlert = "";
-    let productContext = "לא נמצא מוצר תואם מדויק במלאי.";
-
-    if (foundProduct) {
-      const stock = foundProduct.stock_quantity || 0;
-      stockAlert = stock <= 0 ? `⚠️ חסר במלאי כרגע` : stock < 10 ? `⚠️ מלאי מוגבל: רק ${stock} יחידות!` : "זמין במלאי";
-      productContext = `נמצא מוצר: ${foundProduct.product_name} | מק"ט: ${foundProduct.sku} | מלאי: ${stock}`;
-    }
 
     const foundProduct = products?.[0] || null;
     let stockAlert = "";
@@ -111,24 +96,14 @@ export async function POST(req: Request) {
         try {
           const model = genAI.getGenerativeModel({
             model: modelName,
-const model = genAI.getGenerativeModel({
-            model: modelName,
             systemInstruction: `
               ${executorDNA}
+              יועץ: ${advisorData?.reply || ""}
+              נתוני מוצר: ${foundProduct ? foundProduct.product_name : "לא נמצא"}
+              מק"ט: ${foundProduct ? foundProduct.sku : ""}
+              מלאי: ${stockAlert}
               
-              Context טכני: ${advisorData?.reply || "אין"}
-              
-              נתוני מוצר מהמלאי:
-              - שם: ${foundProduct ? foundProduct.product_name : "לא נמצא"}
-              - SKU: ${foundProduct ? foundProduct.sku : "אין"}
-              - מלאי: ${stockAlert}
-
-              הנחיות לביצוע:
-              1. אם נמצא מוצר: הראה שמצאת בדיוק מה שחיפשו. אם המלאי 0, ציין שזה חסר כרגע אך ניתן להזמנה מיוחדת.
-              2. אם נמצא גבס: הצע מוצרים משלימים (ברגים, ניצבים, מסלולים, שפכטל).
-              3. סגנון: מקצועי, תמציתי, נקי וישיר.
-              4. סיום: חובה לסיים במילה MAGIC_URL אם יש מוצר.
-              
+              חוק חשוב: אם מצאת מוצר מתאים בנתונים למעלה, סיים את התשובה תמיד במילה: MAGIC_URL
               חתימה: H.SABAN 1994
             `
           });
@@ -168,10 +143,7 @@ const model = genAI.getGenerativeModel({
     // 7. משלוח ל-Pipeline
     if (phone && aiResponse) {
       const cleanPhone = phone.replace('+', '').trim();
-      await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), { 
-        text: aiResponse, 
-        timestamp: Date.now() 
-      });
+      await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), { text: aiResponse, timestamp: Date.now() });
     }
 
     return NextResponse.json({ text: aiResponse });
