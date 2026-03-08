@@ -46,12 +46,19 @@ export async function POST(req: Request) {
 const executorDNA = config?.filter(r => r.agent_type === 'executor' && r.is_active).map(r => r.instruction).join("\n") || "";
     const activeKeysConfig = config?.filter(r => r.agent_type === 'api_key_status');
 
-    // 3. חיפוש מלאי חכם (החלפת textSearch ב-ilike לזיהוי גבס ומידות)
+// 3. חיפוש מלאי חכם - פירוק למילות מפתח
+    const cleanSearch = lastUserMsg
+      .replace(/[^\u0590-\u05FF0-9\s]/g, ' ') // משאיר רק עברית ומספרים
+      .split(/\s+/)
+      .filter(word => word.length > 2 && !['רוצה', 'לגבי', 'בנושא'].includes(word));
+
+    const searchFilter = cleanSearch.map(word => `product_name.ilike.%${word}%`).join(',');
+
     const [advisorData, { data: products }] = await Promise.all([
       callSidorConsultant(lastUserMsg),
       supabase.from('inventory')
         .select('*, stock_quantity, product_magic_link, sku')
-        .or(`product_name.ilike.%${lastUserMsg}%,sku.eq.${lastUserMsg}`) 
+        .or(searchFilter || `product_name.ilike.%${lastUserMsg}%`) // אם הניקוי ריק, מחפש כרגיל
         .limit(1)
     ]);
 
