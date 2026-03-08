@@ -46,14 +46,17 @@ export async function POST(req: Request) {
     const executorDNA = config?.filter(r => r.agent_type === 'executor' && r.is_active).map(r => r.instruction).join("\n") || "";
     const activeKeysConfig = config?.filter(r => r.agent_type === 'api_key_status');
 
-// 3. חיפוש גמיש רב-עמודתי
-    const rawWords = lastUserMsg
-      .replace(/[^\u0590-\u05FF0-9\s]/g, ' ')
+// 3. חיפוש גמיש רב-עמודתי (שם, מק"ט ומילות מפתח)
+    const noiseWords = ['אני', 'רוצה', 'לגבי', 'בנושא', 'מחפש', 'צריך', 'מעוניין', 'האם', 'שלום', 'הזמנת'];
+    const searchTerms = lastUserMsg
+      .replace(/[^\u0590-\u05FF0-9\s]/g, ' ') // משאיר רק עברית ומספרים
       .split(/\s+/)
-      .filter(word => word.length >= 2 && !['אני', 'רוצה', 'לגבי', 'בנושא', 'מחפש'].includes(word));
+      .filter(word => word.length >= 2 && !noiseWords.includes(word));
 
-    // בונה שאילתה שמחפשת כל מילה ב-3 עמודות שונות
-    const conditions = rawWords.map(word => 
+    console.log("🔍 מילות מפתח לחיפוש:", searchTerms);
+
+    // בניית תנאי חיפוש דינמי: כל מילה נבדקת ב-3 עמודות שונות
+    const conditions = searchTerms.map(word => 
       `product_name.ilike.%${word}%,sku.ilike.%${word}%,keywords.ilike.%${word}%`
     ).join(',');
 
@@ -62,9 +65,21 @@ export async function POST(req: Request) {
       supabase.from('inventory')
         .select('*, stock_quantity, product_magic_link, sku')
         .or(conditions || `product_name.ilike.%${lastUserMsg}%`)
-        .order('stock_quantity', { ascending: false }) // מוצר עם מלאי יקפוץ ראשון
+        .order('stock_quantity', { ascending: false }) // מוצרים עם מלאי קופצים להתחלה
         .limit(1)
     ]);
+
+    console.log("📦 תוצאה שנמצאה במלאי:", products?.[0]?.product_name || "לא נמצא כלום");
+
+    const foundProduct = products?.[0] || null;
+    let stockAlert = "";
+    let productContext = "לא נמצא מוצר תואם מדויק במלאי.";
+
+    if (foundProduct) {
+      const stock = foundProduct.stock_quantity || 0;
+      stockAlert = stock <= 0 ? `⚠️ חסר במלאי כרגע` : stock < 10 ? `⚠️ מלאי מוגבל: רק ${stock} יחידות!` : "זמין במלאי";
+      productContext = `נמצא מוצר: ${foundProduct.product_name} | מק"ט: ${foundProduct.sku} | מלאי: ${stock}`;
+    }
 
     const foundProduct = products?.[0] || null;
     let stockAlert = "";
