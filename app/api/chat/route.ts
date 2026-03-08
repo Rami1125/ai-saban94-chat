@@ -68,17 +68,7 @@ export async function POST(req: Request) {
         .limit(1)
     ]);
 
-    const foundProduct = products?.[0] || null;
-    let stockAlert = "";
-    let productContext = "לא נמצא מוצר תואם במלאי.";
-
-    if (foundProduct) {
-      const stock = foundProduct.stock_quantity || 0;
-      stockAlert = stock <= 0 ? `⚠️ חסר במלאי!` : stock < 10 ? `⚠️ רק ${stock} יחידות נותרו!` : "זמין במלאי";
-      // כאן אנחנו מכינים ל-AI את המידע על המק"ט המדויק שנמצא
-      productContext = `מוצר שנמצא: ${foundProduct.product_name} | מק"ט (SKU): ${foundProduct.sku}`;
-    }
-    // 4. ניהול בריכת מפתחות מהמשתנה ב-Vercel (GOOGLE_AI_KEY_POOL)
+   // 4. ניהול בריכת מפתחות מהמשתנה ב-Vercel (GOOGLE_AI_KEY_POOL)
     const keyPoolString = process.env.GOOGLE_AI_KEY_POOL || "";
     const keys = keyPoolString.split(',').map(k => k.trim()).filter(k => k.length > 10);
     
