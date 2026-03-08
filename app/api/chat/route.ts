@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { supabase } from "@/lib/supabase";
 import { rtdb } from "@/lib/firebase";
-import { ref, push, update, get, set } from "firebase/database";
+import { ref, push, update } from "firebase/database";
 import { NextResponse } from "next/server";
 
 // 1. פונקציות עזר לניהול ה-Dashboard והדיווח
@@ -39,114 +39,104 @@ export async function POST(req: Request) {
     const { messages, phone, user_id } = await req.json();
     const lastUserMsg = messages[messages.length - 1].content;
 
-    // --- מנגנון מניעת כפילויות (Deduplication) ---
-    const cleanPhone = phone ? phone.replace('+', '').trim() : "anonymous";
-    const msgHash = Buffer.from(`${cleanPhone}_${lastUserMsg.substring(0, 30)}`).toString('base64');
-    const lockRef = ref(rtdb, `saban94/temp_locks/${msgHash}`);
-    
-    const lockSnap = await get(lockRef);
-    if (lockSnap.exists()) {
-      const lockTime = lockSnap.val();
-      if (Date.now() - lockTime < 5000) {
-        return NextResponse.json({ text: "", status: "duplicate_ignored" });
-      }
-    }
-    await set(lockRef, Date.now());
-
-    // --- 2. שליפת DNA, כרטיס לקוח ומלאי במקביל ---
-    const [
-      { data: config },
-      { data: customerCard }, // שליפת כרטיס הלקוח לפי טלפון
-      advisorData,
-      { data: products }
-    ] = await Promise.all([
-      supabase.from('system_rules').select('instruction, agent_type, is_active'),
-      supabase.from('customers').select('*').eq('phone', cleanPhone).single(), // משיכת כרטיס לקוח
-      callSidorConsultant(lastUserMsg),
-      supabase.from('inventory').select('*, stock_quantity, product_magic_link, sku').textSearch('product_name', lastUserMsg, { config: 'hebrew' }).limit(1)
-    ]);
-
+    // 2. שליפת DNA ובדיקת מפתחות
+    const { data: config } = await supabase.from('system_rules').select('instruction, agent_type, is_active');
     const executorDNA = config?.filter(r => r.agent_type === 'executor' && r.is_active).map(r => r.instruction).join("\n") || "";
     const activeKeysConfig = config?.filter(r => r.agent_type === 'api_key_status');
 
-    // עיבוד נתוני לקוח עבור המוח
-    const customerInfo = customerCard 
-      ? `לקוח: ${customerCard.full_name}, סיווג: ${customerCard.customer_type}, יתרה: ₪${customerCard.balance || 0}`
-      : "לקוח חדש/לא מזוהה";
+    // 3. חיפוש מלאי משופר + התייעצות טכנית במקביל
+    const [advisorData, { data: products }] = await Promise.all([
+      callSidorConsultant(lastUserMsg),
+      supabase.from('inventory')
+        .select('*, stock_quantity, product_magic_link, sku')
+        .or(`product_name.ilike.%${lastUserMsg}%,sku.eq.${lastUserMsg}`)
+        .limit(1)
+    ]);
 
     const foundProduct = products?.[0] || null;
+    
+    // 4. בניית קונטקסט המוצר והתראות מלאי
     let stockAlert = "";
+    let productContext = "לא נמצא מוצר תואם במלאי.";
+
     if (foundProduct) {
       const stock = foundProduct.stock_quantity || 0;
-      stockAlert = stock <= 0 ? `⚠️ חסר במלאי!` : stock < 10 ? `⚠️ רק ${stock} יחידות נותרו!` : "";
+      stockAlert = stock <= 0 ? `⚠️ חסר במלאי!` : stock < 10 ? `⚠️ רק ${stock} יחידות נותרו!` : "זמין במלאי";
+      productContext = `מוצר שנמצא: ${foundProduct.product_name} | מק"ט (SKU): ${foundProduct.sku}`;
     }
 
-    // 4. ניהול בריכת מפתחות
+    // ניהול בריכת מפתחות ומודלים
     const keyPoolString = process.env.GOOGLE_AI_KEY_POOL || "";
     const keys = keyPoolString.split(',').map(k => k.trim()).filter(k => k.length > 10);
-    const modelPool = ["gemini-1.5-flash", "gemini-1.5-pro"]; // מודלים יציבים יותר לייצור
+    const modelPool = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
+    // 5. לוגיקת רוטציה חסינה ל-Build
     let aiResponse = "";
+    let success = false;
 
-    // 5. לוגיקת רוטציה (מפתח -> מודל)
-    outerLoop: for (let i = 0; i < keys.length; i++) {
+    for (let i = 0; i < keys.length; i++) {
+      if (success) break;
+
       const isKeyDisabled = activeKeysConfig?.find(k => k.instruction === `KEY_${i+1}`)?.is_active === false;
       if (isKeyDisabled) continue;
 
-      const genAI = new GoogleGenerativeAI(keys[i]);
-
       for (const modelName of modelPool) {
+        if (success) break;
+
         try {
+          const genAI = new GoogleGenerativeAI(keys[i]);
           const model = genAI.getGenerativeModel({
             model: modelName,
             systemInstruction: `
               ${executorDNA}
-              --- נתוני הקשר (Context) ---
-              כרטיס לקוח: ${customerInfo}
-              יועץ טכני: ${advisorData?.reply || "אין מידע נוסף"}
-              מידע מלאי: ${foundProduct ? foundProduct.description : "לא נמצא מוצר"}
+              יועץ טכני: ${advisorData?.reply || ""}
+              נתוני מלאי בזמן אמת: ${productContext}
               סטטוס מלאי: ${stockAlert}
-              --- הנחיות ---
-              פנה ללקוח בשמו אם הוא מזוהה. השתמש במידע הטכני מהמלאי כדי לתת תשובה מדויקת.
-              חתימה: H.SABAN 1994`
+              
+              חוקים:
+              - ענה בקיצור נמרץ, ישיר ומקצועי.
+              - אם נמצא מוצר, סיים חובה במחרוזת: MAGIC_URL
+              - חתימה: H.SABAN 1994
+            `
           });
 
           const result = await model.generateContent(lastUserMsg);
-          aiResponse = result.response.text();
+          const text = result.response.text();
 
-          if (aiResponse) {
+          if (text) {
+            aiResponse = text;
             await Promise.all([
               updateDashboardQuota(i + 1, modelName, "SUCCESS"),
               logToDailyChat(lastUserMsg, user_id)
             ]);
-            break outerLoop; 
+            success = true;
           }
         } catch (e: any) {
+          console.warn(`Key ${i+1} Model ${modelName} Failure`);
           await updateDashboardQuota(i + 1, modelName, "QUOTA_EXCEEDED");
-          continue;
         }
       }
     }
 
-    // 6. הזרקת לינקים והחזרת תוצאה
-    if (foundProduct && aiResponse) {
+    // 6. הזרקת לינקים ומשלוח ל-Pipeline
+    if (foundProduct && aiResponse.includes("MAGIC_URL")) {
       const link = foundProduct.product_magic_link || `https://sidor.vercel.app/product-pages/index.html?id=${foundProduct.sku}`;
       aiResponse = aiResponse.replace("MAGIC_URL", link);
+      
+      // הוספת התראת מלאי בסוף רק אם יש חוסר
+      if (stockAlert.includes("⚠️")) {
+        aiResponse += `\n${stockAlert}`;
+      }
     }
 
     if (phone && aiResponse) {
+      const cleanPhone = phone.replace('+', '').trim();
       await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), { 
         text: aiResponse, 
-        timestamp: Date.now(),
-        customer_name: customerCard?.full_name || "אורח"
+        timestamp: Date.now() 
       });
     }
 
-    // החזרת אובייקט עשיר ל-Frontend
-    return NextResponse.json({ 
-      text: aiResponse,
-      product: foundProduct, // מחזיר את המוצר כדי שדף הצאט יציג ProductCard
-      customer: customerCard
-    });
+    return NextResponse.json({ text: aiResponse });
 
   } catch (error: any) {
     console.error("Critical Error:", error.message);
