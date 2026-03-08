@@ -1,168 +1,209 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { supabase } from "@/lib/supabase"; // שימוש באותו לקוח מהקובץ שלך
+import { supabase } from "@/lib/supabase";
+import { motion, AnimatePresence } from "framer-motion";
 import { 
-  Send, Package, ShoppingCart, Info, 
-  Video, Image as ImageIcon, CheckCircle2,
-  ChevronRight, ArrowRight, Loader2
+  ShoppingCart, Search, Package, MessageSquare, 
+  ChevronRight, Calculator, Plus, Minus, Send,
+  Info, CheckCircle2, X, Play, Loader2
 } from "lucide-react";
+import { ProductCard } from "@/components/chat/ProductCard"; // שימוש בקומפוננטה שלך
+import { ActionOverlays } from "@/components/chat/ActionOverlays"; // שימוש במחשבון שלך
 import { toast } from "sonner";
 
-export default function SabanChatOrder() {
+export default function SabanOnlineStore() {
+  const [products, setProducts] = useState<any[]>([]);
+  const [cart, setCart] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
   const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState("");
-  const [cart, setCart] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // 1. פונקציית ייעוץ - מחפשת בטבלה שאתה מנהל
-  const consultInventory = async (query: string) => {
-    setLoading(true);
-    try {
-      // חיפוש בטבלת ה-inventory בדיוק כמו ב-Editor
-      const { data, error } = await supabase
+  // 1. שליפת מוצרים מהמלאי (Supabase)
+  useEffect(() => {
+    async function getStoreData() {
+      const { data } = await supabase
         .from("inventory")
         .select("*")
-        .or(`product_name.ilike.%${query}%,sku.ilike.%${query}%`)
-        .limit(2);
-
-      if (error) throw error;
-      return data;
-    } catch (e) {
-      console.error("Search error", e);
-      return [];
-    } finally {
+        .order("product_name");
+      setProducts(data || []);
       setLoading(false);
+    }
+    getStoreData();
+  }, []);
+
+  // 2. פונקציית ייעוץ מול ה-API של Gemini
+  const askGemini = async (text: string) => {
+    const userMsg = { role: "user", content: text };
+    setMessages(prev => [...prev, userMsg]);
+    setInput("");
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        body: JSON.stringify({
+          messages: [...messages, userMsg],
+          phone: "store_web_user",
+          userId: "web_customer"
+        }),
+      });
+      const data = await res.json();
+      
+      setMessages(prev => [...prev, { 
+        role: "assistant", 
+        content: data.text,
+        product: data.product // אם Gemini זיהה מוצר ב-DB, הוא יחזור כאן
+      }]);
+    } catch (e) {
+      toast.error("שגיאה בחיבור ליועץ ה-AI");
     }
   };
 
-  const handleSend = async () => {
-    if (!input.trim()) return;
-
-    const userMsg = { role: "user", content: input, timestamp: Date.now() };
-    setMessages(prev => [...prev, userMsg]);
-    const currentInput = input;
-    setInput("");
-
-    // שליפת נתונים מהטבלה בזמן אמת
-    const foundProducts = await consultInventory(currentInput);
-
-    // יצירת תשובה מהירה (בשלב הבא תוכל לחבר כאן את Gemini לניתוח עמוק יותר)
-    const assistantMsg = {
-      role: "assistant",
-      content: foundProducts.length > 0 
-        ? `מצאתי עבורך את המוצרים הבאים מהמלאי שלנו:` 
-        : "מצטער, לא מצאתי מוצר תואם במלאי. נסה לתאר את החומר שאתה מחפש.",
-      products: foundProducts,
-      timestamp: Date.now()
-    };
-
-    setTimeout(() => {
-      setMessages(prev => [...prev, assistantMsg]);
-    }, 600);
+  const addToCart = (product: any, qty: number) => {
+    setCart(prev => {
+      const existing = prev.find(item => item.sku === product.sku);
+      if (existing) {
+        return prev.map(item => item.sku === product.sku ? { ...item, qty: item.qty + qty } : item);
+      }
+      return [...prev, { ...product, qty }];
+    });
+    toast.success(`נוסף לסל: ${product.product_name}`);
   };
 
   return (
-    <div className="flex h-screen bg-[#020617] text-slate-100 font-sans" dir="rtl">
-      {/* אזור הצ'אט */}
-      <main className="flex-1 flex flex-col max-w-4xl mx-auto border-x border-white/5 bg-slate-900/20 backdrop-blur-xl">
-        <header className="p-6 border-b border-white/5 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-600 rounded-lg shadow-lg">
-              <Package size={20} className="text-white" />
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-100" dir="rtl">
+      
+      {/* Header מקצועי */}
+      <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 p-4">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <div className="bg-blue-600 p-2 rounded-xl shadow-lg shadow-blue-200">
+              <Package className="text-white" size={24} />
             </div>
             <div>
-              <h1 className="font-black italic uppercase text-lg leading-none">Saban AI Chat</h1>
-              <span className="text-[10px] text-blue-400 font-bold tracking-widest">LIVE INVENTORY CONNECTION</span>
+              <h1 className="text-xl font-black tracking-tight text-slate-800">ח. סבן 1994</h1>
+              <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">חומרי בניין ופתרונות לוגיסטיים</p>
             </div>
+          </div>
+
+          <div className="flex items-center gap-6">
+            <div className="relative hidden md:block">
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <input 
+                placeholder="חפש מוצר טכני..." 
+                className="bg-slate-100 border-none rounded-2xl py-2.5 pr-10 pl-4 w-64 text-sm focus:ring-2 focus:ring-blue-500 transition-all"
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <button className="relative p-2 text-slate-600 hover:text-blue-600 transition-colors">
+              <ShoppingCart size={24} />
+              {cart.length > 0 && (
+                <span className="absolute -top-1 -left-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-white">
+                  {cart.length}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      <main className="max-w-7xl mx-auto p-6 lg:p-12">
+        <header className="mb-12">
+          <h2 className="text-4xl font-black text-slate-800 mb-2">קטלוג מוצרים</h2>
+          <div className="flex gap-4">
+            <button 
+              onClick={() => window.dispatchEvent(new CustomEvent('open-action-overlay', { detail: { type: 'calculator' } }))}
+              className="flex items-center gap-2 text-xs font-bold text-blue-600 bg-blue-50 px-4 py-2 rounded-full hover:bg-blue-100 transition-all"
+            >
+              <Calculator size={14} /> מחשבון כמויות גבס
+            </button>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide" ref={scrollRef}>
-          {messages.map((m, i) => (
-            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
-              <div className={`max-w-[85%] ${m.role === 'user' ? 'bg-blue-600 p-4 rounded-3xl rounded-tr-none' : ''}`}>
-                <p className="text-sm font-medium leading-relaxed">{m.content}</p>
-                
-                {/* הצגת כרטיסי מוצר מהטבלה שלך */}
-                {m.products?.map((p: any) => (
-                  <div key={p.sku} className="mt-4 bg-slate-800/50 border border-white/10 rounded-[24px] overflow-hidden backdrop-blur-md">
-                    <div className="flex flex-col sm:flex-row">
-                      {p.image_url && (
-                        <img src={p.image_url} className="w-full sm:w-32 h-32 object-cover" alt={p.product_name} />
-                      )}
-                      <div className="p-4 flex-1">
-                        <div className="flex justify-between items-start mb-2">
-                          <h4 className="font-black text-white">{p.product_name}</h4>
-                          <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded-full font-bold">₪{p.price}</span>
-                        </div>
-                        <p className="text-xs text-slate-400 line-clamp-2 mb-3">{p.description}</p>
-                        <div className="flex gap-2">
-                          <button 
-                            onClick={() => {
-                              setCart([...cart, p]);
-                              toast.success(`${p.product_name} נוסף לסל`);
-                            }}
-                            className="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-black py-2 rounded-xl transition-all flex items-center justify-center gap-2"
-                          >
-                            <ShoppingCart size={14} /> הוסף להזמנה
-                          </button>
-                          {p.youtube_url && (
-                            <button className="p-2 bg-red-600/20 text-red-500 rounded-xl hover:bg-red-600 hover:text-white transition-all">
-                              <Video size={14} />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-          {loading && <Loader2 className="animate-spin text-blue-500 mx-auto" />}
-        </div>
-
-        <footer className="p-6 bg-white/5 border-t border-white/5">
-          <div className="relative flex items-center gap-3">
-            <input 
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              placeholder="איזה חומר אתה מחפש? (למשל: דבק קרמיקה, שליכט...)"
-              className="flex-1 bg-slate-800 border border-white/5 rounded-2xl py-4 pr-6 pl-14 outline-none focus:border-blue-500/50 transition-all text-sm font-bold"
-            />
-            <button 
-              onClick={handleSend}
-              className="absolute left-2 p-3 bg-blue-600 rounded-xl hover:scale-105 active:scale-95 transition-all"
-            >
-              <ArrowRight size={20} />
-            </button>
+        {loading ? (
+          <div className="flex justify-center py-20"><Loader2 className="animate-spin text-blue-600" size={48} /></div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+            {products.filter(p => p.product_name.includes(searchTerm)).map((product) => (
+              <ProductCard key={product.sku} product={product} onAddToCart={(qty) => addToCart(product, qty)} />
+            ))}
           </div>
-        </footer>
+        )}
       </main>
 
-      {/* סל קניות צדדי */}
-      <aside className="w-80 bg-slate-900/40 p-6 hidden lg:flex flex-col border-r border-white/5 backdrop-blur-2xl">
-        <h3 className="font-black italic flex items-center gap-2 mb-8">
-          <ShoppingCart size={20} className="text-blue-500" /> סל הזמנה
-        </h3>
-        <div className="flex-1 space-y-4 overflow-y-auto">
-          {cart.map((item, idx) => (
-            <div key={idx} className="flex gap-3 p-3 bg-white/5 rounded-2xl border border-white/5 items-center">
-              <div className="w-10 h-10 bg-blue-600/20 rounded-lg flex items-center justify-center"><Package size={16} className="text-blue-500"/></div>
-              <div className="flex-1">
-                <div className="text-[11px] font-bold line-clamp-1">{item.product_name}</div>
-                <div className="text-[10px] text-blue-400">₪{item.price}</div>
+      {/* Floating AI Chat Button */}
+      <button 
+        onClick={() => setChatOpen(!chatOpen)}
+        className="fixed bottom-8 left-8 z-[60] bg-blue-600 text-white p-4 rounded-full shadow-2xl shadow-blue-400/40 hover:scale-110 active:scale-95 transition-all"
+      >
+        {chatOpen ? <X size={28} /> : <MessageSquare size={28} />}
+      </button>
+
+      {/* Side Chat Interface */}
+      <AnimatePresence>
+        {chatOpen && (
+          <motion.aside 
+            initial={{ x: "-100%", opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: "-100%", opacity: 0 }}
+            className="fixed inset-y-0 left-0 z-50 w-full max-w-md bg-white shadow-3xl border-r border-slate-200 flex flex-col"
+          >
+            <header className="p-6 border-b bg-slate-50 flex items-center gap-4">
+              <div className="w-10 h-10 bg-blue-600 rounded-2xl flex items-center justify-center text-white font-bold italic">S</div>
+              <div>
+                <h3 className="font-black text-slate-800 italic uppercase">Saban AI Advisor</h3>
+                <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                  <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> Gemini 3.1 Live
+                </span>
               </div>
+            </header>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-6" ref={scrollRef}>
+              {messages.length === 0 && (
+                <div className="text-center py-10">
+                  <div className="bg-blue-50 w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-4">
+                    <Info className="text-blue-500" />
+                  </div>
+                  <p className="text-sm font-bold text-slate-400 leading-relaxed">שאל אותי על חומרים, כמויות<br/>או ייעוץ טכני לביצוע עבודה.</p>
+                </div>
+              )}
+              {messages.map((m, i) => (
+                <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className="max-w-[85%] space-y-3">
+                    <div className={`p-4 rounded-3xl text-sm leading-relaxed shadow-sm ${
+                      m.role === 'user' ? 'bg-blue-600 text-white rounded-tl-none' : 'bg-slate-100 text-slate-700 rounded-tr-none'
+                    }`}>
+                      {m.content}
+                    </div>
+                    {m.product && <ProductCard product={m.product} />}
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        <button className="w-full mt-6 bg-blue-600 py-4 rounded-2xl font-black italic uppercase tracking-widest text-sm shadow-lg shadow-blue-600/20 hover:bg-blue-500 transition-all">
-          שלח הזמנה לבוט
-        </button>
-      </aside>
+
+            <footer className="p-6 border-t bg-slate-50/50">
+              <div className="relative flex items-center gap-2">
+                <input 
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && askGemini(input)}
+                  placeholder="כתוב הודעה ליועץ..."
+                  className="w-full bg-white border border-slate-200 rounded-2xl py-4 pr-6 pl-12 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+                <button onClick={() => askGemini(input)} className="absolute left-2 p-3 bg-blue-600 text-white rounded-xl">
+                  <Send size={18} />
+                </button>
+              </div>
+            </footer>
+          </motion.aside>
+        )}
+      </AnimatePresence>
+
+      <ActionOverlays />
     </div>
   );
 }
