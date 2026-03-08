@@ -34,51 +34,102 @@ async function callSidorConsultant(message: string) {
   } catch (e) { return null; }
 }
 
-export async function POST(req: Request) {
-  try {
-    const { messages, phone, user_id } = await req.json();
-    const lastUserMsg = messages[messages.length - 1].content;
+export default async function handler(req, res) {
+    const { message } = req.body;
+    const apiKeyPool = process.env.GOOGLE_AI_KEY_POOL || "";
+    const keys = apiKeyPool.split(',').map(k => k.trim()).filter(k => k.length > 10);
 
-    // 2. שליפת DNA ובדיקת מפתחות מה-Supabase
-    const { data: config } = await supabase.from('system_rules')
-      .select('instruction, agent_type, is_active');
-    
-    const executorDNA = config?.filter(r => r.agent_type === 'executor' && r.is_active).map(r => r.instruction).join("\n") || "";
-    const activeKeysConfig = config?.filter(r => r.agent_type === 'api_key_status');
+    if (!message) return res.status(400).json({ error: "Missing message" });
+    if (keys.length === 0) return res.status(500).json({ error: "API_KEY_POOL_MISSING" });
 
-    // 3. התייעצות טכנית ובדיקת מלאי במקביל
-    const [advisorData, { data: products }] = await Promise.all([
-      callSidorConsultant(lastUserMsg),
-      supabase.from('inventory').select('*, stock_quantity, product_magic_link, sku').textSearch('product_name', lastUserMsg, { config: 'hebrew' }).limit(1)
-    ]);
+    const modelPool = [
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
+        "gemini-2.0-flash-exp"
+    ];
 
-    const foundProduct = products?.[0] || null;
-    let stockAlert = "";
-    if (foundProduct) {
-      const stock = foundProduct.stock_quantity || 0;
-      stockAlert = stock <= 0 ? `⚠️ חסר במלאי!` : stock < 10 ? `⚠️ רק ${stock} יחידות נותרו!` : "";
+    try {
+        // 1. שליפה מקבילית של DNA ומלאי (שימוש ב-plain search לדיוק במידות)
+        const [{ data: rules }, { data: inv }] = await Promise.all([
+            supabase.from('system_rules')
+                .select('instruction')
+                .eq('agent_type', 'consultant')
+                .eq('is_active', true),
+            supabase.from('inventory')
+                .select('*')
+                .textSearch('product_name', message, { config: 'hebrew', type: 'plain' })
+                .limit(1)
+        ]);
+
+        const foundProduct = inv?.[0] || null;
+        let stockAlert = "";
+        
+        if (foundProduct) {
+            const stock = foundProduct.stock_quantity || 0;
+            stockAlert = stock <= 0 ? `⚠️ חסר במלאי!` : stock < 10 ? `⚠️ רק ${stock} יחידות נותרו!` : "זמין במלאי";
+        }
+
+        // 2. הכנת הקונטקסט עבור ה-AI (הזרקת ה-ID והשם המדויק)
+        const productContext = foundProduct 
+            ? `נתוני מוצר אמת מהמחסן: ${foundProduct.product_name} | מזהה קטלוגי: ${foundProduct.sku || foundProduct.id}`
+            : "לא נמצא מוצר תואם בחיפוש ראשוני במלאי.";
+
+        const consultantDNA = rules?.map(r => r.instruction).join("\n") || "";
+
+        let aiResponse = "";
+
+        // 3. לוגיקת רוטציה בין מפתחות ומודלים
+        outerLoop: for (const key of keys) {
+            const genAI = new GoogleGenerativeAI(key);
+
+            for (const modelName of modelPool) {
+                try {
+                    const model = genAI.getGenerativeModel({
+                        model: modelName,
+                        systemInstruction: `
+                            ${consultantDNA}
+                            
+                            קונטקסט מוצר נוכחי:
+                            ${productContext}
+                            ${stockAlert}
+                            
+                            חוקי פורמט:
+                            - ענה בקיצור נמרץ (מתכנת אומנותי).
+                            - אם נמצא מוצר, חובה לסיים במחרוזת: MAGIC_URL
+                            - חתימה: H.SABAN 1994
+                        `
+                    });
+
+                    const result = await model.generateContent(message);
+                    aiResponse = result.response.text();
+
+                    if (aiResponse) break outerLoop;
+                } catch (e) {
+                    console.error(`Error with model ${modelName}:`, e.message);
+                    continue;
+                }
+            }
+        }
+
+        // 4. הזרקת הלינק הסופי על בסיס ה-ID מה-Inventory
+        if (foundProduct && aiResponse.includes("MAGIC_URL")) {
+            const productId = foundProduct.sku || foundProduct.id;
+            const finalLink = `https://sidor.vercel.app/product-pages/index.html?id=${productId}`;
+            aiResponse = aiResponse.replace("MAGIC_URL", finalLink);
+            
+            // הוספת התראת מלאי בסוף אם קיימת
+            if (stockAlert.includes("⚠️")) {
+                aiResponse += `\n${stockAlert}`;
+            }
+        }
+
+        return res.status(200).json({ reply: aiResponse });
+
+    } catch (error) {
+        console.error("Critical API Error:", error);
+        return res.status(500).json({ error: "Internal Server Error" });
     }
-
-    // 4. ניהול בריכת מפתחות מהמשתנה ב-Vercel (GOOGLE_AI_KEY_POOL)
-    const keyPoolString = process.env.GOOGLE_AI_KEY_POOL || "";
-    const keys = keyPoolString.split(',').map(k => k.trim()).filter(k => k.length > 10);
-    
-    const modelPool = ["gemini-3.1-flash-lite-preview", "gemini-3.1-flash-preview", "gemini-3.1-pro-preview"];
-    let aiResponse = "";
-
-    // 5. לוגיקת רוטציה (מפתח -> מודל)
-    outerLoop: for (let i = 0; i < keys.length; i++) {
-      const isKeyDisabled = activeKeysConfig?.find(k => k.instruction === `KEY_${i+1}`)?.is_active === false;
-      if (isKeyDisabled) continue;
-
-      const genAI = new GoogleGenerativeAI(keys[i]);
-
-      for (const modelName of modelPool) {
-        try {
-          const model = genAI.getGenerativeModel({
-            model: modelName,
-            systemInstruction: `${executorDNA}\nיועץ: ${advisorData?.reply || ""}\nמלאי: ${stockAlert}\nחתימה: H.SABAN 1994`
-          });
+}
 
           const result = await model.generateContent(lastUserMsg);
           aiResponse = result.response.text();
