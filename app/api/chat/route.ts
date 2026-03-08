@@ -139,28 +139,37 @@ export async function POST(req: Request) {
         }
       }
     }
-
-    // 6. הזרקת לינקים ומשלוח ל-Pipeline
+// 6. הזרקת לינקים ונתוני מוצר
     if (foundProduct && aiResponse.includes("MAGIC_URL")) {
-      // שליפת הלינק הישיר (עדיפות ל-magic_link ואז ל-SKU)
       const link = foundProduct.product_magic_link || `https://sidor.vercel.app/product-pages/index.html?id=${foundProduct.sku}`;
       
-      // החלפה נקייה של הלינק
+      // החלפה נקייה של הלינק בטקסט
       aiResponse = aiResponse.replace("MAGIC_URL", link);
       
-      // הוספת התראת מלאי רק אם יש חוסר (⚠️)
+      // הוספת התראת מלאי לטקסט רק אם יש חוסר
       if (stockAlert.includes("⚠️")) {
         aiResponse += `\n${stockAlert}`;
       }
     }
 
-    // 7. משלוח ל-Pipeline
+    // 7. משלוח ל-Pipeline (וואטסאפ)
     if (phone && aiResponse) {
       const cleanPhone = phone.replace('+', '').trim();
-      await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), { text: aiResponse, timestamp: Date.now() });
+      try {
+        await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), { 
+          text: aiResponse, 
+          timestamp: Date.now() 
+        });
+      } catch (rtdbErr) {
+        console.error("RTDB Update Error:", rtdbErr);
+      }
     }
 
-    return NextResponse.json({ text: aiResponse });
+    // החזרת תשובה סופית לממשק הצאט
+    return NextResponse.json({ 
+      text: aiResponse,
+      foundProduct: foundProduct // מעביר את האובייקט ל-UI לצורך הצגת ה-ProductCard
+    });
 
   } catch (error: any) {
     console.error("Critical Error:", error.message);
