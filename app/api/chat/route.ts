@@ -112,16 +112,25 @@ export async function POST(req: Request) {
           const model = genAI.getGenerativeModel({
             model: modelName,
             systemInstruction: `
-              ${executorDNA}
-              יועץ: ${advisorData?.reply || ""}
-              נתוני מוצר: ${foundProduct ? foundProduct.product_name : "לא נמצא"}
-              מק"ט: ${foundProduct ? foundProduct.sku : ""}
-              מלאי: ${stockAlert}
-              
-              חוק חשוב: אם מצאת מוצר מתאים בנתונים למעלה, סיים את התשובה תמיד במילה: MAGIC_URL
-              חתימה: H.SABAN 1994
-            `
-          });
+            ${executorDNA}
+            
+            Context טכני (מיועץ סידור): ${advisorData?.reply || "אין מידע טכני נוסף."}
+            
+            נתוני מוצר מהמלאי:
+            - שם: ${foundProduct ? foundProduct.product_name : "לא נמצא מוצר ספציפי"}
+            - מק"ט: ${foundProduct ? foundProduct.sku : "אין מק"ט"}
+            - מצב מלאי: ${stockAlert}
+
+            הנחיות לביצוע:
+            1. אם נמצא מוצר (${foundProduct ? 'כן' : 'לא'}):
+               - הראה ללקוח שמצאת בדיוק את מה שהוא מחפש.
+               - אם המלאי הוא 0, ציין שהמוצר חסר כרגע במלאי השוטף אך ניתן לבדוק הזמנה מיוחדת.
+               - אם נמצא גבס, הצע בעדינות מוצרים משלימים (ברגים, ניצבים, מסלולים, שפכטל).
+            2. סגנון: מקצועי, תמציתי, "מתכנת אומנותי" - נקי וישיר.
+            3. סיום: אם מצאת מוצר, חובה לסיים במילה המדויקת MAGIC_URL כדי שהלינק יוזרק.
+            
+            חתימה חובה: H.SABAN 1994
+          `
 
           const result = await model.generateContent(lastUserMsg);
           const responseText = result.response.text();
