@@ -68,7 +68,8 @@ export async function POST(req: Request) {
     // ניהול בריכת מפתחות ומודלים
     const keyPoolString = process.env.GOOGLE_AI_KEY_POOL || "";
     const keys = keyPoolString.split(',').map(k => k.trim()).filter(k => k.length > 10);
-    const modelPool = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
+    const modelPool = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"];
+
     // 5. לוגיקת רוטציה חסינה ל-Build
     let aiResponse = "";
     let success = false;
