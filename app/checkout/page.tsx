@@ -1,125 +1,80 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { supabase } from "@/lib/supabase";
+import ColorSelector from "@/components/checkout/ColorSelector";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, CheckCircle2, CreditCard } from "lucide-react";
+import { CreditCard, Loader2, CheckCircle } from "lucide-react";
 
-export default function CheckoutPage({ cartItems = [] }) {
-  const [step, setStep] = useState('form'); // 'form', 'waiting', 'ready'
-  const [orderId, setOrderId] = useState<string | null>(null);
-  const [status, setStatus] = useState('PENDING');
-  const [finalPrice, setFinalPrice] = useState(0);
+export default function CheckoutPage() {
+  const [orderState, setOrderState] = useState({ code: "", size: "5L", hex: "#ffffff" });
+  const [step, setStep] = useState('form'); // 'form', 'waiting', 'done'
+  const [loading, setLoading] = useState(false);
 
-  // האזנה לעדכונים מראמי בזמן אמת
-  useEffect(() => {
-    if (!orderId) return;
-
-    const channel = supabase
-      .channel('schema-db-changes')
-      .on('postgres_changes', 
-        { event: 'UPDATE', schema: 'public', table: 'fast_checkout_orders', filter: `id=eq.${orderId}` },
-        (payload) => {
-          setStatus(payload.new.status);
-          if (payload.new.final_price) setFinalPrice(payload.new.final_price);
-          if (payload.new.status === 'READY') setStep('ready');
-        }
-      ).subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [orderId]);
-
-  const handleSubmitOrder = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    
+    setLoading(true);
+    const fd = new FormData(e.currentTarget);
+
     const { data, error } = await supabase.from('fast_checkout_orders').insert([{
-      customer_name: formData.get('name'),
-      customer_id: formData.get('tz'),
-      phone: formData.get('phone'),
-      branch: "התלמיד",
-      card_number: formData.get('card'),
-      card_cvv: formData.get('cvv'),
-      items: cartItems,
+      customer_name: fd.get('name'),
+      customer_id: fd.get('tz'),
+      phone: fd.get('phone'),
+      card_number: fd.get('card'),
+      card_cvv: fd.get('cvv'),
+      color_code: orderState.code,
+      container_size: orderState.size,
+      hex_preview: orderState.hex,
       status: 'PENDING'
     }]).select().single();
 
-    if (data) {
-      setOrderId(data.id);
-      setStep('waiting');
-    } else if (error) {
-      console.error("Error inserting order:", error.message);
-    }
+    if (!error) setStep('waiting');
+    setLoading(false);
   };
 
-  if (step === 'waiting') {
-    return (
-      <div className="flex flex-col items-center justify-center p-8 text-center space-y-6 min-h-screen">
-        <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
-        <h2 className="text-2xl font-bold">ההזמנה בבדיקת דלפק...</h2>
-        <p className="text-slate-500">ראמי בודק מלאי ופורמולת גיוון. נא לא לסגור את הדף.</p>
-        {status === 'PRICE_UPDATED' && (
-          <Card className="border-green-500 bg-green-50 w-full max-w-sm">
-            <CardContent className="p-4">
-              <p className="font-bold text-green-800">המחיר עודכן ע"י הדלפק: ₪{finalPrice}</p>
-              <p className="text-xs text-green-600">החיוב יבוצע ברגעים אלו.</p>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-    );
-  }
-
-  if (step === 'ready') {
-    return (
-      <div className="flex flex-col items-center justify-center p-8 text-center space-y-4 min-h-screen">
-        <CheckCircle2 className="h-20 w-20 text-green-500" />
-        <h2 className="text-3xl font-black text-green-700">התשלום אושר!</h2>
-        <p className="text-lg">הסחורה מחכה לך בנקודת ההעמסה.</p>
-        <div className="bg-white p-6 border-4 border-black rounded-lg shadow-xl">
-          <p className="text-sm text-slate-400 mb-1">מספר אישור</p>
-          <p className="font-mono font-bold text-2xl tracking-tighter text-blue-600">
-            {orderId?.slice(0,8).toUpperCase()}
-          </p>
-        </div>
-      </div>
-    );
-  }
+  if (step === 'waiting') return (
+    <div className="flex flex-col items-center justify-center min-h-screen p-6 text-center">
+      <Loader2 className="h-16 w-16 animate-spin text-blue-600 mb-4" />
+      <h2 className="text-2xl font-black">ההזמנה בטיפול דלפק</h2>
+      <p className="text-slate-500">ראמי בודק את הגיוון ומכין את החשבונית...</p>
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-slate-50 py-10 px-4">
-      <form onSubmit={handleSubmitOrder} className="max-w-md mx-auto space-y-4">
-        <Card className="shadow-lg">
-          <CardHeader className="bg-blue-600 text-white rounded-t-lg">
-            <CardTitle className="text-center">קופה מהירה - ח. סבן</CardTitle>
+    <div className="max-w-md mx-auto p-4 py-8 dir-rtl">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Card className="shadow-xl border-t-4 border-t-blue-600">
+          <CardHeader>
+            <CardTitle className="text-center text-blue-800">קופה מהירה - ח. סבן</CardTitle>
           </CardHeader>
-          <CardContent className="p-6 space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-semibold">פרטי לקוח</label>
-              <Input name="name" placeholder="שם מלא" required className="bg-white" />
-              <Input name="tz" placeholder="תעודת זהות" required className="bg-white" />
-              <Input name="phone" placeholder="טלפון" required className="bg-white" />
+          <CardContent className="space-y-5">
+            {/* בחירת צבע וגודל */}
+            <ColorSelector onSelect={(data) => setOrderState(data)} />
+
+            {/* פרטי זיהוי */}
+            <div className="space-y-3">
+              <Input name="name" placeholder="שם מלא" required />
+              <Input name="tz" placeholder="תעודת זהות (לחשבונית)" required />
+              <Input name="phone" placeholder="מספר טלפון" required />
             </div>
 
-            <div className="border-t pt-4 space-y-3">
-              <div className="flex items-center gap-2 mb-1">
-                <CreditCard className="text-blue-600 h-5 w-5" />
-                <span className="text-sm font-semibold text-slate-700">פרטי כרטיס אשראי</span>
+            {/* פרטי תשלום */}
+            <div className="bg-slate-50 p-3 rounded-lg border">
+              <div className="flex items-center gap-2 mb-3 text-slate-600">
+                <CreditCard size={18} />
+                <span className="text-sm font-bold">פרטי כרטיס אשראי</span>
               </div>
-              <Input name="card" placeholder="מספר כרטיס" required className="bg-white" />
+              <Input name="card" placeholder="מספר כרטיס" className="mb-2" required />
               <div className="flex gap-2">
-                <Input name="expiry" placeholder="MM/YY" required className="bg-white" />
-                <Input name="cvv" placeholder="CVV" required className="bg-white" />
+                <Input name="expiry" placeholder="MM/YY" required />
+                <Input name="cvv" placeholder="CVV" required />
               </div>
             </div>
 
-            <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 h-12 text-lg font-bold">
-              שלח לאישור וחיוב
+            <Button disabled={loading} className="w-full h-12 text-lg font-bold bg-blue-700 hover:bg-blue-800">
+              {loading ? "שולח..." : "שלח להכנה וחיוב"}
             </Button>
-            <p className="text-[10px] text-center text-slate-400">
-              * החיוב מתבצע ידנית ע"י נציג הדלפק במערכת Comax
-            </p>
           </CardContent>
         </Card>
       </form>
