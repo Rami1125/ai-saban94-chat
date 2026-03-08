@@ -21,7 +21,7 @@ async function logToDailyChat(message: string, userId: string) {
 
 // שחקן חיזוק: מנוע חיפוש גוגל מותאם (CSE)
 async function getGoogleCseInfo(query: string) {
-  const cx = "1340c66f5e73a4076";
+  const cx = "9275b596f6d184447";
   const apiKey = process.env.GOOGLE_SEARCH_API_KEY;
   if (!apiKey) return null;
 
