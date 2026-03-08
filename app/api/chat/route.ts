@@ -19,35 +19,6 @@ async function logToDailyChat(message: string, userId: string) {
   });
 }
 
-// שחקן חיזוק: מנוע חיפוש גוגל מותאם (CSE)
-async function getGoogleCseInfo(query: string) {
-  const cx = "1340c66f5e73a4076";
-  const apiKey = process.env.GOOGLE_SEARCH_API_KEY;
-  
-  if (!apiKey) return null;
-
-  try {
-    const res = await fetch(
-      `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${cx}&q=${encodeURIComponent(query)}&num=1`
-    );
-    const data = await res.json();
-    
-    if (data.items && data.items.length > 0) {
-      const item = data.items[0];
-      // שליפת תמונה בצורה בטוחה מה-Pagemap
-      const image = item.pagemap?.cse_image?.[0]?.src || item.pagemap?.metatags?.[0]?.['og:image'] || null;
-      return {
-        snippet: item.snippet,
-        link: item.link,
-        image: image
-      };
-    }
-    return null;
-  } catch (e) {
-    return null;
-  }
-}
-
 async function callSidorConsultant(message: string) {
   try {
     const controller = new AbortController();
@@ -68,64 +39,60 @@ export async function POST(req: Request) {
     const { messages, phone, user_id } = await req.json();
     const lastUserMsg = messages[messages.length - 1].content;
 
-    // --- מנגנון מניעת כפילויות ---
+    // --- מנגנון מניעת כפילויות (Deduplication) ---
     const cleanPhone = phone ? phone.replace('+', '').trim() : "anonymous";
     const msgHash = Buffer.from(`${cleanPhone}_${lastUserMsg.substring(0, 30)}`).toString('base64');
     const lockRef = ref(rtdb, `saban94/temp_locks/${msgHash}`);
     
     const lockSnap = await get(lockRef);
-    if (lockSnap.exists() && (Date.now() - lockSnap.val() < 5000)) {
-      return NextResponse.json({ text: "", status: "duplicate_ignored" });
+    if (lockSnap.exists()) {
+      const lockTime = lockSnap.val();
+      if (Date.now() - lockTime < 5000) { // נעילה ל-5 שניות
+        return NextResponse.json({ text: "", status: "duplicate_ignored" });
+      }
     }
-    await set(lockRef, Date.now());
+    await set(lockRef, Date.now()); // יצירת הנעילה
+    // -------------------------------------------
 
-    // 2. שליפת DNA ובדיקת מפתחות
-    const { data: config } = await supabase.from('system_rules').select('instruction, agent_type, is_active');
+    // 2. שליפת DNA ובדיקת מפתחות מה-Supabase
+    const { data: config } = await supabase.from('system_rules')
+      .select('instruction, agent_type, is_active');
+    
     const executorDNA = config?.filter(r => r.agent_type === 'executor' && r.is_active).map(r => r.instruction).join("\n") || "";
     const activeKeysConfig = config?.filter(r => r.agent_type === 'api_key_status');
 
-    // 3. חיפושים במקביל
-    let [advisorData, { data: products }] = await Promise.all([
+    // 3. התייעצות טכנית ובדיקת מלאי במקביל
+    const [advisorData, { data: products }] = await Promise.all([
       callSidorConsultant(lastUserMsg),
       supabase.from('inventory').select('*, stock_quantity, product_magic_link, sku').textSearch('product_name', lastUserMsg, { config: 'hebrew' }).limit(1)
     ]);
 
     const foundProduct = products?.[0] || null;
-    let externalInfo = null;
-
-    if (!foundProduct || !foundProduct.description) {
-      externalInfo = await getGoogleCseInfo(lastUserMsg);
-    }
-
     let stockAlert = "";
     if (foundProduct) {
       const stock = foundProduct.stock_quantity || 0;
       stockAlert = stock <= 0 ? `⚠️ חסר במלאי!` : stock < 10 ? `⚠️ רק ${stock} יחידות נותרו!` : "";
     }
 
-    // --- עדכון ה-googleContext להזרקת תמונה אמיתית ---
-    const googleContext = externalInfo 
-      ? `\nמידע טכני משלים מגוגל: ${externalInfo.snippet}
-         חשוב: אם יש לינק לתמונה, הצג אותו בפורמט: "תמונת המוצר: ${externalInfo.image || externalInfo.link}".
-         אל תמציא לינקים, השתמש רק בלינק שסופק.` 
-      : "";
-
-    // 4. ניהול בריכת מפתחות
+    // 4. ניהול בריכת מפתחות מהמשתנה ב-Vercel (GOOGLE_AI_KEY_POOL)
     const keyPoolString = process.env.GOOGLE_AI_KEY_POOL || "";
     const keys = keyPoolString.split(',').map(k => k.trim()).filter(k => k.length > 10);
+    
     const modelPool = ["gemini-3.1-flash-lite-preview", "gemini-3.1-flash-preview", "gemini-3.1-pro-preview"];
     let aiResponse = "";
 
-    // 5. לוגיקת רוטציה
+    // 5. לוגיקת רוטציה (מפתח -> מודל)
     outerLoop: for (let i = 0; i < keys.length; i++) {
-      if (activeKeysConfig?.find(k => k.instruction === `KEY_${i+1}`)?.is_active === false) continue;
+      const isKeyDisabled = activeKeysConfig?.find(k => k.instruction === `KEY_${i+1}`)?.is_active === false;
+      if (isKeyDisabled) continue;
 
       const genAI = new GoogleGenerativeAI(keys[i]);
+
       for (const modelName of modelPool) {
         try {
           const model = genAI.getGenerativeModel({
             model: modelName,
-            systemInstruction: `${executorDNA}\nיועץ: ${advisorData?.reply || ""}${googleContext}\nמלאי: ${stockAlert}\nחתימה: H.SABAN 1994`
+            systemInstruction: `${executorDNA}\nיועץ: ${advisorData?.reply || ""}\nמלאי: ${stockAlert}\nחתימה: H.SABAN 1994`
           });
 
           const result = await model.generateContent(lastUserMsg);
@@ -139,6 +106,7 @@ export async function POST(req: Request) {
             break outerLoop; 
           }
         } catch (e: any) {
+          console.warn(`Key ${i+1} failed`);
           await updateDashboardQuota(i + 1, modelName, "QUOTA_EXCEEDED");
           continue;
         }
@@ -158,6 +126,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ text: aiResponse });
 
   } catch (error: any) {
+    console.error("Critical Error:", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
