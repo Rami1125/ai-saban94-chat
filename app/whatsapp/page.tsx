@@ -1,209 +1,187 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
-  ShoppingCart, Search, Package, MessageSquare, 
-  ChevronRight, Calculator, Plus, Minus, Send,
-  Info, CheckCircle2, X, Play, Loader2
+  X, Send, ShoppingCart, User, MapPin, Truck, 
+  Calendar, Phone, Menu, Sparkles, CheckCircle2,
+  ChevronLeft, Info, Play, Loader2, Plus
 } from "lucide-react";
-import { ProductCard } from "@/components/chat/ProductCard"; // שימוש בקומפוננטה שלך
-import { ActionOverlays } from "@/components/chat/ActionOverlays"; // שימוש במחשבון שלך
+import { ProductCard } from "./ProductCard";
 import { toast } from "sonner";
 
-export default function SabanOnlineStore() {
-  const [products, setProducts] = useState<any[]>([]);
-  const [cart, setCart] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [chatOpen, setChatOpen] = useState(false);
+export default function SabanAICanvas({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
+  const [orderStep, setOrderStep] = useState<'consult' | 'logistics'>('consult');
   
+  // לוגיקת פרטי לקוח
+  const [customerData, setCustomerData] = useState({
+    name: "", address: "", phone: "", contact: "",
+    deliveryDate: "", deliveryTime: "", transportType: "manual" // manual | crane
+  });
+
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // 1. שליפת מוצרים מהמלאי (Supabase)
+  // הודעת פתיחה אנושית ומזמינה
   useEffect(() => {
-    async function getStoreData() {
-      const { data } = await supabase
-        .from("inventory")
-        .select("*")
-        .order("product_name");
-      setProducts(data || []);
-      setLoading(false);
+    if (isOpen && messages.length === 0) {
+      simulateAIResponse("שלום! אני כאן לעזור לך לבחור את החומרים הנכונים לפרויקט שלך. מה אנחנו בונים היום? (גבס, איטום, צבע?) ✨");
     }
-    getStoreData();
-  }, []);
+  }, [isOpen]);
 
-  // 2. פונקציית ייעוץ מול ה-API של Gemini
-  const askGemini = async (text: string) => {
-    const userMsg = { role: "user", content: text };
-    setMessages(prev => [...prev, userMsg]);
+  const simulateAIResponse = (text: string, product?: any) => {
+    setIsTyping(true);
+    setTimeout(() => {
+      setMessages(prev => [...prev, { role: "assistant", content: text, product }]);
+      setIsTyping(false);
+    }, 1500);
+  };
+
+  const handleSend = async () => {
+    if (!input.trim()) return;
+    const userMsg = input;
+    setMessages(prev => [...prev, { role: "user", content: userMsg }]);
     setInput("");
 
+    // קריאה ל"מוח" (API Route) שעדכנו קודם
+    setIsTyping(true);
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
-        body: JSON.stringify({
-          messages: [...messages, userMsg],
-          phone: "store_web_user",
-          userId: "web_customer"
-        }),
+        body: JSON.stringify({ messages: [...messages, { role: "user", content: userMsg }], phone: customerData.phone }),
       });
       const data = await res.json();
-      
-      setMessages(prev => [...prev, { 
-        role: "assistant", 
-        content: data.text,
-        product: data.product // אם Gemini זיהה מוצר ב-DB, הוא יחזור כאן
-      }]);
+      simulateAIResponse(data.text, data.product);
     } catch (e) {
-      toast.error("שגיאה בחיבור ליועץ ה-AI");
+      simulateAIResponse("משהו השתבש בחיבור, אבל אני כאן. ספר לי שוב מה חסר לך?");
     }
   };
 
-  const addToCart = (product: any, qty: number) => {
-    setCart(prev => {
-      const existing = prev.find(item => item.sku === product.sku);
-      if (existing) {
-        return prev.map(item => item.sku === product.sku ? { ...item, qty: item.qty + qty } : item);
-      }
-      return [...prev, { ...product, qty }];
-    });
-    toast.success(`נוסף לסל: ${product.product_name}`);
-  };
-
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-100" dir="rtl">
-      
-      {/* Header מקצועי */}
-      <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 p-4">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <div className="bg-blue-600 p-2 rounded-xl shadow-lg shadow-blue-200">
-              <Package className="text-white" size={24} />
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.9 }}
+          className="fixed inset-0 z-[999] bg-white flex flex-col md:flex-row overflow-hidden"
+        >
+          {/* Sidebar - פרטי לקוח ולוגיסטיקה (תפריט המבורגר בנייד) */}
+          <div className="w-full md:w-[350px] bg-slate-50 border-l border-slate-200 p-6 flex flex-col overflow-y-auto">
+            <div className="flex justify-between items-center mb-8">
+              <Menu className="text-blue-600" />
+              <h2 className="font-black text-slate-800 tracking-tighter italic">H. SABAN LOGISTICS</h2>
+              <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-all"><X size={20}/></button>
             </div>
-            <div>
-              <h1 className="text-xl font-black tracking-tight text-slate-800">ח. סבן 1994</h1>
-              <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">חומרי בניין ופתרונות לוגיסטיים</p>
-            </div>
-          </div>
 
-          <div className="flex items-center gap-6">
-            <div className="relative hidden md:block">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input 
-                placeholder="חפש מוצר טכני..." 
-                className="bg-slate-100 border-none rounded-2xl py-2.5 pr-10 pl-4 w-64 text-sm focus:ring-2 focus:ring-blue-500 transition-all"
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <button className="relative p-2 text-slate-600 hover:text-blue-600 transition-colors">
-              <ShoppingCart size={24} />
-              {cart.length > 0 && (
-                <span className="absolute -top-1 -left-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-white">
-                  {cart.length}
-                </span>
-              )}
-            </button>
-          </div>
-        </div>
-      </nav>
+            <div className="space-y-6">
+              <section className="space-y-4">
+                <h3 className="text-[10px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-2">
+                  <User size={12}/> פרטי הזמנה
+                </h3>
+                <InputGroup label="שם לקוח" value={customerData.name} onChange={(v) => setCustomerData({...customerData, name: v})} />
+                <InputGroup label="נייד" value={customerData.phone} onChange={(v) => setCustomerData({...customerData, phone: v})} />
+                <InputGroup label="כתובת אספקה" value={customerData.address} onChange={(v) => setCustomerData({...customerData, address: v})} icon={<MapPin size={14}/>} />
+              </section>
 
-      <main className="max-w-7xl mx-auto p-6 lg:p-12">
-        <header className="mb-12">
-          <h2 className="text-4xl font-black text-slate-800 mb-2">קטלוג מוצרים</h2>
-          <div className="flex gap-4">
-            <button 
-              onClick={() => window.dispatchEvent(new CustomEvent('open-action-overlay', { detail: { type: 'calculator' } }))}
-              className="flex items-center gap-2 text-xs font-bold text-blue-600 bg-blue-50 px-4 py-2 rounded-full hover:bg-blue-100 transition-all"
-            >
-              <Calculator size={14} /> מחשבון כמויות גבס
-            </button>
-          </div>
-        </header>
-
-        {loading ? (
-          <div className="flex justify-center py-20"><Loader2 className="animate-spin text-blue-600" size={48} /></div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-            {products.filter(p => p.product_name.includes(searchTerm)).map((product) => (
-              <ProductCard key={product.sku} product={product} onAddToCart={(qty) => addToCart(product, qty)} />
-            ))}
-          </div>
-        )}
-      </main>
-
-      {/* Floating AI Chat Button */}
-      <button 
-        onClick={() => setChatOpen(!chatOpen)}
-        className="fixed bottom-8 left-8 z-[60] bg-blue-600 text-white p-4 rounded-full shadow-2xl shadow-blue-400/40 hover:scale-110 active:scale-95 transition-all"
-      >
-        {chatOpen ? <X size={28} /> : <MessageSquare size={28} />}
-      </button>
-
-      {/* Side Chat Interface */}
-      <AnimatePresence>
-        {chatOpen && (
-          <motion.aside 
-            initial={{ x: "-100%", opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: "-100%", opacity: 0 }}
-            className="fixed inset-y-0 left-0 z-50 w-full max-w-md bg-white shadow-3xl border-r border-slate-200 flex flex-col"
-          >
-            <header className="p-6 border-b bg-slate-50 flex items-center gap-4">
-              <div className="w-10 h-10 bg-blue-600 rounded-2xl flex items-center justify-center text-white font-bold italic">S</div>
-              <div>
-                <h3 className="font-black text-slate-800 italic uppercase">Saban AI Advisor</h3>
-                <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
-                  <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> Gemini 3.1 Live
-                </span>
-              </div>
-            </header>
-
-            <div className="flex-1 overflow-y-auto p-6 space-y-6" ref={scrollRef}>
-              {messages.length === 0 && (
-                <div className="text-center py-10">
-                  <div className="bg-blue-50 w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-4">
-                    <Info className="text-blue-500" />
-                  </div>
-                  <p className="text-sm font-bold text-slate-400 leading-relaxed">שאל אותי על חומרים, כמויות<br/>או ייעוץ טכני לביצוע עבודה.</p>
+              <section className="space-y-4 pt-4 border-t border-slate-200">
+                <h3 className="text-[10px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-2">
+                  <Truck size={12}/> שיטת הובלה
+                </h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <TransportBtn active={customerData.transportType === 'manual'} label="ידנית" onClick={() => setCustomerData({...customerData, transportType: 'manual'})} />
+                  <TransportBtn active={customerData.transportType === 'crane'} label="מנוף" onClick={() => setCustomerData({...customerData, transportType: 'crane'})} />
                 </div>
-              )}
+                <div className="grid grid-cols-2 gap-2">
+                  <InputGroup label="תאריך" type="date" value={customerData.deliveryDate} onChange={(v) => setCustomerData({...customerData, deliveryDate: v})} />
+                  <InputGroup label="שעה" type="time" value={customerData.deliveryTime} onChange={(v) => setCustomerData({...customerData, deliveryTime: v})} />
+                </div>
+              </section>
+            </div>
+          </div>
+
+          {/* Main Canvas Area - הצאט הויזואלי */}
+          <div className="flex-1 flex flex-col bg-slate-100/50 relative">
+            <div className="flex-1 overflow-y-auto p-4 md:p-12 space-y-8" ref={scrollRef}>
               {messages.map((m, i) => (
-                <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className="max-w-[85%] space-y-3">
-                    <div className={`p-4 rounded-3xl text-sm leading-relaxed shadow-sm ${
-                      m.role === 'user' ? 'bg-blue-600 text-white rounded-tl-none' : 'bg-slate-100 text-slate-700 rounded-tr-none'
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }} 
+                  animate={{ opacity: 1, y: 0 }} 
+                  key={i} 
+                  className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div className={`max-w-2xl w-full space-y-4 ${m.role === 'user' ? 'flex flex-col items-end' : ''}`}>
+                    <div className={`p-6 rounded-[32px] text-lg font-medium shadow-sm leading-relaxed ${
+                      m.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white text-slate-700 rounded-tl-none border border-slate-200'
                     }`}>
                       {m.content}
                     </div>
-                    {m.product && <ProductCard product={m.product} />}
+
+                    {/* כרטיס מוצר ויזואלי שנפרס בתוך הקנבס */}
+                    {m.product && (
+                      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="w-full">
+                         <ProductCard product={m.product} onAddToCart={() => toast.success("המוצר נוסף לסל הלוגיסטי")} />
+                      </motion.div>
+                    )}
                   </div>
-                </div>
+                </motion.div>
               ))}
+
+              {isTyping && (
+                <div className="flex gap-2 p-4 bg-white/50 w-24 rounded-full justify-center shadow-inner italic text-xs text-slate-400">
+                   כותב... <Loader2 size={14} className="animate-spin"/>
+                </div>
+              )}
             </div>
 
-            <footer className="p-6 border-t bg-slate-50/50">
-              <div className="relative flex items-center gap-2">
+            {/* Input Area */}
+            <footer className="p-8 bg-gradient-to-t from-white via-white to-transparent">
+              <div className="max-w-3xl mx-auto relative group">
                 <input 
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && askGemini(input)}
-                  placeholder="כתוב הודעה ליועץ..."
-                  className="w-full bg-white border border-slate-200 rounded-2xl py-4 pr-6 pl-12 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                  placeholder="כתוב כאן... (לדוגמא: אני צריך דבק קרמיקה חזק מאוד)"
+                  className="w-full bg-white border-2 border-slate-100 rounded-[32px] py-6 pr-8 pl-20 shadow-2xl focus:border-blue-500 outline-none text-lg transition-all"
                 />
-                <button onClick={() => askGemini(input)} className="absolute left-2 p-3 bg-blue-600 text-white rounded-xl">
-                  <Send size={18} />
+                <button 
+                  onClick={handleSend}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 p-4 bg-blue-600 text-white rounded-[24px] hover:bg-blue-700 transition-all active:scale-90"
+                >
+                  <Send size={24} />
                 </button>
               </div>
             </footer>
-          </motion.aside>
-        )}
-      </AnimatePresence>
-
-      <ActionOverlays />
-    </div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
+
+// קומפוננטות עזר לעיצוב הבהיר
+const InputGroup = ({ label, value, onChange, type = "text", icon }: any) => (
+  <div className="space-y-1">
+    <label className="text-[10px] font-bold text-slate-400 mr-2 uppercase">{label}</label>
+    <div className="relative">
+      <input 
+        type={type} value={value} onChange={(e) => onChange(e.target.value)}
+        className="w-full bg-white border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+      />
+      {icon && <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300">{icon}</div>}
+    </div>
+  </div>
+);
+
+const TransportBtn = ({ active, label, onClick }: any) => (
+  <button 
+    onClick={onClick}
+    className={`p-3 rounded-xl text-xs font-bold transition-all border ${
+      active ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-200' : 'bg-white text-slate-500 border-slate-200'
+    }`}
+  >
+    {label}
+  </button>
+);
