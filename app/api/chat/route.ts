@@ -43,30 +43,27 @@ export async function POST(req: Request) {
     const { data: config } = await supabase.from('system_rules')
       .select('instruction, agent_type, is_active');
     
-    const executorDNA = config?.filter(r => r.agent_type === 'executor' && r.is_active).map(r => r.instruction).join("\n") || "";
+const executorDNA = config?.filter(r => r.agent_type === 'executor' && r.is_active).map(r => r.instruction).join("\n") || "";
     const activeKeysConfig = config?.filter(r => r.agent_type === 'api_key_status');
 
-    // 3. התייעצות טכנית ובדיקת מלאי במקביל
-    const [advisorData, { data: products }] = await Promise.all([
-      callSidorConsultant(lastUserMsg),
-      supabase.from('inventory').select('*, stock_quantity, product_magic_link, sku').textSearch('product_name', lastUserMsg, { config: 'hebrew' }).limit(1)
-    ]);
-
-    const foundProduct = products?.[0] || null;
-    let stockAlert = "";
-    if (foundProduct) {
-      const stock = foundProduct.stock_quantity || 0;
-      stockAlert = stock <= 0 ? `⚠️ חסר במלאי!` : stock < 10 ? `⚠️ רק ${stock} יחידות נותרו!` : "";
-    }
-      // 3. חיפוש מלאי חכם (החלפת textSearch ב-ilike לזיהוי גבס ומידות)
+    // 3. חיפוש מלאי חכם (החלפת textSearch ב-ilike לזיהוי גבס ומידות)
     const [advisorData, { data: products }] = await Promise.all([
       callSidorConsultant(lastUserMsg),
       supabase.from('inventory')
         .select('*, stock_quantity, product_magic_link, sku')
-        // מחפש התאמה חלקית בשם המוצר או התאמה למק"ט (SKU)
-        .or(`product_name.ilike.%${lastUserMsg}%,sku.eq.${lastUserMsg}`)
+        .or(`product_name.ilike.%${lastUserMsg}%,sku.eq.${lastUserMsg}`) 
         .limit(1)
     ]);
+
+    const foundProduct = products?.[0] || null;
+    let stockAlert = "";
+    let productContext = "לא נמצא מוצר תואם במלאי.";
+
+    if (foundProduct) {
+      const stock = foundProduct.stock_quantity || 0;
+      stockAlert = stock <= 0 ? `⚠️ חסר במלאי!` : stock < 10 ? `⚠️ רק ${stock} יחידות נותרו!` : "זמין במלאי";
+      productContext = `מוצר שנמצא: ${foundProduct.product_name} | מק"ט (SKU): ${foundProduct.sku}`;
+    }
 
    // 4. ניהול בריכת מפתחות מהמשתנה ב-Vercel (GOOGLE_AI_KEY_POOL)
     const keyPoolString = process.env.GOOGLE_AI_KEY_POOL || "";
