@@ -46,10 +46,24 @@ export async function POST(req: Request) {
     const executorDNA = config?.filter(r => r.agent_type === 'executor' && r.is_active).map(r => r.instruction).join("\n") || "";
     const activeKeysConfig = config?.filter(r => r.agent_type === 'api_key_status');
 
-    // 3. התייעצות טכנית ובדיקת מלאי במקביל
+// 3. חיפוש גמיש רב-עמודתי
+    const rawWords = lastUserMsg
+      .replace(/[^\u0590-\u05FF0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter(word => word.length >= 2 && !['אני', 'רוצה', 'לגבי', 'בנושא', 'מחפש'].includes(word));
+
+    // בונה שאילתה שמחפשת כל מילה ב-3 עמודות שונות
+    const conditions = rawWords.map(word => 
+      `product_name.ilike.%${word}%,sku.ilike.%${word}%,keywords.ilike.%${word}%`
+    ).join(',');
+
     const [advisorData, { data: products }] = await Promise.all([
       callSidorConsultant(lastUserMsg),
-      supabase.from('inventory').select('*, stock_quantity, product_magic_link, sku').textSearch('product_name', lastUserMsg, { config: 'hebrew' }).limit(1)
+      supabase.from('inventory')
+        .select('*, stock_quantity, product_magic_link, sku')
+        .or(conditions || `product_name.ilike.%${lastUserMsg}%`)
+        .order('stock_quantity', { ascending: false }) // מוצר עם מלאי יקפוץ ראשון
+        .limit(1)
     ]);
 
     const foundProduct = products?.[0] || null;
