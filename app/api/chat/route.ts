@@ -64,48 +64,70 @@ export async function POST(req: Request) {
     const keys = keyPoolString.split(',').map(k => k.trim()).filter(k => k.length > 10);
     
     const modelPool = ["gemini-3.1-flash-lite-preview", "gemini-3.1-flash-preview", "gemini-3.1-pro-preview"];
-    let aiResponse = "";
+ let aiResponse = "";
+    let success = false; // שימוש בדגל במקום outerLoop למניעת שגיאות Build
 
     // 5. לוגיקת רוטציה (מפתח -> מודל)
-    outerLoop: for (let i = 0; i < keys.length; i++) {
+    for (let i = 0; i < keys.length; i++) {
+      if (success) break;
+
       const isKeyDisabled = activeKeysConfig?.find(k => k.instruction === `KEY_${i+1}`)?.is_active === false;
       if (isKeyDisabled) continue;
 
       const genAI = new GoogleGenerativeAI(keys[i]);
 
       for (const modelName of modelPool) {
+        if (success) break;
+
         try {
           const model = genAI.getGenerativeModel({
             model: modelName,
-            systemInstruction: `${executorDNA}\nיועץ: ${advisorData?.reply || ""}\nמלאי: ${stockAlert}\nחתימה: H.SABAN 1994`
+            systemInstruction: `
+              ${executorDNA}
+              יועץ: ${advisorData?.reply || ""}
+              נתוני מוצר: ${foundProduct ? foundProduct.product_name : "לא נמצא"}
+              מק"ט: ${foundProduct ? foundProduct.sku : ""}
+              מלאי: ${stockAlert}
+              
+              חוק חשוב: אם מצאת מוצר מתאים בנתונים למעלה, סיים את התשובה תמיד במילה: MAGIC_URL
+              חתימה: H.SABAN 1994
+            `
           });
 
           const result = await model.generateContent(lastUserMsg);
-          aiResponse = result.response.text();
+          const responseText = result.response.text();
 
-          if (aiResponse) {
-            // עדכון הדאשבורד בזמן אמת
+          if (responseText) {
+            aiResponse = responseText;
             await Promise.all([
               updateDashboardQuota(i + 1, modelName, "SUCCESS"),
               logToDailyChat(lastUserMsg, user_id)
             ]);
-            break outerLoop; 
+            success = true; // מסמן הצלחה ויוצא מהלופים
           }
         } catch (e: any) {
           console.warn(`Key ${i+1} Model ${modelName} Quota Exceeded`);
           await updateDashboardQuota(i + 1, modelName, "QUOTA_EXCEEDED");
-          continue;
         }
       }
     }
 
     // 6. הזרקת לינקים ומשלוח ל-Pipeline
-    if (foundProduct) {
+    if (foundProduct && aiResponse.includes("MAGIC_URL")) {
+      // שליפת הלינק הישיר (עדיפות ל-magic_link ואז ל-SKU)
       const link = foundProduct.product_magic_link || `https://sidor.vercel.app/product-pages/index.html?id=${foundProduct.sku}`;
-      aiResponse = aiResponse.replace("MAGIC_URL", link) + (stockAlert ? `\n${stockAlert}` : "");
+      
+      // החלפה נקייה של הלינק
+      aiResponse = aiResponse.replace("MAGIC_URL", link);
+      
+      // הוספת התראת מלאי רק אם יש חוסר (⚠️)
+      if (stockAlert.includes("⚠️")) {
+        aiResponse += `\n${stockAlert}`;
+      }
     }
 
-    if (phone) {
+    // 7. משלוח ל-Pipeline
+    if (phone && aiResponse) {
       const cleanPhone = phone.replace('+', '').trim();
       await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), { text: aiResponse, timestamp: Date.now() });
     }
