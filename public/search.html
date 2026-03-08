@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>בדיקת Google CSE</title>
+
+    <!-- טעינת סקריפט Google CSE (אסינכרוני) -->
+    https://cse.google.com/cse.js?cx=9275b596f6d184447
+
+    <style>
+      /* עיצוב בסיסי לבדיקה */
+      body { font-family: system-ui, -apple-system, "Segoe UI", Heebo, Arial, sans-serif; margin: 24px; }
+      header { margin-bottom: 16px; }
+      .wrap { max-width: 900px; margin: 0 auto; }
+      .hint { color: #555; font-size: 0.9rem; margin-top: 8px; }
+      /* RTL "עדין" למיכלים של CSE */
+      .gcse-search, .gcse-searchbox-only, .gcse-searchresults-only { direction: rtl; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <h1>בדיקת חיפוש – Google CSE</h1>
+        <p class="hint">נסה חיפוש (למשל: "גבס ירוק").</p>
+      </header>
+
+      <!-- תיבה + תוצאות באותו עמוד -->
+      <div class="gcse-search"></div>
+
+      <!-- לחלופין (אופציונלי): תיבת חיפוש בלבד -->
+      <!-- <div class="gcse-searchbox-only" data-resultsUrl="/search"></div> -->
+
+      <!-- לחלופין (אופציונלי): תוצאות בלבד -->
+      <!-- <div class="gcse-searchresults-only"></div> -->
+    </div>
+  </body>
+</html>
