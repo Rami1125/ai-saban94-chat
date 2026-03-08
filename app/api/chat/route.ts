@@ -111,24 +111,28 @@ export async function POST(req: Request) {
         try {
           const model = genAI.getGenerativeModel({
             model: modelName,
+const model = genAI.getGenerativeModel({
+            model: modelName,
             systemInstruction: `
-            ${executorDNA}
-            
-            Context טכני: ${advisorData?.reply || "אין"}
-            
-            נתוני מוצר מהמלאי:
-            - שם: ${foundProduct ? foundProduct.product_name : "לא נמצא"}
-            - SKU: ${foundProduct ? foundProduct.sku : "אין"}
-            - מלאי: ${stockAlert}
+              ${executorDNA}
+              
+              Context טכני: ${advisorData?.reply || "אין"}
+              
+              נתוני מוצר מהמלאי:
+              - שם: ${foundProduct ? foundProduct.product_name : "לא נמצא"}
+              - SKU: ${foundProduct ? foundProduct.sku : "אין"}
+              - מלאי: ${stockAlert}
 
-            הנחיות לביצוע:
-            1. אם נמצא מוצר: הראה שמצאת בדיוק מה שחיפשו. אם המלאי 0, ציין שזה חסר כרגע אך ניתן להזמנה מיוחדת.
-            2. אם נמצא גבס: הצע מוצרים משלימים (ברגים, ניצבים, מסלולים, שפכטל).
-            3. סגנון: מקצועי, תמציתי, נקי וישיר.
-            4. סיום: חובה לסיים במילה MAGIC_URL אם יש מוצר.
-            
-            חתימה: H.SABAN 1994
-          `
+              הנחיות לביצוע:
+              1. אם נמצא מוצר: הראה שמצאת בדיוק מה שחיפשו. אם המלאי 0, ציין שזה חסר כרגע אך ניתן להזמנה מיוחדת.
+              2. אם נמצא גבס: הצע מוצרים משלימים (ברגים, ניצבים, מסלולים, שפכטל).
+              3. סגנון: מקצועי, תמציתי, נקי וישיר.
+              4. סיום: חובה לסיים במילה MAGIC_URL אם יש מוצר.
+              
+              חתימה: H.SABAN 1994
+            `
+          });
+
           const result = await model.generateContent(lastUserMsg);
           const responseText = result.response.text();
 
@@ -164,7 +168,10 @@ export async function POST(req: Request) {
     // 7. משלוח ל-Pipeline
     if (phone && aiResponse) {
       const cleanPhone = phone.replace('+', '').trim();
-      await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), { text: aiResponse, timestamp: Date.now() });
+      await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), { 
+        text: aiResponse, 
+        timestamp: Date.now() 
+      });
     }
 
     return NextResponse.json({ text: aiResponse });
