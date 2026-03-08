@@ -4,7 +4,7 @@ import { rtdb } from "@/lib/firebase";
 import { ref, push, update } from "firebase/database";
 import { NextResponse } from "next/server";
 
-// 1. פונקציות עזר לניהול ה-Dashboard והדיווח
+// 1. פונקציות עזר
 async function updateDashboardQuota(keyIndex: number, modelName: string, status: string) {
   const dashRef = ref(rtdb, `saban94/dashboard/quota_logs/${Date.now()}`);
   await update(dashRef, { key_index: keyIndex, model: modelName, status, timestamp: Date.now() });
@@ -39,73 +39,85 @@ export async function POST(req: Request) {
     const { messages, phone, user_id } = await req.json();
     const lastUserMsg = messages[messages.length - 1].content;
 
-    // 2. שליפת DNA ובדיקת מפתחות מה-Supabase
-    const { data: config } = await supabase.from('system_rules')
-      .select('instruction, agent_type, is_active');
-    
+    // 2. שליפת DNA ובדיקת מפתחות
+    const { data: config } = await supabase.from('system_rules').select('instruction, agent_type, is_active');
     const executorDNA = config?.filter(r => r.agent_type === 'executor' && r.is_active).map(r => r.instruction).join("\n") || "";
     const activeKeysConfig = config?.filter(r => r.agent_type === 'api_key_status');
 
-    // 3. התייעצות טכנית ובדיקת מלאי במקביל
+    // 3. חיפוש מלאי משופר + התייעצות טכנית
     const [advisorData, { data: products }] = await Promise.all([
       callSidorConsultant(lastUserMsg),
-      supabase.from('inventory').select('*, stock_quantity, product_magic_link, sku').textSearch('product_name', lastUserMsg, { config: 'hebrew' }).limit(1)
+      supabase.from('inventory')
+        .select('*, stock_quantity, product_magic_link, sku')
+        .or(`product_name.ilike.%${lastUserMsg}%,sku.eq.${lastUserMsg}`)
+        .limit(1)
     ]);
 
     const foundProduct = products?.[0] || null;
     let stockAlert = "";
+    let productContext = "לא נמצא מוצר תואם במלאי.";
+
     if (foundProduct) {
       const stock = foundProduct.stock_quantity || 0;
-      stockAlert = stock <= 0 ? `⚠️ חסר במלאי!` : stock < 10 ? `⚠️ רק ${stock} יחידות נותרו!` : "";
+      stockAlert = stock <= 0 ? `⚠️ חסר במלאי!` : stock < 10 ? `⚠️ רק ${stock} יחידות נותרו!` : "זמין במלאי";
+      productContext = `מוצר שנמצא: ${foundProduct.product_name} | מק"ט (SKU): ${foundProduct.sku}`;
     }
 
-    // 4. ניהול בריכת מפתחות מהמשתנה ב-Vercel (GOOGLE_AI_KEY_POOL)
+    // 4. ניהול בריכת מפתחות ומודלים
     const keyPoolString = process.env.GOOGLE_AI_KEY_POOL || "";
     const keys = keyPoolString.split(',').map(k => k.trim()).filter(k => k.length > 10);
-    
-    const modelPool = ["gemini-3.1-flash-lite-preview", "gemini-3.1-flash-preview", "gemini-3.1-pro-preview"];
-    let aiResponse = "";
+    const modelPool = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
 
-    // 5. לוגיקת רוטציה (מפתח -> מודל)
-    outerLoop: for (let i = 0; i < keys.length; i++) {
+    // 5. לוגיקת רוטציה חסינה
+    let aiResponse = "";
+    let success = false;
+
+    for (let i = 0; i < keys.length; i++) {
+      if (success) break;
       const isKeyDisabled = activeKeysConfig?.find(k => k.instruction === `KEY_${i+1}`)?.is_active === false;
       if (isKeyDisabled) continue;
 
-      const genAI = new GoogleGenerativeAI(keys[i]);
-
       for (const modelName of modelPool) {
+        if (success) break;
         try {
+          const genAI = new GoogleGenerativeAI(keys[i]);
           const model = genAI.getGenerativeModel({
             model: modelName,
-            systemInstruction: `${executorDNA}\nיועץ: ${advisorData?.reply || ""}\nמלאי: ${stockAlert}\nחתימה: H.SABAN 1994`
+            systemInstruction: `
+              ${executorDNA}
+              יועץ טכני: ${advisorData?.reply || ""}
+              נתוני מלאי בזמן אמת: ${productContext}
+              סטטוס מלאי: ${stockAlert}
+              חוקים: ענה בקיצור, אם נמצא מוצר סיים ב-MAGIC_URL. חתימה: H.SABAN 1994
+            `
           });
 
           const result = await model.generateContent(lastUserMsg);
-          aiResponse = result.response.text();
-
-          if (aiResponse) {
-            // עדכון הדאשבורד בזמן אמת
+          const text = result.response.text();
+          if (text) {
+            aiResponse = text;
             await Promise.all([
               updateDashboardQuota(i + 1, modelName, "SUCCESS"),
               logToDailyChat(lastUserMsg, user_id)
             ]);
-            break outerLoop; 
+            success = true;
           }
         } catch (e: any) {
-          console.warn(`Key ${i+1} Model ${modelName} Quota Exceeded`);
+          console.error(`Key ${i+1} ${modelName} Error:`, e.message);
           await updateDashboardQuota(i + 1, modelName, "QUOTA_EXCEEDED");
-          continue;
         }
       }
     }
 
-    // 6. הזרקת לינקים ומשלוח ל-Pipeline
-    if (foundProduct) {
+    // 6. הזרקת לינק ישיר מהטבלה
+    if (foundProduct && aiResponse.includes("MAGIC_URL")) {
       const link = foundProduct.product_magic_link || `https://sidor.vercel.app/product-pages/index.html?id=${foundProduct.sku}`;
-      aiResponse = aiResponse.replace("MAGIC_URL", link) + (stockAlert ? `\n${stockAlert}` : "");
+      aiResponse = aiResponse.replace("MAGIC_URL", link);
+      if (stockAlert.includes("⚠️")) aiResponse += `\n${stockAlert}`;
     }
 
-    if (phone) {
+    // משלוח ל-Pipeline
+    if (phone && aiResponse) {
       const cleanPhone = phone.replace('+', '').trim();
       await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), { text: aiResponse, timestamp: Date.now() });
     }
@@ -113,7 +125,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ text: aiResponse });
 
   } catch (error: any) {
-    console.error("Critical Error:", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
