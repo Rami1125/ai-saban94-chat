@@ -82,16 +82,19 @@ export async function POST(req: Request) {
     const keys = keyPoolString.split(',').map(k => k.trim()).filter(k => k.length > 10);
     
     const modelPool = ["gemini-3.1-flash-lite-preview", "gemini-3.1-flash-preview", "gemini-3.1-pro-preview"];
-// 5. לוגיקת רוטציה חסינה
+// 5. לוגיקת רוטציה (שימוש בדגל במקום Label למניעת שגיאות Build)
     let aiResponse = "";
+    let success = false;
 
-    // וודא שהלייבל צמוד ל-for ללא שורות קוד ביניהם
-    outerLoop: 
     for (let i = 0; i < keys.length; i++) {
+      if (success) break;
+
       const isKeyDisabled = activeKeysConfig?.find(k => k.instruction === `KEY_${i+1}`)?.is_active === false;
       if (isKeyDisabled) continue;
 
       for (const modelName of modelPool) {
+        if (success) break;
+
         try {
           const genAI = new GoogleGenerativeAI(keys[i]);
           const model = genAI.getGenerativeModel({
@@ -99,12 +102,12 @@ export async function POST(req: Request) {
             systemInstruction: `
               ${executorDNA}
               יועץ טכני: ${advisorData?.reply || ""}
-              נתוני מלאי בזמין אמת: ${productContext}
+              נתוני מלאי בזמן אמת: ${productContext}
               סטטוס: ${stockAlert}
               
               חוקים:
-              - ענה בקיצור, ישיר ומקצועי.
-              - אם יש מוצר, סיים במחרוזת MAGIC_URL.
+              - ענה בקיצור נמרץ, ישיר ומקצועי.
+              - אם נמצא מוצר, סיים חובה במחרוזת: MAGIC_URL
               - חתימה: H.SABAN 1994
             `
           });
@@ -117,12 +120,12 @@ export async function POST(req: Request) {
               updateDashboardQuota(i + 1, modelName, "SUCCESS"),
               logToDailyChat(lastUserMsg, user_id)
             ]);
-            break outerLoop; // קופץ החוצה מהכל
+            success = true; // מסמן הצלחה כדי לצאת מכל הלופים
           }
         } catch (e: any) {
-          console.warn(`Quota hit: Key ${i+1}, Model ${modelName}`);
+          console.warn(`Quota Exceeded for Key ${i+1} - ${modelName}`);
           await updateDashboardQuota(i + 1, modelName, "QUOTA_EXCEEDED");
-          // כאן ה-continue ימשיך למודל הבא בלופ הפנימי
+          // ממשיך אוטומטית למודל הבא בלופ הפנימי
         }
       }
     }
