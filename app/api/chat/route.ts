@@ -82,36 +82,50 @@ export async function POST(req: Request) {
     const keys = keyPoolString.split(',').map(k => k.trim()).filter(k => k.length > 10);
     
     const modelPool = ["gemini-3.1-flash-lite-preview", "gemini-3.1-flash-preview", "gemini-3.1-pro-preview"];
+// 5. לוגיקת רוטציה חסינה
     let aiResponse = "";
 
-// 5. לוגיקת רוטציה (מפתח -> מודל)
-outerLoop: for (let i = 0; i < keys.length; i++) {
-  const isKeyDisabled = activeKeysConfig?.find(k => k.instruction === `KEY_${i+1}`)?.is_active === false;
-  if (isKeyDisabled) continue;
+    // וודא שהלייבל צמוד ל-for ללא שורות קוד ביניהם
+    outerLoop: 
+    for (let i = 0; i < keys.length; i++) {
+      const isKeyDisabled = activeKeysConfig?.find(k => k.instruction === `KEY_${i+1}`)?.is_active === false;
+      if (isKeyDisabled) continue;
 
-  const genAI = new GoogleGenerativeAI(keys[i]);
+      for (const modelName of modelPool) {
+        try {
+          const genAI = new GoogleGenerativeAI(keys[i]);
+          const model = genAI.getGenerativeModel({
+            model: modelName,
+            systemInstruction: `
+              ${executorDNA}
+              יועץ טכני: ${advisorData?.reply || ""}
+              נתוני מלאי בזמין אמת: ${productContext}
+              סטטוס: ${stockAlert}
+              
+              חוקים:
+              - ענה בקיצור, ישיר ומקצועי.
+              - אם יש מוצר, סיים במחרוזת MAGIC_URL.
+              - חתימה: H.SABAN 1994
+            `
+          });
 
-  for (const modelName of modelPool) {
-    try {
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        systemInstruction: `
-          ${executorDNA}
-          
-          --- נתוני אמת מהמחסן (מחייב) ---
-          ${productContext}
-          ${stockAlert}
-          (השתמש ב-ID שמופיע כאן בלבד לבניית הלינק!)
-          
-          --- רקע טכני מהיועץ (להעשרה) ---
-          ${advisorData?.reply || ""}
-          
-          --- חוקי פורמט ---
-          1. שלב את ההסברים של היועץ בצורה תמציתית.
-          2. אל תמציא לינקים - סיים תמיד במילה: MAGIC_URL
-          3. חתימה: H.SABAN 1994
-        `
-      });
+          const result = await model.generateContent(lastUserMsg);
+          aiResponse = result.response.text();
+
+          if (aiResponse) {
+            await Promise.all([
+              updateDashboardQuota(i + 1, modelName, "SUCCESS"),
+              logToDailyChat(lastUserMsg, user_id)
+            ]);
+            break outerLoop; // קופץ החוצה מהכל
+          }
+        } catch (e: any) {
+          console.warn(`Quota hit: Key ${i+1}, Model ${modelName}`);
+          await updateDashboardQuota(i + 1, modelName, "QUOTA_EXCEEDED");
+          // כאן ה-continue ימשיך למודל הבא בלופ הפנימי
+        }
+      }
+    }
 
       const result = await model.generateContent(lastUserMsg);
       aiResponse = result.response.text();
