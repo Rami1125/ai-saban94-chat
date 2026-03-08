@@ -66,29 +66,53 @@ export async function POST(req: Request) {
     const modelPool = ["gemini-3.1-flash-lite-preview", "gemini-3.1-flash-preview", "gemini-3.1-pro-preview"];
     let aiResponse = "";
 
-    // 5. לוגיקת רוטציה (מפתח -> מודל)
-    outerLoop: for (let i = 0; i < keys.length; i++) {
-      const isKeyDisabled = activeKeysConfig?.find(k => k.instruction === `KEY_${i+1}`)?.is_active === false;
-      if (isKeyDisabled) continue;
+// 5. לוגיקת רוטציה (מפתח -> מודל)
+outerLoop: for (let i = 0; i < keys.length; i++) {
+  const isKeyDisabled = activeKeysConfig?.find(k => k.instruction === `KEY_${i+1}`)?.is_active === false;
+  if (isKeyDisabled) continue;
 
-      const genAI = new GoogleGenerativeAI(keys[i]);
+  const genAI = new GoogleGenerativeAI(keys[i]);
 
-      for (const modelName of modelPool) {
-        try {
-          const model = genAI.getGenerativeModel({
-            model: modelName,
-systemInstruction: `
-  ${executorDNA}
-  נתוני מלאי מחייבים: ${productContext} 
-  (השתמש ב-ID שמופיע כאן בלבד!)
-  
-  מידע טכני מהיועץ: ${advisorData?.reply || ""}
-  
-  חוק פורמט: שלב את המידע הטכני מהיועץ, אך את הלינק בנה אך ורק לפי ה-ID מהמלאי.
-  סיים בכתובת: MAGIC_URL
-  });
+  for (const modelName of modelPool) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        systemInstruction: `
+          ${executorDNA}
+          
+          --- נתוני אמת מהמחסן (מחייב) ---
+          ${productContext}
+          ${stockAlert}
+          (השתמש ב-ID שמופיע כאן בלבד לבניית הלינק!)
+          
+          --- רקע טכני מהיועץ (להעשרה) ---
+          ${advisorData?.reply || ""}
+          
+          --- חוקי פורמט ---
+          1. שלב את ההסברים של היועץ בצורה תמציתית.
+          2. אל תמציא לינקים - סיים תמיד במילה: MAGIC_URL
+          3. חתימה: H.SABAN 1994
+        `
+      });
 
-          const result = await model.generateContent(lastUserMsg);
+      const result = await model.generateContent(lastUserMsg);
+      aiResponse = result.response.text();
+
+      if (aiResponse) {
+        await Promise.all([
+          updateDashboardQuota(i + 1, modelName, "SUCCESS"),
+          logToDailyChat(lastUserMsg, user_id)
+        ]);
+        break outerLoop;
+      }
+    } catch (e: any) {
+      console.warn(`Key ${i+1} failed, trying next...`);
+      await updateDashboardQuota(i + 1, modelName, "QUOTA_EXCEEDED");
+      continue;
+    }
+  }
+}
+    const result = await model.generateContent(lastUserMsg);
           aiResponse = result.response.text();
 
           if (aiResponse) {
