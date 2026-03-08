@@ -43,28 +43,23 @@ export async function POST(req: Request) {
     const { data: config } = await supabase.from('system_rules')
       .select('instruction, agent_type, is_active');
     
-const executorDNA = config?.filter(r => r.agent_type === 'executor' && r.is_active).map(r => r.instruction).join("\n") || "";
+    const executorDNA = config?.filter(r => r.agent_type === 'executor' && r.is_active).map(r => r.instruction).join("\n") || "";
     const activeKeysConfig = config?.filter(r => r.agent_type === 'api_key_status');
 
-// 3. חיפוש מלאי חכם - פירוק למילות מפתח משמעותיות
-    const searchTerms = lastUserMsg
-      .replace(/[^\u0590-\u05FF0-9\s]/g, ' ') // משאיר רק עברית ומספרים
-      .split(/\s+/)
-      .filter(word => word.length >= 3 && !['אני', 'רוצה', 'לגבי', 'בנושא', 'מעוניין'].includes(word));
-
-    // יוצר שאילתה שבודקת אם לפחות אחת ממילות המפתח קיימת
-    const searchQuery = searchTerms.map(word => `product_name.ilike.%${word}%`).join(',');
-
+    // 3. התייעצות טכנית ובדיקת מלאי במקביל
     const [advisorData, { data: products }] = await Promise.all([
       callSidorConsultant(lastUserMsg),
-      supabase.from('inventory')
-        .select('*, stock_quantity, product_magic_link, sku')
-        .or(searchQuery || `product_name.ilike.%${lastUserMsg}%`)
-        .order('stock_quantity', { ascending: false }) // עדיפות למוצרים שיש במלאי
-        .limit(1)
+      supabase.from('inventory').select('*, stock_quantity, product_magic_link, sku').textSearch('product_name', lastUserMsg, { config: 'hebrew' }).limit(1)
     ]);
 
-   // 4. ניהול בריכת מפתחות מהמשתנה ב-Vercel (GOOGLE_AI_KEY_POOL)
+    const foundProduct = products?.[0] || null;
+    let stockAlert = "";
+    if (foundProduct) {
+      const stock = foundProduct.stock_quantity || 0;
+      stockAlert = stock <= 0 ? `⚠️ חסר במלאי!` : stock < 10 ? `⚠️ רק ${stock} יחידות נותרו!` : "";
+    }
+
+    // 4. ניהול בריכת מפתחות מהמשתנה ב-Vercel (GOOGLE_AI_KEY_POOL)
     const keyPoolString = process.env.GOOGLE_AI_KEY_POOL || "";
     const keys = keyPoolString.split(',').map(k => k.trim()).filter(k => k.length > 10);
     
