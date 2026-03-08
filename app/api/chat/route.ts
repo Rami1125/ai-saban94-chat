@@ -39,19 +39,37 @@ export async function POST(req: Request) {
     const { messages, phone, user_id } = await req.json();
     const lastUserMsg = messages[messages.length - 1].content;
 
-    // 2. שליפת DNA ובדיקת מפתחות מה-Supabase
-    const { data: config } = await supabase.from('system_rules')
-      .select('instruction, agent_type, is_active');
-    
+    // 2. שליפת DNA (כפי שהיה)
+    const { data: config } = await supabase.from('system_rules').select('instruction, agent_type, is_active');
     const executorDNA = config?.filter(r => r.agent_type === 'executor' && r.is_active).map(r => r.instruction).join("\n") || "";
     const activeKeysConfig = config?.filter(r => r.agent_type === 'api_key_status');
 
-    // 3. התייעצות טכנית ובדיקת מלאי במקביל
+    // 3. חיפוש מלאי משופר + התייעצות
+    // משתמשים ב-or וב-ilike כדי למצוא "סומסום" גם אם זה חלק ממחרוזת
     const [advisorData, { data: products }] = await Promise.all([
       callSidorConsultant(lastUserMsg),
-      supabase.from('inventory').select('*, stock_quantity, product_magic_link, sku').textSearch('product_name', lastUserMsg, { config: 'hebrew' }).limit(1)
+      supabase.from('inventory')
+        .select('*, stock_quantity, product_magic_link, sku')
+        .or(`product_name.ilike.%${lastUserMsg}%,sku.eq.${lastUserMsg}`) // מחפש גם בשם וגם במק"ט
+        .limit(1)
     ]);
 
+    const foundProduct = products?.[0] || null;
+    
+    // 4. בניית קונטקסט המוצר עבור Gemini
+    let stockAlert = "";
+    let productContext = "לא נמצא מוצר תואם במלאי.";
+
+    if (foundProduct) {
+      const stock = foundProduct.stock_quantity || 0;
+      stockAlert = stock <= 0 ? `⚠️ חסר במלאי!` : stock < 10 ? `⚠️ רק ${stock} יחידות נותרו!` : "זמין במלאי";
+      
+      // כאן המפתח: אנחנו מזריקים ל-AI את ה-SKU שגילינו (11511)
+      productContext = `מוצר שנמצא: ${foundProduct.product_name} | מק"ט (SKU): ${foundProduct.sku}`;
+    }
+
+    // [המשך הלופ של הרוטציה...]
+    // בתוך ה-systemInstruction תזריק את productContext
     const foundProduct = products?.[0] || null;
     let stockAlert = "";
     if (foundProduct) {
