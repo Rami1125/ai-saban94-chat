@@ -47,32 +47,25 @@ export async function POST(req: Request) {
     const lockSnap = await get(lockRef);
     if (lockSnap.exists()) {
       const lockTime = lockSnap.val();
-      if (Date.now() - lockTime < 5000) {
+      if (Date.now() - lockTime < 5000) { // נעילה ל-5 שניות
         return NextResponse.json({ text: "", status: "duplicate_ignored" });
       }
     }
-    await set(lockRef, Date.now());
+    await set(lockRef, Date.now()); // יצירת הנעילה
+    // -------------------------------------------
 
-    // --- 2. שליפת DNA, כרטיס לקוח ומלאי במקביל ---
-    const [
-      { data: config },
-      { data: customerCard }, // שליפת כרטיס הלקוח לפי טלפון
-      advisorData,
-      { data: products }
-    ] = await Promise.all([
-      supabase.from('system_rules').select('instruction, agent_type, is_active'),
-      supabase.from('customers').select('*').eq('phone', cleanPhone).single(), // משיכת כרטיס לקוח
-      callSidorConsultant(lastUserMsg),
-      supabase.from('inventory').select('*, stock_quantity, product_magic_link, sku').textSearch('product_name', lastUserMsg, { config: 'hebrew' }).limit(1)
-    ]);
-
+    // 2. שליפת DNA ובדיקת מפתחות מה-Supabase
+    const { data: config } = await supabase.from('system_rules')
+      .select('instruction, agent_type, is_active');
+    
     const executorDNA = config?.filter(r => r.agent_type === 'executor' && r.is_active).map(r => r.instruction).join("\n") || "";
     const activeKeysConfig = config?.filter(r => r.agent_type === 'api_key_status');
 
-    // עיבוד נתוני לקוח עבור המוח
-    const customerInfo = customerCard 
-      ? `לקוח: ${customerCard.full_name}, סיווג: ${customerCard.customer_type}, יתרה: ₪${customerCard.balance || 0}`
-      : "לקוח חדש/לא מזוהה";
+    // 3. התייעצות טכנית ובדיקת מלאי במקביל
+    const [advisorData, { data: products }] = await Promise.all([
+      callSidorConsultant(lastUserMsg),
+      supabase.from('inventory').select('*, stock_quantity, product_magic_link, sku').textSearch('product_name', lastUserMsg, { config: 'hebrew' }).limit(1)
+    ]);
 
     const foundProduct = products?.[0] || null;
     let stockAlert = "";
@@ -81,10 +74,11 @@ export async function POST(req: Request) {
       stockAlert = stock <= 0 ? `⚠️ חסר במלאי!` : stock < 10 ? `⚠️ רק ${stock} יחידות נותרו!` : "";
     }
 
-    // 4. ניהול בריכת מפתחות
+    // 4. ניהול בריכת מפתחות מהמשתנה ב-Vercel (GOOGLE_AI_KEY_POOL)
     const keyPoolString = process.env.GOOGLE_AI_KEY_POOL || "";
     const keys = keyPoolString.split(',').map(k => k.trim()).filter(k => k.length > 10);
-    const modelPool = ["gemini-1.5-flash", "gemini-1.5-pro"]; // מודלים יציבים יותר לייצור
+    
+    const modelPool = ["gemini-3.1-flash-lite-preview", "gemini-3.1-flash-preview", "gemini-3.1-pro-preview"];
     let aiResponse = "";
 
     // 5. לוגיקת רוטציה (מפתח -> מודל)
@@ -98,16 +92,7 @@ export async function POST(req: Request) {
         try {
           const model = genAI.getGenerativeModel({
             model: modelName,
-            systemInstruction: `
-              ${executorDNA}
-              --- נתוני הקשר (Context) ---
-              כרטיס לקוח: ${customerInfo}
-              יועץ טכני: ${advisorData?.reply || "אין מידע נוסף"}
-              מידע מלאי: ${foundProduct ? foundProduct.description : "לא נמצא מוצר"}
-              סטטוס מלאי: ${stockAlert}
-              --- הנחיות ---
-              פנה ללקוח בשמו אם הוא מזוהה. השתמש במידע הטכני מהמלאי כדי לתת תשובה מדויקת.
-              חתימה: H.SABAN 1994`
+            systemInstruction: `${executorDNA}\nיועץ: ${advisorData?.reply || ""}\nמלאי: ${stockAlert}\nחתימה: H.SABAN 1994`
           });
 
           const result = await model.generateContent(lastUserMsg);
@@ -121,32 +106,24 @@ export async function POST(req: Request) {
             break outerLoop; 
           }
         } catch (e: any) {
+          console.warn(`Key ${i+1} failed`);
           await updateDashboardQuota(i + 1, modelName, "QUOTA_EXCEEDED");
           continue;
         }
       }
     }
 
-    // 6. הזרקת לינקים והחזרת תוצאה
+    // 6. הזרקת לינקים ומשלוח ל-Pipeline
     if (foundProduct && aiResponse) {
       const link = foundProduct.product_magic_link || `https://sidor.vercel.app/product-pages/index.html?id=${foundProduct.sku}`;
-      aiResponse = aiResponse.replace("MAGIC_URL", link);
+      aiResponse = aiResponse.replace("MAGIC_URL", link) + (stockAlert ? `\n${stockAlert}` : "");
     }
 
     if (phone && aiResponse) {
-      await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), { 
-        text: aiResponse, 
-        timestamp: Date.now(),
-        customer_name: customerCard?.full_name || "אורח"
-      });
+      await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), { text: aiResponse, timestamp: Date.now() });
     }
 
-    // החזרת אובייקט עשיר ל-Frontend
-    return NextResponse.json({ 
-      text: aiResponse,
-      product: foundProduct, // מחזיר את המוצר כדי שדף הצאט יציג ProductCard
-      customer: customerCard
-    });
+    return NextResponse.json({ text: aiResponse });
 
   } catch (error: any) {
     console.error("Critical Error:", error.message);
