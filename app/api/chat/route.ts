@@ -77,8 +77,16 @@ export async function POST(req: Request) {
         try {
           const model = genAI.getGenerativeModel({
             model: modelName,
-            systemInstruction: `${executorDNA}\nיועץ: ${advisorData?.reply || ""}\nמלאי: ${stockAlert}\nחתימה: H.SABAN 1994`
-          });
+systemInstruction: `
+  ${executorDNA}
+  נתוני מלאי מחייבים: ${productContext} 
+  (השתמש ב-ID שמופיע כאן בלבד!)
+  
+  מידע טכני מהיועץ: ${advisorData?.reply || ""}
+  
+  חוק פורמט: שלב את המידע הטכני מהיועץ, אך את הלינק בנה אך ורק לפי ה-ID מהמלאי.
+  סיים בכתובת: MAGIC_URL
+  });
 
           const result = await model.generateContent(lastUserMsg);
           aiResponse = result.response.text();
