@@ -66,12 +66,26 @@ export async function POST(req: Request) {
         .limit(1)
     ]);
 
-    const foundProduct = products?.[0] || null;
-    let stockAlert = "";
-    if (foundProduct) {
-      const stock = foundProduct.stock_quantity || 0;
-      stockAlert = stock <= 0 ? `⚠️ חסר במלאי!` : stock < 10 ? `⚠️ רק ${stock} יחידות נותרו!` : "";
+// 7. משלוח ל-Pipeline (וואטסאפ/שירות לקוחות)
+    if (phone && aiResponse) {
+      const cleanPhone = phone.replace('+', '').trim();
+      await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), { 
+        text: aiResponse, 
+        timestamp: Date.now() 
+      });
     }
+
+    // התיקון הקריטי כאן: מחזירים גם את הטקסט וגם את אובייקט המוצר
+    return NextResponse.json({ 
+      text: aiResponse,
+      foundProduct: foundProduct // זה מה שיגרום ל-MessageBubble להציג את הכרטיס!
+    });
+
+  } catch (error: any) {
+    console.error("Critical Error:", error.message);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
 
     // 4. ניהול בריכת מפתחות מהמשתנה ב-Vercel (GOOGLE_AI_KEY_POOL)
     const keyPoolString = process.env.GOOGLE_AI_KEY_POOL || "";
