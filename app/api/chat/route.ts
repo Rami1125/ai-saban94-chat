@@ -66,26 +66,12 @@ export async function POST(req: Request) {
         .limit(1)
     ]);
 
-// 7. משלוח ל-Pipeline (וואטסאפ/שירות לקוחות)
-    if (phone && aiResponse) {
-      const cleanPhone = phone.replace('+', '').trim();
-      await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), { 
-        text: aiResponse, 
-        timestamp: Date.now() 
-      });
+    const foundProduct = products?.[0] || null;
+    let stockAlert = "";
+    if (foundProduct) {
+      const stock = foundProduct.stock_quantity || 0;
+      stockAlert = stock <= 0 ? `⚠️ חסר במלאי!` : stock < 10 ? `⚠️ רק ${stock} יחידות נותרו!` : "";
     }
-
-    // התיקון הקריטי כאן: מחזירים גם את הטקסט וגם את אובייקט המוצר
-    return NextResponse.json({ 
-      text: aiResponse,
-      foundProduct: foundProduct // זה מה שיגרום ל-MessageBubble להציג את הכרטיס!
-    });
-
-  } catch (error: any) {
-    console.error("Critical Error:", error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
 
     // 4. ניהול בריכת מפתחות מהמשתנה ב-Vercel (GOOGLE_AI_KEY_POOL)
     const keyPoolString = process.env.GOOGLE_AI_KEY_POOL || "";
@@ -139,37 +125,28 @@ export async function POST(req: Request) {
         }
       }
     }
-// 6. הזרקת לינקים ונתוני מוצר
+
+    // 6. הזרקת לינקים ומשלוח ל-Pipeline
     if (foundProduct && aiResponse.includes("MAGIC_URL")) {
+      // שליפת הלינק הישיר (עדיפות ל-magic_link ואז ל-SKU)
       const link = foundProduct.product_magic_link || `https://sidor.vercel.app/product-pages/index.html?id=${foundProduct.sku}`;
       
-      // החלפה נקייה של הלינק בטקסט
+      // החלפה נקייה של הלינק
       aiResponse = aiResponse.replace("MAGIC_URL", link);
       
-      // הוספת התראת מלאי לטקסט רק אם יש חוסר
+      // הוספת התראת מלאי רק אם יש חוסר (⚠️)
       if (stockAlert.includes("⚠️")) {
         aiResponse += `\n${stockAlert}`;
       }
     }
 
-    // 7. משלוח ל-Pipeline (וואטסאפ)
+    // 7. משלוח ל-Pipeline
     if (phone && aiResponse) {
       const cleanPhone = phone.replace('+', '').trim();
-      try {
-        await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), { 
-          text: aiResponse, 
-          timestamp: Date.now() 
-        });
-      } catch (rtdbErr) {
-        console.error("RTDB Update Error:", rtdbErr);
-      }
+      await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), { text: aiResponse, timestamp: Date.now() });
     }
 
-    // החזרת תשובה סופית לממשק הצאט
-    return NextResponse.json({ 
-      text: aiResponse,
-      foundProduct: foundProduct // מעביר את האובייקט ל-UI לצורך הצגת ה-ProductCard
-    });
+    return NextResponse.json({ text: aiResponse });
 
   } catch (error: any) {
     console.error("Critical Error:", error.message);
