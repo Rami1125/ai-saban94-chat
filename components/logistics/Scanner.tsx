@@ -1,100 +1,102 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { Html5QrcodeScanner } from "html5-qrcode";
-import { Camera, RefreshCw, AlertTriangle } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Html5Qrcode } from "html5-qrcode";
+import { Camera, RefreshCw, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function Scanner({ onScan }: { onScan: (code: string) => void }) {
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [isScannerReady, setIsScannerReady] = useState(false);
-  const scannerRef = useRef<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isStarted, setIsStarted] = useState(false);
+  const qrCodeRef = useRef<Html5Qrcode | null>(null);
 
-  const startScanner = () => {
-    // בדיקה שהאלמנט קיים ב-DOM
-    const readerElement = document.getElementById("reader");
-    if (!readerElement) return;
-
-    // אתחול הסורק
-    scannerRef.current = new Html5QrcodeScanner(
-      "reader",
-      { 
-        fps: 15, 
-        qrbox: { width: 250, height: 250 },
-        aspectRatio: 1.0,
-        rememberLastUsedCamera: true,
-        // עדיפות למצלמה אחורית (Environment)
-        videoConstraints: { facingMode: "environment" }
-      },
-      false
-    );
-
-    scannerRef.current.render(
-      (decodedText: string) => {
-        onScan(decodedText);
-      },
-      (error: any) => {
-        // שגיאות סריקה רגילות בזמן חיפוש
+  const stopScanner = async () => {
+    if (qrCodeRef.current && qrCodeRef.current.isScanning) {
+      try {
+        await qrCodeRef.current.stop();
+      } catch (err) {
+        console.error("Failed to stop scanner", err);
       }
-    );
-    setIsScannerReady(true);
+    }
+  };
+
+  const startScanner = async () => {
+    setError(null);
+    await stopScanner();
+
+    const scanner = new Html5Qrcode("reader");
+    qrCodeRef.current = scanner;
+
+    const config = {
+      fps: 10,
+      qrbox: { width: 250, height: 250 },
+    };
+
+    try {
+      // ניסיון הפעלה ישיר עם הגדרה למצלמה אחורית
+      await scanner.start(
+        { facingMode: "environment" },
+        config,
+        (decodedText) => {
+          onScan(decodedText);
+          // צליל ביפ פשוט
+          const audio = new AudioContext();
+          const osc = audio.createOscillator();
+          osc.connect(audio.destination);
+          osc.start();
+          osc.stop(audio.currentTime + 0.1);
+        },
+        () => {} // שגיאות סריקה שקטות
+      );
+      setIsStarted(true);
+    } catch (err: any) {
+      console.error("Scanner start error:", err);
+      setError("לא ניתן לגשת למצלמה. וודא שהרשאות מאושרות ושהמצלמה לא בשימוש.");
+    }
   };
 
   useEffect(() => {
-    // בקשת הרשאה ראשונית מהדפדפן
-    navigator.mediaDevices.getUserMedia({ video: true })
-      .then(() => {
-        setHasPermission(true);
-        startScanner();
-      })
-      .catch((err) => {
-        console.error("Camera permission denied:", err);
-        setHasPermission(false);
-      });
+    // השהיה קלה כדי לוודא שה-DOM מוכן לחלוטין
+    const timer = setTimeout(() => {
+      startScanner();
+    }, 500);
 
     return () => {
-      if (scannerRef.current) {
-        scannerRef.current.clear().catch(console.error);
-      }
+      clearTimeout(timer);
+      stopScanner();
     };
   }, []);
 
   return (
-    <div className="relative w-full max-w-sm mx-auto overflow-hidden rounded-[2.5rem] border-4 border-slate-900 bg-slate-950 aspect-square shadow-2xl">
+    <div className="relative w-full max-w-sm mx-auto overflow-hidden rounded-[2.5rem] border-4 border-slate-900 bg-black aspect-square shadow-2xl">
       
-      {/* אזור המצלמה */}
-      <div id="reader" className="w-full h-full"></div>
+      {/* אלמנט הוידאו - נקי ללא עיצוב פנימי של הספרייה */}
+      <div id="reader" className="w-full h-full object-cover"></div>
 
-      {/* הודעת חוסר הרשאה */}
-      {hasPermission === false && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-900/90 p-6 text-center">
-          <AlertTriangle className="text-amber-400 mb-4" size={48} />
-          <h3 className="text-white font-black text-lg mb-2">המצלמה חסומה</h3>
-          <p className="text-slate-400 text-xs mb-6">יש לאשר גישה למצלמה בהגדרות הדפדפן כדי להשתמש במסופון.</p>
-          <Button 
-            onClick={() => window.location.reload()} 
-            className="bg-white text-slate-900 hover:bg-slate-200 rounded-2xl font-black px-8"
-          >
+      {/* הודעת שגיאה */}
+      {error && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-900 p-6 text-center">
+          <AlertCircle className="text-red-500 mb-4" size={48} />
+          <p className="text-white font-bold text-sm mb-6">{error}</p>
+          <Button onClick={startScanner} className="bg-blue-600 rounded-2xl font-black">
             נסה שוב
           </Button>
         </div>
       )}
 
-      {/* Overlay בזמן טעינה או מסך שחור */}
-      {!isScannerReady && hasPermission !== false && (
+      {/* Overlay טעינה */}
+      {!isStarted && !error && (
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-900 text-white">
           <Camera className="animate-pulse text-blue-500 mb-2" size={40} />
-          <p className="text-[10px] font-black uppercase tracking-widest opacity-50">מאתחל מצלמה...</p>
+          <p className="text-[10px] font-black uppercase tracking-widest opacity-50">מתחבר למצלמה...</p>
         </div>
       )}
 
-      {/* כפתור רענון ידני קטן בצד */}
-      {isScannerReady && (
+      {/* כפתור רענון מהיר */}
+      {isStarted && (
         <button 
-          onClick={() => {
-            scannerRef.current?.clear().then(() => startScanner());
-          }}
-          className="absolute bottom-4 left-4 z-30 p-3 bg-white/20 backdrop-blur-md rounded-full text-white hover:bg-white/40 transition-all"
+          onClick={startScanner}
+          className="absolute bottom-4 left-4 z-30 p-3 bg-white/20 backdrop-blur-md rounded-full text-white"
         >
           <RefreshCw size={18} />
         </button>
