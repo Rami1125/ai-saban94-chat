@@ -1,72 +1,87 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { supabase } from "@/lib/supabase";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Search, Paintbrush } from "lucide-react";
-
-const SIZES = [
-  { label: "1 ליטר", value: "1L" },
-  { label: "5 ליטר", value: "5L" },
-  { label: "10 ליטר", value: "10L" },
-  { label: "פח (18 ליטר)", value: "18L" }
-];
+import { debounce } from "lodash"; // מומלץ להתקין: npm i lodash @types/lodash
 
 export default function ColorSelector({ onSelect }) {
   const [query, setQuery] = useState("");
   const [selectedSize, setSelectedSize] = useState("5L");
-  const [preview, setPreview] = useState({ hex: "#ffffff", code: "" });
+  const [preview, setPreview] = useState({ hex: "#ffffff", name: "בחר גוון" });
+  const [loading, setLoading] = useState(false);
 
-  const handleSearch = (val: string) => {
-    setQuery(val.toUpperCase());
-    // כאן אפשר להוסיף Fetch בזמן אמת מ-color_library
-    // לצורך הדוגמה נבצע עדכון ויזואלי פשוט
-    if (val.length > 2) {
-      const mockHex = val.includes("NWC") ? "#fcfcfc" : "#e3ded1";
-      setPreview({ hex: mockHex, code: val.toUpperCase() });
-      onSelect({ code: val.toUpperCase(), size: selectedSize, hex: mockHex });
-    }
-  };
+  // הפונקציה המרכזית: שליפת הגוון מהדאטה-בייס האמיתי
+  const fetchColorData = useCallback(
+    debounce(async (code: string) => {
+      if (code.length < 2) return;
+      
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('colors')
+        .select('hex, name, code')
+        .or(`code.ilike.${code},name.ilike.%${code}%`) // חיפוש גמיש לפי קוד או שם
+        .limit(1)
+        .single();
+
+      if (data && !error) {
+        const colorInfo = {
+          code: data.code,
+          hex: data.hex,
+          name: data.name,
+          size: selectedSize
+        };
+        setPreview({ hex: data.hex, name: data.name });
+        onSelect(colorInfo); // מעדכן את דף הקופה הראשי
+      }
+      setLoading(false);
+    }, 400), // ממתין 400 מילי-שניות מסיום ההקלדה
+    [selectedSize]
+  );
+
+  useEffect(() => {
+    if (query) fetchColorData(query);
+  }, [query, fetchColorData]);
 
   return (
-    <Card className="p-4 space-y-4 bg-slate-50 border-dashed border-2">
-      <div className="flex items-center gap-2 mb-2 text-blue-700">
-        <Paintbrush size={18} />
-        <span className="font-bold">בחירת גוון וגודל אריזה</span>
-      </div>
-
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute right-3 top-3 h-4 w-4 text-slate-400" />
-          <Input 
-            placeholder="קוד גוון (למשל NWC040W)" 
-            className="pr-10 bg-white"
-            value={query}
-            onChange={(e) => handleSearch(e.target.value)}
-          />
-        </div>
+    <div className="space-y-4">
+      <div className="relative">
+        <Input
+          placeholder="חפש קוד גוון (למשל IS0001 או 7035)"
+          value={query}
+          onChange={(e) => setQuery(e.target.value.toUpperCase())}
+          className="pl-12 font-bold tracking-widest"
+        />
+        {/* תצוגה מקדימה של הגוון בתוך האינפוט */}
         <div 
-          className="w-12 h-10 rounded border shadow-sm transition-colors duration-300"
+          className="absolute left-2 top-2 w-8 h-6 rounded border shadow-sm transition-all duration-500"
           style={{ backgroundColor: preview.hex }}
         />
       </div>
 
+      <div className="flex justify-between items-center px-1">
+        <span className="text-xs text-slate-500 font-medium">
+          {loading ? "מחפש במניפה..." : preview.name}
+        </span>
+        <span className="text-xs font-mono text-blue-600 font-bold">{preview.hex}</span>
+      </div>
+      
+      {/* כפתורי בחירת גודל (נשארים כפי שהיו) */}
       <div className="grid grid-cols-4 gap-2">
-        {SIZES.map((s) => (
-          <Button
-            key={s.value}
+        {["1L", "5L", "10L", "18L"].map((size) => (
+          <button
+            key={size}
             type="button"
-            variant={selectedSize === s.value ? "default" : "outline"}
-            className={`text-xs h-9 ${selectedSize === s.value ? 'bg-blue-600' : 'bg-white'}`}
-            onClick={() => {
-              setSelectedSize(s.value);
-              onSelect({ code: query, size: s.value, hex: preview.hex });
-            }}
+            onClick={() => setSelectedSize(size)}
+            className={`py-2 text-xs rounded-md border font-bold transition-all ${
+              selectedSize === size 
+                ? "bg-slate-800 text-white border-slate-800 shadow-md scale-105" 
+                : "bg-white text-slate-600 border-slate-200 hover:border-blue-400"
+            }`}
           >
-            {s.label}
-          </Button>
+            {size === "18L" ? 'פח' : size}
+          </button>
         ))}
       </div>
-    </Card>
+    </div>
   );
 }
