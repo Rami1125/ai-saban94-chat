@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CreditCard, Loader2, CheckCircle } from "lucide-react";
+import ProductSelector from "@/components/checkout/ProductSelector";
 
 export default function CheckoutPage() {
   const [orderState, setOrderState] = useState({ code: "", size: "5L", hex: "#ffffff" });
