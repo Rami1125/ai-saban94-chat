@@ -29,7 +29,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     fetchOrders();
-    const channel = supabase.channel('admin_v10')
+    const channel = supabase.channel('admin_final_v10')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => fetchOrders())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -60,17 +60,36 @@ export default function AdminPage() {
     `).join('');
 
     const paymentNote = order.payment_method === 'counter' 
-      ? '<h2 style="color: red; border: 3px solid red; padding: 10px; text-align: center;">נא לגבות תשלום בקופה - מזומן</h2>' 
-      : '<h2 style="color: green; border: 3px solid green; padding: 10px; text-align: center;">הזמנה שולמה באשראי</h2>';
+      ? '<div style="color: red; border: 4px solid red; padding: 15px; text-align: center; font-size: 24px; margin: 20px 0;">נא לגבות תשלום בקופה - מזומן</div>' 
+      : '<div style="color: green; border: 4px solid green; padding: 15px; text-align: center; font-size: 24px; margin: 20px 0;">הזמנה שולמה באשראי - לליקוט בלבד</div>';
 
     printWindow.document.write(`
       <html dir="rtl">
-        <head><style>body { font-family: Arial; padding: 20px; } table { width: 100%; border-collapse: collapse; margin-top: 20px; } th, td { border: 1px solid #000; padding: 10px; } .header { border-bottom: 5px solid #000; padding-bottom: 10px; }</style></head>
+        <head>
+          <title>ליקוט - ${order.customer_name}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 30px; }
+            .header { border-bottom: 5px solid #000; display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 18px; }
+            th, td { border: 1px solid #000; padding: 12px; }
+            th { background: #f0f0f0; }
+          </style>
+        </head>
         <body>
-          <div class="header"><h1>ח. סבן חומרי בניין 1994</h1><p>רשימת ליקוט | ${new Date(order.created_at).toLocaleDateString('he-IL')}</p></div>
-          <p><strong>לקוח:</strong> ${order.customer_name} | <strong>טלפון:</strong> ${order.phone}</p>
+          <div class="header">
+            <div>
+              <h1 style="margin:0;">ח. סבן חומרי בניין 1994</h1>
+              <p>סניף הוד השרון | טל: 09-7602010</p>
+            </div>
+            <div style="border: 2px solid #000; padding: 10px; font-weight: bold;">תעודת ליקוט</div>
+          </div>
+          <p><strong>שם לקוח:</strong> ${order.customer_name} | <strong>טלפון:</strong> ${order.phone}</p>
+          <p><strong>תאריך:</strong> ${new Date(order.created_at).toLocaleString('he-IL')}</p>
           ${paymentNote}
-          <table><thead><tr><th>מק"ט</th><th>שם פריט</th><th>כמות</th></tr></thead><tbody>${itemsHtml}</tbody></table>
+          <table>
+            <thead><tr><th>מק"ט</th><th>שם פריט</th><th>כמות</th></tr></thead>
+            <tbody>${itemsHtml}</tbody>
+          </table>
           <script>window.onload = () => { window.print(); window.close(); };</script>
         </body>
       </html>
@@ -78,13 +97,13 @@ export default function AdminPage() {
     printWindow.document.close();
   };
 
-  const handleToggleStatus = async (orderId: string, currentStatus: string) => {
-    setUpdatingId(orderId);
-    const newStatus = currentStatus === 'completed' ? 'pending' : 'completed';
+  const handleToggleStatus = async (order: any) => {
+    setUpdatingId(order.id);
+    const newStatus = order.status === 'completed' ? 'pending' : 'completed';
     try {
-      const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', orderId);
+      const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', order.id);
       if (error) throw error;
-      toast.success("סטטוס עודכן");
+      toast.success(newStatus === 'completed' ? "הליקוט בוצע" : "הוחזר לרשימה");
     } catch (err) {
       toast.error("שגיאה בעדכון");
     } finally {
@@ -97,8 +116,13 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 text-right" dir="rtl">
       <header className="max-w-5xl mx-auto mb-8 flex justify-between items-center bg-white p-6 rounded-[2rem] shadow-sm border">
-        <h1 className="text-2xl font-black">SabanOS Admin</h1>
-        <button onClick={fetchOrders} className="p-3 bg-slate-50 rounded-2xl"><RefreshCw size={24} /></button>
+        <div>
+          <h1 className="text-2xl font-black text-slate-900 leading-none tracking-tight">ניהול לוגיסטי SabanOS</h1>
+          <p className="text-blue-600 text-[10px] font-bold uppercase mt-1">ממשק מנהל מחסן</p>
+        </div>
+        <button onClick={fetchOrders} className="p-3 bg-slate-50 rounded-2xl hover:bg-blue-50 transition-colors">
+          <RefreshCw size={24} className="text-blue-600" />
+        </button>
       </header>
 
       <div className="max-w-5xl mx-auto space-y-6">
@@ -109,11 +133,11 @@ export default function AdminPage() {
                 <div className="bg-blue-600 p-3 rounded-2xl"><User size={20} /></div>
                 <div>
                   <h3 className="font-bold text-lg leading-none">{order.customer_name}</h3>
-                  <p className="text-xs opacity-50 mt-1 font-mono">{order.phone}</p>
+                  <p className="text-[10px] opacity-50 mt-1 font-mono">{order.phone}</p>
                 </div>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => handleShareWhatsApp(order)} className="p-3 bg-green-600/20 text-green-400 rounded-xl hover:bg-green-600 transition-all border border-green-600/20"><Share2 size={18} /></button>
+                <button onClick={() => handleShareWhatsApp(order)} className="p-3 bg-green-600/20 text-green-400 rounded-xl hover:bg-green-600 hover:text-white border border-green-600/20 transition-all"><Share2 size={18} /></button>
                 <button onClick={() => handlePrint(order)} className="p-3 bg-slate-800 rounded-xl hover:bg-slate-700 border border-slate-700 transition-all"><Printer size={18} /></button>
               </div>
             </div>
@@ -123,8 +147,8 @@ export default function AdminPage() {
                 <div className="lg:col-span-2 space-y-3">
                   <div className="flex items-center gap-2 mb-2">
                     {order.payment_method === 'counter' ? 
-                      <Badge className="bg-orange-100 text-orange-700 border-orange-200 flex gap-1 items-center"><Banknote size={14}/> תשלום בקופה (מזומן)</Badge> : 
-                      <Badge className="bg-green-100 text-green-700 border-green-200 flex gap-1 items-center"><CreditCard size={14}/> שולם באשראי</Badge>
+                      <Badge className="bg-orange-100 text-orange-700 border-orange-200 flex gap-1 items-center px-3 py-1 rounded-lg font-bold"><Banknote size={14}/> תשלום בקופה (מזומן)</Badge> : 
+                      <Badge className="bg-green-100 text-green-700 border-green-200 flex gap-1 items-center px-3 py-1 rounded-lg font-bold"><CreditCard size={14}/> שולם באשראי</Badge>
                     }
                   </div>
                   {order.order_items?.map((item: any) => (
@@ -133,20 +157,23 @@ export default function AdminPage() {
                         <span className="text-[10px] font-mono bg-white px-2 py-1 rounded border text-slate-400">{item.sku || '---'}</span>
                         <span className="font-bold text-slate-800">{item.item_name}</span>
                       </div>
-                      <Badge className="bg-blue-600 text-white font-black px-4">x{item.quantity}</Badge>
+                      <Badge className="bg-blue-600 text-white font-black px-4 py-1 rounded-xl shadow-sm">x{item.quantity}</Badge>
                     </div>
                   ))}
                 </div>
 
-                <div className="bg-slate-50 p-6 rounded-[2rem] border-2 border-dashed flex flex-col items-center justify-center relative min-h-[200px]">
+                <div className="bg-slate-50 p-6 rounded-[2rem] border-2 border-dashed flex flex-col items-center justify-center relative">
                   <Badge className={`mb-6 px-6 py-1 rounded-full font-black ${order.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
                     {order.status === 'completed' ? 'לוקט' : 'ממתין לליקוט'}
                   </Badge>
 
-                  {/* תיקון לוגיקת כפתור לחיץ */}
-                  <div className="w-full relative z-30">
+                  {/* לוגיקת כפתור לחיץ מבודדת */}
+                  <div className="w-full relative z-[100]">
                     <button 
-                      onClick={() => handleToggleStatus(order.id, order.status)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleToggleStatus(order);
+                      }}
                       disabled={updatingId === order.id}
                       className={`w-full py-4 rounded-2xl font-black text-sm shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 ${
                         order.status === 'completed' ? 'bg-white text-slate-400 border border-slate-200' : 'bg-blue-600 text-white hover:bg-blue-700'
