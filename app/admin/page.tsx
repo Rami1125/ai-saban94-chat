@@ -6,18 +6,16 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { 
   Loader2, Package, Phone, User, CheckCircle2, 
-  Printer, MessageSquare, Clock, RefreshCw, Trash2 
+  Printer, MessageSquare, Clock, RefreshCw 
 } from "lucide-react";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 
 export default function AdminPage() {
-  const [orders, setOrders] = useState([]);
+  const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
-  
-  // Ref להחזקת האלמנטים של ההזמנות לצורך צילום ל-PDF
   const orderRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
   const fetchOrders = async () => {
@@ -30,7 +28,8 @@ export default function AdminPage() {
       if (error) throw error;
       setOrders(data || []);
     } catch (error) {
-      toast.error("שגיאה בטעינת נתונים מהשרת");
+      console.error("Supabase Error:", error);
+      toast.error("שגיאה במשיכת נתונים");
     } finally {
       setLoading(false);
     }
@@ -38,25 +37,25 @@ export default function AdminPage() {
 
   useEffect(() => {
     fetchOrders();
-    // סנכרון זמן אמת
-    const channel = supabase.channel('admin_sync')
+    const channel = supabase.channel('admin_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => fetchOrders())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // --- פונקציית הדפסה חסינת ג'יבריש ---
   const handleExportPDF = async (order: any) => {
     const element = orderRefs.current[order.id];
     if (!element) return;
 
     setProcessingId(order.id);
     try {
-      // יצירת Canvas מהאלמנט (תומך בעברית מושלם כי זה צילום)
+      // תיקון שגיאת ה-LAB: html2canvas לעיתים נכשל על פונקציות צבע מורכבות. 
+      // אנחנו מבטיחים רקע לבן נקי.
       const canvas = await html2canvas(element, {
-        scale: 2, // רזולוציה גבוהה להדפסה
+        scale: 2,
         useCORS: true,
-        backgroundColor: "#ffffff",
+        backgroundColor: "#ffffff", // הבטחת רקע HEX פשוט
+        logging: false,
       });
 
       const imgData = canvas.toDataURL("image/png");
@@ -71,12 +70,10 @@ export default function AdminPage() {
       const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
 
       pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Saban_Order_${order.customer_name.replace(/\s+/g, '_')}.pdf`);
-      
-      toast.success("קובץ PDF נוצר בהצלחה");
+      pdf.save(`Order_${order.customer_name.replace(/\s+/g, '_')}.pdf`);
+      toast.success("PDF הופק בהצלחה");
     } catch (error) {
-      console.error(error);
-      toast.error("נכשלה יצירת הקובץ");
+      toast.error("שגיאה ברינדור ה-PDF. וודא שאין צבעים לא תקינים.");
     } finally {
       setProcessingId(null);
     }
@@ -84,156 +81,115 @@ export default function AdminPage() {
 
   const handleWhatsAppShare = (order: any) => {
     const items = order.order_items.map((i: any) => `• ${i.item_name} (x${i.quantity})`).join('%0A');
-    const msg = `*הזמנה חדשה - ח. סבן*%0A*לקוח:* ${order.customer_name}%0A*טלפון:* ${order.phone}%0A%0A*פריטים:*%0A${items}`;
+    const msg = `*הזמנה חדשה - ח. סבן*%0A*לקוח:* ${order.customer_name}%0A*פריטים:*%0A${items}`;
     window.open(`https://wa.me/?text=${msg}`, '_blank');
   };
 
   const toggleStatus = async (order: any) => {
     const newStatus = order.status === 'completed' ? 'pending' : 'completed';
     const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', order.id);
-    if (!error) toast.success("סטטוס עודכן");
+    if (!error) {
+      toast.success("סטטוס עודכן");
+      fetchOrders();
+    }
   };
 
   if (loading) return (
-    <div className="flex h-screen w-full items-center justify-center bg-slate-50">
+    <div className="flex h-screen items-center justify-center bg-slate-50">
       <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-10 text-right font-sans" dir="rtl">
-      <header className="max-w-5xl mx-auto mb-12 flex justify-between items-center">
-        <div>
-          <h1 className="text-4xl font-black text-slate-900 tracking-tight">ניהול הזמנות</h1>
-          <p className="text-slate-500 font-medium mt-1 italic">ח. סבן חומרי בניין 1994 בע"מ</p>
-        </div>
-        <button onClick={fetchOrders} className="p-3 bg-white rounded-2xl shadow-sm border hover:bg-slate-50">
-          <RefreshCw size={20} className="text-slate-600" />
+    <div className="min-h-screen bg-slate-50 p-4 md:p-8 text-right font-sans" dir="rtl">
+      <header className="max-w-5xl mx-auto mb-10 flex justify-between items-center">
+        <h1 className="text-3xl font-black text-slate-900">ניהול לוגיסטי - ח. סבן</h1>
+        <button onClick={fetchOrders} className="p-2 hover:rotate-180 transition-transform duration-500">
+          <RefreshCw size={24} className="text-blue-600" />
         </button>
       </header>
 
-      <div className="max-w-5xl mx-auto space-y-8">
+      <div className="max-w-5xl mx-auto space-y-6">
         {orders.map((order) => (
-          <Card key={order.id} className="border-none shadow-2xl shadow-slate-200/50 rounded-[2.5rem] overflow-hidden bg-white">
-            <div className="bg-slate-900 p-6 text-white flex justify-between items-center">
-              <div className="flex items-center gap-5">
-                <div className="bg-blue-600 p-4 rounded-2xl shadow-lg shadow-blue-500/20 text-white">
-                  <User size={24} />
-                </div>
+          <Card key={order.id} className="border-none shadow-xl rounded-[2rem] overflow-hidden bg-white">
+            {/* Header של כרטיס הזמנה */}
+            <div className="bg-slate-900 p-5 text-white flex justify-between items-center">
+              <div className="flex items-center gap-4">
+                <div className="bg-blue-600 p-3 rounded-xl"><User size={24} /></div>
                 <div>
-                  <h2 className="text-2xl font-black">{order.customer_name}</h2>
-                  <div className="flex gap-4 mt-1 opacity-80 text-sm font-medium">
-                    <span className="flex items-center gap-1"><Phone size={14} /> {order.phone}</span>
-                    <span className="flex items-center gap-1"><Clock size={14} /> {new Date(order.created_at).toLocaleTimeString('he-IL', {hour: '2-digit', minute:'2-digit'})}</span>
-                  </div>
+                  <h3 className="font-bold text-xl">{order.customer_name}</h3>
+                  <p className="text-xs text-slate-400 flex items-center gap-2 mt-1">
+                    <Phone size={14} /> {order.phone} | <Clock size={14} /> {new Date(order.created_at).toLocaleTimeString('he-IL')}
+                  </p>
                 </div>
               </div>
-              
-              <div className="flex gap-3">
-                <button 
-                  onClick={() => handleWhatsAppShare(order)}
-                  className="p-3 bg-green-600 hover:bg-green-700 rounded-2xl transition-all shadow-lg shadow-green-900/20"
-                >
-                  <MessageSquare size={22} />
+              <div className="flex gap-2">
+                <button onClick={() => handleWhatsAppShare(order)} className="p-3 bg-green-600 rounded-xl hover:bg-green-700 transition-colors">
+                  <MessageSquare size={20} />
                 </button>
                 <button 
                   disabled={processingId === order.id}
-                  onClick={() => handleExportPDF(order)}
-                  className="p-3 bg-slate-700 hover:bg-slate-600 rounded-2xl transition-all shadow-lg"
+                  onClick={() => handleExportPDF(order)} 
+                  className="p-3 bg-slate-700 rounded-xl hover:bg-slate-600 transition-colors"
                 >
-                  {processingId === order.id ? <Loader2 size={22} className="animate-spin" /> : <Printer size={22} />}
+                  {processingId === order.id ? <Loader2 size={20} className="animate-spin" /> : <Printer size={20} />}
                 </button>
               </div>
             </div>
 
-            <CardContent className="p-8">
-              {/* רכיב נסתר שמשמש לצילום ה-PDF */}
-              <div className="sr-only">
+            <CardContent className="p-6">
+              {/* אלמנט ה-PDF הנסתר (רנדור נקי ללא צבעי LAB) */}
+              <div className="hidden">
                 <div 
                   ref={(el) => (orderRefs.current[order.id] = el)}
                   className="p-10 bg-white w-[800px] text-right"
-                  dir="rtl"
+                  style={{ color: '#000000' }} // הבטחת צבע HEX פשוט
                 >
-                  <div className="border-b-4 border-slate-900 pb-6 mb-8 flex justify-between items-center">
-                    <div>
-                      <h1 className="text-3xl font-black text-slate-900">ח. סבן חומרי בניין 1994</h1>
-                      <p className="text-xl font-bold text-blue-600">רשימת ליקוט להזמנה #{order.id.slice(0,5)}</p>
-                    </div>
-                    <div className="text-left font-bold text-slate-500">
-                      <p>{new Date(order.created_at).toLocaleDateString('he-IL')}</p>
-                      <p>{new Date(order.created_at).toLocaleTimeString('he-IL')}</p>
-                    </div>
-                  </div>
-                  <div className="mb-8 space-y-2 text-2xl">
-                    <p><strong>לקוח:</strong> {order.customer_name}</p>
-                    <p><strong>טלפון:</strong> {order.phone}</p>
-                  </div>
-                  <table className="w-full border-collapse text-2xl">
+                  <h1 className="text-2xl font-black mb-4">ח. סבן - הזמנת ליקוט</h1>
+                  <p className="mb-2"><strong>לקוח:</strong> {order.customer_name}</p>
+                  <p className="mb-6 border-b pb-4"><strong>טלפון:</strong> {order.phone}</p>
+                  <table className="w-full border-collapse">
                     <thead>
-                      <tr className="bg-slate-100">
-                        <th className="border-2 border-slate-200 p-4">פריט</th>
-                        <th className="border-2 border-slate-200 p-4">מק"ט</th>
-                        <th className="border-2 border-slate-200 p-4 text-center">כמות</th>
+                      <tr className="bg-gray-100">
+                        <th className="border p-2">מוצר</th>
+                        <th className="border p-2 text-center">כמות</th>
                       </tr>
                     </thead>
                     <tbody>
                       {order.order_items?.map((item: any) => (
                         <tr key={item.id}>
-                          <td className="border-2 border-slate-200 p-4 font-black">{item.item_name}</td>
-                          <td className="border-2 border-slate-200 p-4 font-mono">{item.sku || '-'}</td>
-                          <td className="border-2 border-slate-200 p-4 text-center font-black text-3xl">{item.quantity}</td>
+                          <td className="border p-2 font-bold">{item.item_name}</td>
+                          <td className="border p-2 text-center font-black">{item.quantity}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  <div className="mt-12 pt-6 border-t border-slate-200 text-center text-slate-400 font-bold">
-                    הופק באמצעות מערכת SabanOS
-                  </div>
                 </div>
               </div>
 
               {/* תצוגה במסך הניהול */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                <div className="md:col-span-2 space-y-4">
-                  <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest">פירוט פריטים</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-3">
                   {order.order_items?.map((item: any) => (
-                    <div key={item.id} className="flex items-center justify-between bg-slate-50 p-5 rounded-3xl border border-slate-100 group hover:bg-blue-50/50 transition-colors">
-                      <div className="flex items-center gap-5">
-                        {item.hex_color ? (
-                          <div className="w-14 h-14 rounded-2xl border-4 border-white shadow-sm shrink-0" style={{ backgroundColor: item.hex_color }} />
-                        ) : (
-                          <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-blue-600 border border-slate-200 shrink-0 shadow-sm">
-                            <Package size={28} />
-                          </div>
-                        )}
-                        <div>
-                          <p className="font-black text-slate-800 text-lg leading-tight">{item.item_name}</p>
-                          <p className="text-xs text-slate-500 font-bold mt-1 uppercase tracking-tighter">
-                            {item.sku ? `מק"ט: ${item.sku}` : "ללא מק\"ט"} {item.container_size && ` | אריזה: ${item.container_size}`}
-                          </p>
-                        </div>
+                    <div key={item.id} className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                      <div className="flex items-center gap-3">
+                        <Package className="text-blue-500" size={20} />
+                        <span className="font-bold">{item.item_name}</span>
                       </div>
-                      <div className="text-center bg-white px-5 py-2 rounded-2xl border border-slate-100 shadow-sm min-w-[70px]">
-                        <p className="text-[10px] text-slate-400 font-black uppercase">כמות</p>
-                        <p className="text-2xl font-black text-blue-600">{item.quantity}</p>
-                      </div>
+                      <Badge variant="outline" className="font-black text-blue-600 border-blue-200 bg-white">
+                        x{item.quantity}
+                      </Badge>
                     </div>
                   ))}
                 </div>
-
-                <div className="flex flex-col justify-between p-6 bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200">
-                  <div className="text-center mb-6">
-                    <p className="text-xs font-black text-slate-400 mb-2">סטטוס הזמנה</p>
-                    <Badge className={`px-6 py-2 rounded-full text-sm font-black ${order.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-                      {order.status === 'completed' ? 'הושלם' : 'ממתין לליקוט'}
-                    </Badge>
-                  </div>
+                <div className="flex flex-col justify-center items-center p-6 bg-slate-50 rounded-2xl border-2 border-dashed">
+                  <Badge className={`mb-4 px-4 py-1 rounded-full ${order.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                    {order.status === 'completed' ? 'בוצע' : 'ממתין'}
+                  </Badge>
                   <button 
                     onClick={() => toggleStatus(order)}
-                    className={`w-full py-5 rounded-2xl font-black text-lg transition-all active:scale-95 shadow-lg ${
-                      order.status === 'completed' 
-                        ? 'bg-slate-200 text-slate-600 hover:bg-slate-300' 
-                        : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200'
+                    className={`w-full py-4 rounded-xl font-black transition-all ${
+                      order.status === 'completed' ? 'bg-slate-200 text-slate-600' : 'bg-blue-600 text-white shadow-lg'
                     }`}
                   >
                     {order.status === 'completed' ? "החזר לרשימה" : "סיים ליקוט"}
