@@ -2,31 +2,27 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Package, Paintbucket, Phone, User, Clock, CheckCircle2 } from "lucide-react";
+import { Loader2, Package, Phone, User, CheckCircle2, Printer, Share2, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
 
 export default function AdminPage() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // שליפת הזמנות כולל הפריטים שלהן (Join)
   async function fetchOrders() {
     try {
       const { data, error } = await supabase
         .from('orders')
-        .select(`
-          *,
-          order_items (*)
-        `)
+        .select(`*, order_items (*)`)
         .order('created_at', { ascending: false });
-
       if (error) throw error;
       setOrders(data || []);
     } catch (error) {
-      console.error("Fetch error:", error);
-      toast.error("שגיאה בטעינת הזמנות");
+      toast.error("שגיאה בטעינת נתונים");
     } finally {
       setLoading(false);
     }
@@ -34,126 +30,124 @@ export default function AdminPage() {
 
   useEffect(() => {
     fetchOrders();
-    
-    // בונוס: האזנה לשינויים בזמן אמת (Realtime)
-    const channel = supabase
-      .channel('schema-db-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-        fetchOrders();
-      })
-      .subscribe();
-
+    const channel = supabase.channel('admin-sync').on('postgres_changes', 
+      { event: '*', schema: 'public', table: 'orders' }, () => fetchOrders()).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  const updateStatus = async (orderId, newStatus) => {
-    const { error } = await supabase
-      .from('orders')
-      .update({ status: newStatus })
-      .eq('id', orderId);
+  // --- פונקציית הדפסה ל-PDF ---
+  const generatePDF = (order) => {
+    const doc = new jsPDF({ orientation: "p", unit: "mm", format: "a4" });
+    
+    // הגדרות בסיסיות (הערה: PDF לא תומך בעברית ללא פונט מותאם, נשתמש באנגלית/מספרים או ייצוא גרפי)
+    doc.setFontSize(20);
+    doc.text(`Order ID: ${order.id.slice(0,8)}`, 10, 20);
+    doc.setFontSize(12);
+    doc.text(`Customer: ${order.customer_name}`, 10, 30);
+    doc.text(`Phone: ${order.phone}`, 10, 38);
+    doc.text(`Date: ${new Date(order.created_at).toLocaleString('he-IL')}`, 10, 46);
 
+    const tableRows = order.order_items.map(item => [
+      item.item_name,
+      item.sku || '-',
+      item.quantity.toString(),
+      item.container_size || '-'
+    ]);
+
+    (doc as any).autoTable({
+      head: [['Item', 'SKU', 'Qty', 'Size']],
+      body: tableRows,
+      startY: 55,
+      theme: 'grid',
+      styles: { halign: 'left' }
+    });
+
+    doc.save(`Order_${order.customer_name}.pdf`);
+    toast.success("קובץ PDF נוצר");
+  };
+
+  // --- פונקציית שיתוף לוואטסאפ ---
+  const shareToWhatsApp = (order) => {
+    const itemsText = order.order_items
+      .map(item => `• ${item.item_name} (כמות: ${item.quantity}) ${item.sku ? `[${item.sku}]` : ''}`)
+      .join('%0A');
+
+    const text = `*הזמנה חדשה - ח. סבן*%0A------------------%0A*לקוח:* ${order.customer_name}%0A*טלפון:* ${order.phone}%0A*פריטים:*%0A${itemsText}%0A------------------%0A*נא להכין במחסן!*`;
+    
+    window.open(`https://wa.me/?text=${text}`, '_blank');
+  };
+
+  const updateStatus = async (orderId, newStatus) => {
+    const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', orderId);
     if (!error) {
-      toast.success(`הסטטוס עודכן ל-${newStatus}`);
+      toast.success("סטטוס עודכן");
       fetchOrders();
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-slate-50">
-        <div className="text-center">
-          <Loader2 className="animate-spin h-12 w-12 text-blue-600 mx-auto mb-4" />
-          <p className="text-slate-500 font-medium">טוען הזמנות מהקופה...</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin h-10 w-10 text-blue-600" /></div>;
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 dir-rtl" dir="rtl">
-      <header className="max-w-5xl mx-auto mb-8 flex justify-between items-end">
-        <div>
-          <h1 className="text-4xl font-black text-slate-900 tracking-tight">ניהול הזמנות</h1>
-          <p className="text-slate-500">ח. סבן - מרכז לוגיסטי</p>
-        </div>
-        <Badge className="bg-blue-600 text-white px-4 py-1.5 rounded-full text-lg">
-          {orders.length} ממתינות
-        </Badge>
+      <header className="max-w-5xl mx-auto mb-8 flex justify-between items-center">
+        <h1 className="text-3xl font-black text-slate-900 tracking-tight">ניהול הזמנות ח. סבן</h1>
+        <Badge className="bg-blue-600 text-lg px-4">{orders.length}</Badge>
       </header>
 
       <div className="max-w-5xl mx-auto grid gap-6">
-        {orders.length === 0 ? (
-          <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-slate-200">
-            <p className="text-slate-400 text-xl font-medium">אין הזמנות חדשות כרגע</p>
-          </div>
-        ) : (
-          orders.map((order) => (
-            <Card key={order.id} className="border-none shadow-xl shadow-slate-200/50 rounded-3xl overflow-hidden bg-white">
-              <div className="bg-slate-900 p-4 text-white flex justify-between items-center">
-                <div className="flex items-center gap-4">
-                  <div className="bg-blue-600 p-2 rounded-lg">
-                    <User size={20} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-lg leading-tight">{order.customer_name}</h3>
-                    <p className="text-slate-400 text-xs flex items-center gap-1">
-                      <Phone size={10} /> {order.phone}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-left">
-                  <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">זמן הזמנה</p>
-                  <p className="text-sm font-mono">{new Date(order.created_at).toLocaleTimeString('he-IL')}</p>
+        {orders.map((order) => (
+          <Card key={order.id} className="border-none shadow-lg rounded-3xl overflow-hidden bg-white">
+            <div className="bg-slate-900 p-4 text-white flex justify-between items-center">
+              <div className="flex items-center gap-4">
+                <div className="bg-blue-600 p-2 rounded-lg"><User size={20} /></div>
+                <div>
+                  <h3 className="font-bold text-lg">{order.customer_name}</h3>
+                  <p className="text-slate-400 text-xs">{order.phone}</p>
                 </div>
               </div>
+              <div className="flex gap-2">
+                <button onClick={() => shareToWhatsApp(order)} className="p-2 bg-green-600 rounded-full hover:bg-green-700 transition-colors">
+                  <MessageSquare size={18} />
+                </button>
+                <button onClick={() => generatePDF(order)} className="p-2 bg-slate-700 rounded-full hover:bg-slate-600 transition-colors">
+                  <Printer size={18} />
+                </button>
+              </div>
+            </div>
 
-              <CardContent className="p-6">
-                <div className="space-y-4">
-                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-2">פירוט סל הקניות:</h4>
-                  {order.order_items?.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                      <div className="flex items-center gap-4">
-                        {item.hex_color ? (
-                          <div className="w-12 h-12 rounded-xl border-2 border-white shadow-sm" style={{ backgroundColor: item.hex_color }} />
-                        ) : (
-                          <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-blue-600 border border-slate-100">
-                            <Package size={24} />
-                          </div>
-                        )}
-                        <div>
-                          <p className="font-black text-slate-800">{item.item_name}</p>
-                          <p className="text-xs text-slate-500 font-medium">
-                            {item.sku ? `מק"ט: ${item.sku}` : "גוון בהתאמה"} 
-                            {item.container_size && ` | אריזה: ${item.container_size}`}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-center bg-white px-4 py-2 rounded-xl border border-slate-100">
-                        <p className="text-[10px] text-slate-400 font-bold uppercase">כמות</p>
-                        <p className="text-xl font-black text-blue-600">{item.quantity}</p>
+            <CardContent className="p-6">
+              <div className="space-y-3">
+                {order.order_items?.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <div className="flex items-center gap-3">
+                      {item.hex_color ? <div className="w-10 h-10 rounded-lg border" style={{ backgroundColor: item.hex_color }} /> : <Package size={20} className="text-blue-500"/>}
+                      <div>
+                        <p className="font-bold text-sm">{item.item_name}</p>
+                        <p className="text-[10px] text-slate-500">{item.sku || 'ללא מק"ט'}</p>
                       </div>
                     </div>
-                  ))}
-                </div>
-
-                <div className="mt-8 pt-6 border-t border-slate-100 flex justify-between items-center">
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => updateStatus(order.id, 'completed')}
-                      className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-xl font-bold transition-all active:scale-95"
-                    >
-                      <CheckCircle2 size={18} /> סמן כבוצע
-                    </button>
-                    <button className="text-slate-400 hover:text-slate-600 px-4 font-medium text-sm">הדפס מדבקה</button>
+                    <div className="text-center bg-white px-3 py-1 rounded-lg border">
+                      <p className="text-lg font-black text-blue-600">{item.quantity}</p>
+                    </div>
                   </div>
-                  <Badge className={`${order.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'} px-4 py-1 rounded-lg font-bold`}>
-                    {order.status === 'completed' ? 'הושלם' : 'ממתין להכנה'}
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
-          ))
-        )}
+                ))}
+              </div>
+
+              <div className="mt-6 pt-4 border-t flex justify-between items-center">
+                <button 
+                  onClick={() => updateStatus(order.id, 'completed')}
+                  disabled={order.status === 'completed'}
+                  className={`flex items-center gap-2 px-6 py-2 rounded-xl font-bold transition-all ${order.status === 'completed' ? 'bg-slate-100 text-slate-400' : 'bg-green-500 text-white hover:bg-green-600'}`}
+                >
+                  <CheckCircle2 size={18} /> {order.status === 'completed' ? 'בוצע' : 'סמן כבוצע'}
+                </button>
+                <Badge className={order.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}>
+                  {order.status === 'completed' ? 'הושלם' : 'ממתין'}
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
     </div>
   );
