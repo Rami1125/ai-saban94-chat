@@ -34,7 +34,8 @@ export default function PremiumCheckout() {
 
   const addToCart = (product: any, color = "סטנדרט") => {
     setCart(prev => [...prev, { ...product, selectedColor: color, quantity: 1 }]);
-    toast.success(`${product.name} {`נוסף לסל`}`);
+    // תיקון סינטקס כאן - שימוש ב-Backticks רגילים בתוך פונקציה
+    toast.success(`${product.name} נוסף לסל`);
   };
 
   const handleScanProduct = async (sku: string) => {
@@ -43,7 +44,8 @@ export default function PremiumCheckout() {
       addToCart(data);
       setIsScannerOpen(false);
     } else {
-      toast.error(`מק"ט ${sku} {`לא נמצא`}`);
+      // תיקון סינטקס כאן
+      toast.error(`מק"ט ${sku} לא נמצא`);
     }
   };
 
@@ -51,10 +53,10 @@ export default function PremiumCheckout() {
 
   return (
     <div className="min-h-screen bg-[#FCF9F5] pb-32" dir="rtl">
-      {/* Header יוקרתי */}
+      {/* Header */}
       <header className="bg-white p-6 rounded-b-[3rem] shadow-sm border-b border-slate-100 sticky top-0 z-40">
         <div className="flex justify-between items-center max-w-xl mx-auto">
-          <div>
+          <div className="text-right">
             <h1 className="text-2xl font-black text-slate-900 tracking-tighter italic">{`ח.סבן`} <span className="text-blue-600">1994</span></h1>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Premium Logistics App</p>
           </div>
@@ -65,7 +67,6 @@ export default function PremiumCheckout() {
       </header>
 
       <main className="p-6 max-w-xl mx-auto space-y-8">
-        {/* כפתורי פעולה גדולים */}
         <div className="grid grid-cols-2 gap-4">
           <button onClick={() => setIsScannerOpen(true)} className="bg-slate-900 h-36 rounded-[2.5rem] flex flex-col items-center justify-center gap-3 shadow-2xl active:scale-95 transition-all">
             <div className="bg-blue-600 p-3 rounded-xl"><Scan className="text-white" size={24} /></div>
@@ -93,7 +94,6 @@ export default function PremiumCheckout() {
           </Dialog>
         </div>
 
-        {/* רשימת ליקוט */}
         <div className="space-y-4">
           <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest px-2">{`פריטים לליקוט`} ({cart.length})</h3>
           {cart.length === 0 ? (
@@ -117,7 +117,6 @@ export default function PremiumCheckout() {
         </div>
       </main>
 
-      {/* יועץ AI Popup */}
       <Dialog open={isAiOpen} onOpenChange={setIsAiOpen}>
         <DialogContent className="bg-white/95 backdrop-blur-2xl border-none rounded-[3rem] p-10 text-center shadow-2xl">
           <div className="w-20 h-20 bg-blue-600 rounded-[1.5rem] flex items-center justify-center mx-auto mb-6 shadow-xl shadow-blue-200">
@@ -125,13 +124,12 @@ export default function PremiumCheckout() {
           </div>
           <h2 className="text-2xl font-black text-slate-900 mb-2">{`יועץ המומחה של סבן`}</h2>
           <p className="text-slate-500 font-medium mb-8 leading-relaxed">
-            {`"שלום רמי, אני כאן כדי לעזור לך להתאים את החומרים המדויקים לפרויקט. דבקים, איטום או גיוון שליכט - רק תשאל."`}
+            {`"שלום רמי, אני כאן כדי לעזור לך להתאים את החומרים המדויקים לפרויקט."`}
           </p>
           <Button className="w-full h-14 bg-slate-900 rounded-2xl font-black text-lg" onClick={() => setIsAiOpen(false)}>{`בוא נתחיל לסחור`}</Button>
         </DialogContent>
       </Dialog>
 
-      {/* סורק Popup */}
       <Dialog open={isScannerOpen} onOpenChange={setIsScannerOpen}>
         <DialogContent className="p-0 bg-transparent border-none overflow-hidden max-w-[400px]">
            <div className="bg-slate-900 p-2 rounded-[3rem]">
@@ -141,7 +139,6 @@ export default function PremiumCheckout() {
         </DialogContent>
       </Dialog>
 
-      {/* סיכום הזמנה בתחתית */}
       <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-3xl border-t p-8 rounded-t-[3.5rem] shadow-2xl z-50">
         <div className="max-w-xl mx-auto flex items-center justify-between">
           <div className="text-right">
