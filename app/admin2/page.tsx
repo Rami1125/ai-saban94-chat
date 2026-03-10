@@ -24,7 +24,6 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // טעינת נתונים
   const fetchData = async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -40,7 +39,6 @@ export default function AdminDashboard() {
     fetchData();
   }, []);
 
-  // עדכון "מוצר החודש" (Promoted Product)
   const togglePromoted = async (id: string, currentStatus: boolean) => {
     const { error } = await supabase
       .from("products")
@@ -48,9 +46,9 @@ export default function AdminDashboard() {
       .eq("id", id);
 
     if (error) {
-      toast.error("שגיאה בעדכון המבצע");
+      toast.error(`שגיאה בעדכון המבצע`);
     } else {
-      toast.success("סטטוס המבצע עודכן");
+      toast.success(`סטטוס המבצע עודכן`);
       fetchData();
     }
   };
@@ -62,29 +60,29 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-[#FCF9F5] flex font-sans" dir="rtl">
       
-      {/* Sidebar - עיצוב מרובע מגושם ויוקרתי */}
+      {/* Sidebar */}
       <aside className="w-72 bg-white border-l border-slate-100 p-8 flex flex-col gap-8 hidden lg:flex">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-blue-100">S</div>
           <div>
-            <h2 className="text-xl font-black text-slate-900 tracking-tighter leading-none">ניהול סבן</h2>
+            <h2 className="text-xl font-black text-slate-900 tracking-tighter leading-none">{`ניהול סבן`}</h2>
             <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-1">Admin Panel v3.0</p>
           </div>
         </div>
 
         <nav className="space-y-2">
-          <NavItem icon={<LayoutDashboard size={20}/>} label="דאשבורד" active />
-          <NavItem icon={<Package size={20}/>} label="ניהול מלאי" />
-          <NavItem icon={<Store size={20}/>} label="סניפים" />
-          <NavItem icon={<TrendingUp size={20}/>} label="דוחות מכירה" />
-          <NavItem icon={<Settings size={20}/>} label="הגדרות מערכת" />
+          <NavItem icon={<LayoutDashboard size={20}/>} label={`דאשבורד`} active />
+          <NavItem icon={<Package size={20}/>} label={`ניהול מלאי`} />
+          <NavItem icon={<Store size={20}/>} label={`סניפים`} />
+          <NavItem icon={<TrendingUp size={20}/>} label={`דוחות מכירה`} />
+          <NavItem icon={<Settings size={20}/>} label={`הגדרות מערכת`} />
         </nav>
 
         <div className="mt-auto bg-blue-50 p-6 rounded-[2rem] border border-blue-100">
-          <p className="text-xs font-black text-blue-700 mb-2">סטטוס מערכת</p>
+          <p className="text-xs font-black text-blue-700 mb-2">{`סטטוס מערכת`}</p>
           <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-            סנכרון Supabase תקין
+            {`סנכרון Supabase תקין`}
           </div>
         </div>
       </aside>
@@ -92,49 +90,36 @@ export default function AdminDashboard() {
       {/* Main Content */}
       <main className="flex-1 p-8 lg:p-12 overflow-y-auto">
         
-        {/* Header */}
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
           <div>
-            <h1 className="text-4xl font-black text-slate-900 tracking-tighter">ניהול קטלוג ומבצעים</h1>
-            <p className="text-slate-400 font-medium mt-1">שלוט במוצרים המוצגים בסניפי החרש והתלמיד</p>
+            <h1 className="text-4xl font-black text-slate-900 tracking-tighter">{`ניהול קטלוג ומבצעים`}</h1>
+            <p className="text-slate-400 font-medium mt-1">{`שלוט במוצרים המוצגים בסניפי החרש והתלמיד`}</p>
           </div>
           <Button className="bg-blue-600 hover:bg-blue-700 h-14 px-8 rounded-2xl font-black text-lg shadow-xl shadow-blue-100 gap-2">
-            <Plus size={20} /> הוסף מוצר חדש
+            <Plus size={20} /> {`הוסף מוצר חדש`}
           </Button>
         </header>
-{/* Stats Grid */}
-<div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-  <StatCard 
-    label={`סה"כ מוצרים`} 
-    value={products.length} 
-    color="blue" 
-  />
-  <StatCard 
-    label="מוצרים במבצע" 
-    value={products.filter(p => p.is_promoted).length} 
-    color="amber" 
-  />
-  <StatCard 
-    label="חוסרים במלאי" 
-    value="12" 
-    color="red" 
-  />
-</div>
 
-        {/* Product Table / Catalog Management */}
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+          <StatCard label={`סה"כ מוצרים`} value={products.length} color="blue" />
+          <StatCard label={`מוצרים במבצע`} value={products.filter(p => p.is_promoted).length} color="amber" />
+          <StatCard label={`חוסרים במלאי`} value="12" color="red" />
+        </div>
+
         <section className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden">
           <div className="p-8 border-b border-slate-50 flex flex-col md:flex-row justify-between gap-4">
             <div className="relative w-full md:w-96">
               <Search className="absolute right-4 top-3.5 text-slate-400" size={18} />
-<Input 
-  placeholder={`חיפוש לפי שם או מק"ט...`} 
-  className="rounded-2xl bg-slate-50 border-none h-12 pr-12 font-bold"
-  value={searchQuery}
-  onChange={(e) => setSearchQuery(e.target.value)}
-/>
+              <Input 
+                placeholder={`חיפוש לפי שם או מק"ט...`} 
+                className="rounded-2xl bg-slate-50 border-none h-12 pr-12 font-bold"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
             <Button variant="ghost" onClick={fetchData} className="rounded-xl gap-2 text-slate-400">
-              <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> רענן נתונים
+              <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> {`רענן נתונים`}
             </Button>
           </div>
 
@@ -142,12 +127,12 @@ export default function AdminDashboard() {
             <table className="w-full text-right">
               <thead>
                 <tr className="bg-slate-50/50 text-[11px] font-black text-slate-400 uppercase tracking-widest">
-                  <th className="p-6">מוצר</th>
-                  <th className="p-6">מק"ט</th>
-                  <th className="p-6">מחיר</th>
-                  <th className="p-6">מלאי</th>
-                  <th className="p-6">מוצר החודש</th>
-                  <th className="p-6">פעולות</th>
+                  <th className="p-6">{`מוצר`}</th>
+                  <th className="p-6">{`מק"ט`}</th>
+                  <th className="p-6">{`מחיר`}</th>
+                  <th className="p-6">{`מלאי`}</th>
+                  <th className="p-6">{`מוצר החודש`}</th>
+                  <th className="p-6">{`פעולות`}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -163,7 +148,7 @@ export default function AdminDashboard() {
                     <td className="p-6 font-black text-slate-900">₪{product.price}</td>
                     <td className="p-6">
                       <span className={`px-3 py-1 rounded-full text-[10px] font-black ${product.stock > 10 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        {product.stock} יח'
+                        {product.stock} {`יח"`}
                       </span>
                     </td>
                     <td className="p-6">
@@ -191,7 +176,6 @@ export default function AdminDashboard() {
   );
 }
 
-// Components פנימיים לעיצוב נקי
 function NavItem({ icon, label, active = false }: { icon: any, label: string, active?: boolean }) {
   return (
     <button className={`w-full flex items-center gap-4 p-4 rounded-2xl font-black text-sm transition-all ${active ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-900'}`}>
