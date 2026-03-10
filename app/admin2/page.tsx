@@ -126,12 +126,12 @@ export default function AdminDashboard() {
           <div className="p-8 border-b border-slate-50 flex flex-col md:flex-row justify-between gap-4">
             <div className="relative w-full md:w-96">
               <Search className="absolute right-4 top-3.5 text-slate-400" size={18} />
-              <Input 
-                placeholder="חיפוש לפי שם או מק"ט..." 
-                className="rounded-2xl bg-slate-50 border-none h-12 pr-12 font-bold"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+<Input 
+  placeholder={`חיפוש לפי שם או מק"ט...`} 
+  className="rounded-2xl bg-slate-50 border-none h-12 pr-12 font-bold"
+  value={searchQuery}
+  onChange={(e) => setSearchQuery(e.target.value)}
+/>
             </div>
             <Button variant="ghost" onClick={fetchData} className="rounded-xl gap-2 text-slate-400">
               <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> רענן נתונים
