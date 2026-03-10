@@ -102,13 +102,24 @@ export default function AdminDashboard() {
             <Plus size={20} /> הוסף מוצר חדש
           </Button>
         </header>
-
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-          <StatCard label="סה"כ מוצרים" value={products.length} color="blue" />
-          <StatCard label="מוצרים במבצע" value={products.filter(p => p.is_promoted).length} color="amber" />
-          <StatCard label="חוסרים במלאי" value="12" color="red" />
-        </div>
+{/* Stats Grid */}
+<div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+  <StatCard 
+    label={`סה"כ מוצרים`} 
+    value={products.length} 
+    color="blue" 
+  />
+  <StatCard 
+    label="מוצרים במבצע" 
+    value={products.filter(p => p.is_promoted).length} 
+    color="amber" 
+  />
+  <StatCard 
+    label="חוסרים במלאי" 
+    value="12" 
+    color="red" 
+  />
+</div>
 
         {/* Product Table / Catalog Management */}
         <section className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden">
