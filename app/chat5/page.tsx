@@ -1,9 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { ChatShell } from "./components/chat-shell";
-import { AnimatedOrb } from "./components/animated-orb";
+import { ChatShell } from "./components/chat-shell"; // שים לב אם זה chat-shell או ChatShell
+import { AnimatedOrb } from "./components/animated-orb"; 
 import { Composer } from "./components/Composer";
 import { MessageList } from "./components/message-list";
 import { ProductCard } from "./components/ProductCard";
