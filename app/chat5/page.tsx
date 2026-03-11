@@ -8,9 +8,7 @@ import dynamic from "next/dynamic";
  * זה פותר בעיות שבהן השרת מחפש קובץ עם אותיות גדולות/קטנות ולא מוצא.
  */
 
-const ChatShell = dynamic(() => import("./components/chat-shell").then(m => m.ChatShell || m.default), { 
-  ssr: true,
-  fallback: <div className="min-h-screen bg-black" /> 
+const ChatShell = dynamic(() => import("@/components/chat-shell"));
 });
 
 const AnimatedOrb = dynamic(() => import("./components/animated-orb").then(m => m.AnimatedOrb || m.default), { 
