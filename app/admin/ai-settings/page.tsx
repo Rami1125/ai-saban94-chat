@@ -2,14 +2,24 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
+// פיצול הייבוא מבטיח ש-Vercel יזהה את האייקון בוודאות
+import { Database } from "lucide-react"; 
 import { 
-  Zap, Save, Edit3, Trash2, RefreshCw, 
-  Play, Terminal, ChevronLeft, ChevronRight,
-  MoreVertical, Search, CheckCircle2
+  Zap, 
+  Save, 
+  Edit3, 
+  Trash2, 
+  RefreshCw, 
+  Play, 
+  Terminal, 
+  ShieldAlert, 
+  MessageSquare, 
+  ChevronDown, 
+  Check 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export default function SabanAIStudioMobile() {
+export default function SabanAIStudioAdmin() {
   const [rules, setRules] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [logs, setLogs] = useState<{t: string, m: string, s: string}[]>([]);
