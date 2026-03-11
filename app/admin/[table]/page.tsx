@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { 
   Plus, Search, Edit2, Trash2, 
-  RefreshCw, Database, ChevronRight, AlertCircle
+  RefreshCw, Database, ChevronRight 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import DynamicModal from "@/components/admin/DynamicModal";
@@ -13,61 +13,53 @@ import DynamicModal from "@/components/admin/DynamicModal";
 export default function DynamicTablePage() {
   const params = useParams();
   
-  // 1. זיהוי שם הטבלה בצורה בטוחה
+  // 1. חילוץ שם הטבלה ובדיקת תקינות אגרסיבית
   const tableName = useMemo(() => {
     const table = params?.table;
-    return Array.isArray(table) ? table[0] : table;
+    const name = Array.isArray(table) ? table[0] : table;
+    
+    // אם השם ריק, הוא "[table]", או שהוא מכיל סוגריים - הוא לא תקין
+    if (!name || name === "[table]" || name.includes("[") || name.includes("]")) {
+      return null;
+    }
+    return name;
   }, [params?.table]);
-
-  // 2. פונקציית בדיקת תקינות (שומר הסף)
-  const isValidTable = useCallback((name: string | undefined) => {
-    if (!name) return false;
-    const forbidden = ["[table]", "undefined", "null", "default"];
-    // חסימה אם השם ברשימת האסורים או מכיל סוגריים של Next.js
-    return !forbidden.includes(name) && !name.includes("[") && !name.includes("]");
-  }, []);
 
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // 3. שליפת נתונים - מורצת רק אם השם תקין
+  // 2. פונקציית Fetch מוגנת לחלוטין
   const fetchData = useCallback(async () => {
-    if (!isValidTable(tableName)) return;
+    // עצירה מוחלטת אם שם הטבלה לא פוענח עדיין
+    if (!tableName) return;
 
     setLoading(true);
-    setError(null);
-
     try {
       const { data: result, error: supabaseError } = await supabase
-        .from(tableName!)
+        .from(tableName)
         .select("*")
         .order("created_at", { ascending: false });
 
       if (supabaseError) throw supabaseError;
       setData(result || []);
     } catch (err: any) {
-      console.error("Supabase Error:", err.message);
-      setError(err.message);
+      console.error("Supabase Fetch Blocked:", err.message);
     } finally {
       setLoading(false);
     }
-  }, [tableName, isValidTable]);
+  }, [tableName]);
 
-  // 4. אפקט טעינה ו-Realtime
+  // 3. הפעלת ה-Sync רק כשהטבלה תקינה
   useEffect(() => {
-    if (!isValidTable(tableName)) {
-      setLoading(false);
-      return;
-    }
+    if (!tableName) return;
 
     fetchData();
 
     const channel = supabase
-      .channel(`db-sync-${tableName}`)
-      .on('postgres_changes', { event: '*', table: tableName!, schema: 'public' }, () => {
+      .channel(`realtime-${tableName}`)
+      .on('postgres_changes', { event: '*', table: tableName, schema: 'public' }, () => {
         fetchData(); 
       })
       .subscribe();
@@ -75,9 +67,9 @@ export default function DynamicTablePage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [tableName, fetchData, isValidTable]);
+  }, [tableName, fetchData]);
 
-  // סינון חיפוש
+  // 4. סינון נתונים
   const filteredData = data.filter((item) =>
     Object.values(item).some(
       (val) => val && val.toString().toLowerCase().includes(searchTerm.toLowerCase())
@@ -86,19 +78,18 @@ export default function DynamicTablePage() {
 
   const columns = data.length > 0 ? Object.keys(data[0]) : [];
 
-  // 5. הגנה ויזואלית - אם השם לא תקין, אל תציג את הטבלה בכלל
-  if (!isValidTable(tableName)) {
+  // 5. המנעול הוויזואלי - אם הנתיב הוא "[table]", ה-JSX הזה בכלל לא מרנדר קריאות ל-DB
+  if (!tableName) {
     return (
-      <div className="p-24 text-center flex flex-col items-center justify-center min-h-screen bg-slate-50">
-         <RefreshCw size={32} className="animate-spin text-blue-500 mb-4 opacity-20" />
-         <p className="text-slate-400 font-black uppercase tracking-widest text-[10px]">ממתין לנתיב נתונים תקין...</p>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] opacity-50">
+        <RefreshCw size={32} className="animate-spin text-blue-500 mb-4" />
+        <p className="text-xs font-black uppercase tracking-widest text-slate-400">מזהה נתיב נתונים...</p>
       </div>
     );
   }
 
   return (
     <div className="p-4 md:p-8 bg-[#F8FAFC] min-h-screen" dir="rtl">
-      
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
         <div>
@@ -108,10 +99,8 @@ export default function DynamicTablePage() {
             <ChevronRight size={10} />
             <span className="text-blue-600 italic uppercase">{tableName}</span>
           </div>
-          <h1 className="text-3xl font-black text-slate-900">
-             ניהול <span className="text-blue-600 underline decoration-blue-200 underline-offset-8">
-               {tableName?.replace(/_/g, ' ')}
-             </span>
+          <h1 className="text-3xl font-black text-slate-900 uppercase">
+             ניהול <span className="text-blue-600">{tableName.replace(/_/g, ' ')}</span>
           </h1>
         </div>
         
@@ -125,7 +114,7 @@ export default function DynamicTablePage() {
         </div>
       </div>
 
-      {/* Table & Search */}
+      {/* Table Content */}
       <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl overflow-hidden min-h-[400px]">
         <div className="p-6 border-b border-slate-50">
           <div className="relative w-full md:w-96">
@@ -155,20 +144,14 @@ export default function DynamicTablePage() {
               {loading ? (
                 <tr>
                   <td colSpan={columns.length + 1} className="p-24 text-center text-slate-400 font-bold italic">
-                    מושך נתונים מ-Supabase...
-                  </td>
-                </tr>
-              ) : filteredData.length === 0 ? (
-                <tr>
-                  <td colSpan={columns.length + 1} className="p-24 text-center text-slate-400 font-bold">
-                    לא נמצאו רשומות בטבלת {tableName}
+                    טוען נתונים...
                   </td>
                 </tr>
               ) : (
                 filteredData.map((row, i) => (
                   <tr key={i} className="hover:bg-blue-50/20 transition-colors group">
                     {columns.map((col) => (
-                      <td key={col} className="p-6 font-bold text-slate-700 max-w-[200px] truncate">
+                      <td key={col} className="p-6 font-bold text-slate-700">
                         {row[col]?.toString()}
                       </td>
                     ))}
@@ -186,7 +169,7 @@ export default function DynamicTablePage() {
         </div>
       </div>
 
-      {isModalOpen && tableName && (
+      {isModalOpen && (
         <DynamicModal 
           tableName={tableName} 
           columns={columns} 
