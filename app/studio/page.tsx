@@ -1,240 +1,122 @@
 "use client";
-import React, { useEffect, useState, useRef } from 'react';
-import { supabase } from "@/lib/supabase"; 
-import { rtdb } from "@/lib/firebase";
-import { ref, onValue, limitToLast, query as dbQuery } from "firebase/database";
-import { motion, AnimatePresence } from "framer-motion";
-import { 
-  RefreshCw, Database, Trash2, Plus, BrainCircuit, 
-  Edit3, Send, Smartphone, Save, X, CheckCircle2, XCircle
-} from "lucide-react";
-import { toast } from "sonner";
 
-export default function SabanStudioFull() {
+import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
+import { Zap, Save, RefreshCw, Database, Terminal, Edit2, Play, ChevronLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+export default function SabanStudioPWA() {
   const [rules, setRules] = useState<any[]>([]);
-  const [liveMessages, setLiveMessages] = useState<any[]>([]);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editValue, setEditValue] = useState("");
-  const [newRule, setNewRule] = useState("");
+  const [systemPrompt, setSystemPrompt] = useState("");
   const [loading, setLoading] = useState(true);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [logs, setLogs] = useState<{t: string, m: string, s: string}[]>([]);
 
-  // האזנה לסימולטור בזמן אמת
-  useEffect(() => {
-    const chatRef = dbQuery(ref(rtdb, 'chat-sidor'), limitToLast(6));
-    return onValue(chatRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        setLiveMessages(Object.values(data).sort((a: any, b: any) => a.timestamp - b.timestamp));
-        setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }), 100);
-      }
-    });
-  }, []);
+  const addLog = (m: string, s: "info" | "success" | "error" = "info") => {
+    setLogs(prev => [{ t: new Date().toLocaleTimeString().slice(0, 5), m, s }, ...prev].slice(0, 3));
+  };
 
-  const fetchRules = async () => {
+  const fetchData = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('system_rules').select('*').order('id', { ascending: true });
-    if (!error) setRules(data || []);
-    setLoading(false);
-  };
-
-  useEffect(() => { fetchRules(); }, []);
-
-  const handleAddRule = async () => {
-    if (!newRule.trim()) return;
-    const { error } = await supabase.from('system_rules').insert([{ 
-      instruction: newRule, 
-      agent_type: 'executor', 
-      is_active: true 
-    }]);
-    if (!error) {
-      toast.success("הנחיה חדשה הוזרקה למוח");
-      setNewRule("");
-      fetchRules();
+    try {
+      const { data, error } = await supabase.from("saban_unified_knowledge").select("*");
+      if (error) throw error;
+      setRules(data || []);
+      addLog("סנכרון מלא הושלם", "success");
+    } catch (err: any) {
+      addLog(err.message, "error");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleUpdate = async (id: number) => {
-    const { error } = await supabase.from('system_rules').update({ instruction: editValue }).eq('id', id);
-    if (!error) {
-      toast.success("החוק עודכן");
-      setEditingId(null);
-      fetchRules();
-    }
-  };
-
-  const handleDelete = async (id: number) => {
-    const { error } = await supabase.from('system_rules').delete().eq('id', id);
-    if (!error) {
-      toast.success("החוק נמחק");
-      fetchRules();
-    }
-  };
-
-  const toggleStatus = async (id: number, currentStatus: boolean) => {
-    await supabase.from('system_rules').update({ is_active: !currentStatus }).eq('id', id);
-    fetchRules();
-  };
+  useEffect(() => { fetchData(); }, []);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 p-4 md:p-8 font-sans" dir="rtl">
+    <div className="fixed inset-0 bg-[#FBFBFE] flex flex-col overflow-hidden select-none" dir="rtl">
       
-      {/* Header & New Rule Bar */}
-      <div className="max-w-[1600px] mx-auto space-y-6">
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-[32px] shadow-sm border border-slate-200">
-          <div className="flex items-center gap-4">
-            <div className="bg-blue-600 p-3 rounded-2xl shadow-lg shadow-blue-200">
-              <BrainCircuit size={28} className="text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-black italic tracking-tight">SABAN <span className="text-blue-600">DNA STUDIO</span></h1>
-              <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">ממשק ניהול חוקי בינה מלאכותית v4.0</p>
-            </div>
+      {/* Header - Minimalist PWA Style */}
+      <header className="h-16 flex items-center justify-between px-6 bg-white/80 backdrop-blur-md border-b border-slate-100 shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-blue-200 shadow-lg">
+            <Zap size={16} className="text-white" fill="currentColor" />
           </div>
-
-          <div className="flex items-center gap-3 w-full md:w-auto">
-            <div className="relative flex-1 md:w-[500px]">
-              <input 
-                value={newRule} 
-                onChange={(e) => setNewRule(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAddRule()}
-                placeholder="הוסף הנחיה חדשה ל-DNA של המערכת..." 
-                className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm outline-none focus:ring-4 focus:ring-blue-500/10 focus:bg-white transition-all shadow-inner"
-              />
-            </div>
-            <button 
-              onClick={handleAddRule}
-              className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-2xl shadow-lg shadow-blue-200 transition-all active:scale-95 flex items-center gap-2 font-bold"
-            >
-              <Plus size={20} /> <span className="hidden md:inline">הוסף חוק</span>
-            </button>
-            <button onClick={fetchRules} className="p-4 text-slate-400 hover:bg-white hover:shadow-sm rounded-2xl transition-all border border-transparent hover:border-slate-200">
-              <RefreshCw size={20} className={loading ? "animate-spin" : ""} />
-            </button>
-          </div>
-        </header>
-
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
-          
-          {/* Main Table Area (8/12) */}
-          <div className="xl:col-span-8 space-y-6">
-            <section className="bg-white rounded-[35px] shadow-sm border border-slate-200 overflow-hidden">
-              <div className="p-6 border-b border-slate-50 flex justify-between items-center bg-slate-50/30">
-                <h2 className="font-bold text-slate-700 flex items-center gap-2 uppercase text-xs tracking-widest">
-                  <Database size={16} className="text-blue-600" /> מאגר החוקים הפעיל
-                </h2>
-                <div className="flex gap-2">
-                   <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-black">{rules.length} חוקים מוגדרים</span>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-right border-collapse">
-                  <thead>
-                    <tr className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-50">
-                      <th className="p-5 w-20">סטטוס</th>
-                      <th className="p-5 w-24">מזהה</th>
-                      <th className="p-5">הנחיה טכנית (DNA Instruction)</th>
-                      <th className="p-5 w-32 text-center">פעולות</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    <AnimatePresence>
-                      {rules.map((rule) => (
-                        <motion.tr 
-                          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                          key={rule.id} 
-                          className={`group transition-colors ${rule.is_active ? 'hover:bg-blue-50/30' : 'bg-slate-50/50 opacity-60'}`}
-                        >
-                          <td className="p-5">
-                            <button onClick={() => toggleStatus(rule.id, rule.is_active)} className="transition-transform active:scale-90">
-                              {rule.is_active ? <CheckCircle2 className="text-emerald-500" size={20} /> : <XCircle className="text-slate-300" size={20} />}
-                            </button>
-                          </td>
-                          <td className="p-5 text-xs font-mono text-slate-400">ID-{rule.id}</td>
-                          <td className="p-5">
-                            {editingId === rule.id ? (
-                              <textarea 
-                                value={editValue} 
-                                onChange={(e) => setEditValue(e.target.value)}
-                                className="w-full p-4 border-2 border-blue-500 rounded-2xl text-sm h-28 outline-none bg-white shadow-xl relative z-10"
-                              />
-                            ) : (
-                              <div className="space-y-1">
-                                <span className="text-[9px] font-black text-blue-500 bg-blue-50 px-2 py-0.5 rounded uppercase">{rule.agent_type}</span>
-                                <p className="text-sm font-medium text-slate-600 leading-relaxed">{rule.instruction}</p>
-                              </div>
-                            )}
-                          </td>
-                          <td className="p-5">
-                            <div className="flex justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              {editingId === rule.id ? (
-                                <button onClick={() => handleUpdate(rule.id)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"><Save size={18} /></button>
-                              ) : (
-                                <button onClick={() => { setEditingId(rule.id); setEditValue(rule.instruction); }} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"><Edit3 size={18} /></button>
-                              )}
-                              <button onClick={() => handleDelete(rule.id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={18} /></button>
-                            </div>
-                          </td>
-                        </motion.tr>
-                      ))}
-                    </AnimatePresence>
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          </div>
-
-          {/* Sidebar Area: Simulator (4/12) */}
-          <div className="xl:col-span-4 space-y-6">
-            <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm sticky top-8">
-              <header className="flex items-center justify-between mb-8">
-                <div className="flex items-center gap-3">
-                  <div className="bg-slate-900 p-2 rounded-xl text-white"><Smartphone size={20} /></div>
-                  <h2 className="font-bold text-slate-800">סימולטור בדיקה</h2>
-                </div>
-                <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-100 rounded-full">
-                  <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                  <span className="text-[9px] font-black text-emerald-600 uppercase">Live Sync</span>
-                </div>
-              </header>
-
-              {/* iPhone Mockup */}
-              <div className="mx-auto w-full max-w-[300px] h-[550px] bg-slate-900 rounded-[3rem] border-[10px] border-slate-800 shadow-2xl relative overflow-hidden flex flex-col group">
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-6 bg-slate-800 rounded-b-2xl z-20" />
-                
-                <div className="flex-1 overflow-y-auto p-4 space-y-4 pt-10 scrollbar-hide bg-slate-50" ref={scrollRef}>
-                  {liveMessages.map((msg: any, idx) => (
-                    <motion.div 
-                      initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-                      key={idx} className={`flex ${msg.user_name === 'AI' ? 'justify-start' : 'justify-end'}`}
-                    >
-                      <div className={`max-w-[85%] p-4 rounded-2xl text-[12px] shadow-sm leading-snug ${
-                        msg.user_name === 'AI' ? 'bg-white text-slate-800 rounded-tr-none' : 'bg-blue-600 text-white rounded-tl-none'
-                      }`}>
-                        <p className="text-[9px] font-black opacity-30 mb-1 uppercase tracking-tighter">{msg.user_name}</p>
-                        {msg.text}
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-
-                <div className="p-4 bg-white border-t border-slate-100 flex items-center gap-2">
-                  <div className="flex-1 h-10 bg-slate-50 rounded-full border border-slate-200" />
-                  <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-lg shadow-blue-100"><Send size={16} /></div>
-                </div>
-              </div>
-
-              <div className="mt-8 p-4 bg-blue-50 rounded-2xl border border-blue-100">
-                <p className="text-[11px] text-blue-600 font-bold leading-relaxed">
-                  💡 טיפ: כשאתה מעדכן את חוק ה"מנוף" בטבלה, שלח הודעה בוואטסאפ או בדוק כאן בסימולטור כדי לראות אם Gemini הטמיע את השינוי.
-                </p>
-              </div>
-            </div>
-          </div>
-
+          <span className="font-black text-slate-900 text-lg tracking-tight">Studio AI</span>
         </div>
-      </div>
+        <button onClick={fetchData} className="w-10 h-10 flex items-center justify-center rounded-full active:bg-slate-100 transition-all">
+          <RefreshCw size={18} className={`${loading ? "animate-spin" : "text-slate-400"}`} />
+        </button>
+      </header>
+
+      {/* Main Scrollable Content */}
+      <main className="flex-1 overflow-y-auto p-5 space-y-6 pb-24 custom-scrollbar">
+        
+        {/* Core Brain Section */}
+        <section className="space-y-3">
+          <label className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">
+            <Database size={12} /> הגדרות מוח מרכזיות
+          </label>
+          <div className="bg-white rounded-[2rem] p-5 shadow-sm border border-slate-100">
+            <textarea 
+              className="w-full h-32 bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 outline-none focus:ring-1 focus:ring-blue-500/20 resize-none transition-all"
+              placeholder="כתוב את ההנחיות כאן..."
+              value={systemPrompt}
+              onChange={(e) => setSystemPrompt(e.target.value)}
+            />
+            <Button className="w-full mt-4 bg-blue-600 h-12 rounded-xl font-black text-white shadow-lg shadow-blue-100">
+              <Save size={16} className="ml-2" /> שמור הגדרות
+            </Button>
+          </div>
+        </section>
+
+        {/* Live Knowledge Cards */}
+        <section className="space-y-4">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">
+             חוקי בסיס ידע ({rules.length})
+          </label>
+          {rules.map((rule) => (
+            <div key={rule.id} className="bg-white rounded-[1.8rem] p-5 border border-slate-100 shadow-sm active:scale-[0.98] transition-all">
+              <div className="flex justify-between items-start mb-2">
+                <span className="text-[8px] font-black bg-blue-50 text-blue-600 px-2 py-0.5 rounded uppercase">Logic Case</span>
+                <Edit2 size={14} className="text-slate-300" />
+              </div>
+              <h3 className="text-sm font-black text-slate-800 mb-2 leading-tight italic">
+                "{rule.question_trigger || rule.input}"
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-50">
+                {rule.ai_response || rule.output}
+              </p>
+            </div>
+          ))}
+        </section>
+
+        {/* Floating Mini Console */}
+        <div className="bg-slate-900 rounded-[1.8rem] p-4 text-white shadow-xl">
+           <div className="flex items-center gap-2 text-[8px] font-black text-slate-500 uppercase tracking-widest mb-2">
+             <Terminal size={10} /> Live Device Logs
+           </div>
+           {logs.map((l, i) => (
+             <div key={i} className="text-[9px] font-mono flex gap-2">
+               <span className="text-slate-600">[{l.t}]</span>
+               <span className={l.s === 'error' ? 'text-red-400' : 'text-blue-400'}>{l.m}</span>
+             </div>
+           ))}
+        </div>
+      </main>
+
+      {/* Modern Bottom Dock - Fixed */}
+      <nav className="h-20 bg-white/90 backdrop-blur-xl border-t border-slate-100 shrink-0 flex items-center justify-around px-10 pb-2 shadow-[0_-10px_30px_rgba(0,0,0,0.03)]">
+        <button className="flex flex-col items-center gap-1 text-blue-600">
+          <Zap size={22} fill="currentColor" />
+          <span className="text-[8px] font-black uppercase tracking-tighter">Studio</span>
+        </button>
+        <button className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center -mt-10 shadow-xl shadow-blue-200 border-4 border-[#FBFBFE]">
+          <Play size={20} className="text-white ml-1" fill="currentColor" />
+        </button>
+        <button className="flex flex-col items-center gap-1 text-slate-300">
+          <Database size={22} />
+          <span className="text-[8px] font-black uppercase tracking-tighter">Memory</span>
+        </button>
+      </nav>
     </div>
   );
 }
