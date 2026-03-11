@@ -8,32 +8,28 @@ import { MessageList } from "@/components/chat/message-list";
 import { Composer } from "@/components/chat/Composer";
 import { ActionOverlays } from "@/components/chat/ActionOverlays";
 import { useToast } from "@/hooks/use-toast";
+
+// ייבוא ה-Providers כדי למנוע קריסת Build
+import { ChatActionsProvider } from "@/context/ChatActionsContext";
+import { BusinessConfigProvider } from "@/context/BusinessConfigContext";
+
 import { 
-  Phone, 
-  Video, 
-  Search, 
-  MoreVertical, 
-  BadgeCheck, 
-  Ruler, 
-  LayoutDashboard, 
-  Settings,
-  History
+  Phone, Video, Search, LayoutDashboard, 
+  Settings, History, BadgeCheck, Ruler, Zap
 } from "lucide-react";
 
-export default function WhatsAppClonePage() {
+function WhatsAppCloneContent() {
   const [messages, setMessages] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-  
-  const phone = "972508860896"; // ח. סבן מרכזי
+  const phone = "972508860896";
 
-  // סנכרון Realtime מול Firebase
   useEffect(() => {
     const chatRef = ref(rtdb, `saban94`);
     const unsubscribe = onValue(chatRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        const incoming = data.incoming ? Object.entries(data.incoming).map(([id, m]: any) => ({ ...m, id, role: 'user' })) : [];
+        const incoming = data.inbound ? Object.entries(data.inbound).map(([id, m]: any) => ({ ...m, id, role: 'user' })) : [];
         const outgoing = data.send ? Object.entries(data.send).map(([id, m]: any) => ({ ...m, id, role: 'assistant' })) : [];
         
         const combined = [...incoming, ...outgoing]
@@ -54,32 +50,16 @@ export default function WhatsAppClonePage() {
 
   const handleSendMessage = async (content: string) => {
     if (!content.trim()) return;
-    
-    const userMsg = { id: Date.now().toString(), role: 'user', content, timestamp: Date.now() };
-    setMessages(prev => [...prev, userMsg]);
     setIsLoading(true);
-    
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [...messages, { role: 'user', content }],
-          phone: phone,
-          userId: 'admin'
-        })
+        body: JSON.stringify({ messages: [...messages, { role: 'user', content }], phone })
       });
-      
       const data = await res.json();
       if (res.ok) {
-        const assistantMsg = {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          content: data.text,
-          product: data.product || null,
-          timestamp: Date.now()
-        };
-        setMessages(prev => [...prev, assistantMsg]);
+        // המענה יתעדכן אוטומטית דרך ה-onValue מ-Firebase
       }
     } catch (error: any) {
       toast({ title: "שגיאה", description: error.message, variant: "destructive" });
@@ -88,7 +68,6 @@ export default function WhatsAppClonePage() {
     }
   };
 
-  // פונקציה לפתיחת המחשבון באופן ידני מהממשק
   const openGlobalCalculator = () => {
     window.dispatchEvent(new CustomEvent('open-action-overlay', { 
       detail: { type: 'calculator', product: null } 
@@ -96,87 +75,98 @@ export default function WhatsAppClonePage() {
   };
 
   return (
-    <div className="flex h-screen bg-[#f0f2f5] dark:bg-zinc-950 overflow-hidden font-sans" dir="rtl">
+    <div className="flex h-screen bg-[#F2F2F2] dark:bg-zinc-950 overflow-hidden font-sans selection:bg-blue-100" dir="rtl">
       
-      {/* Sidebar מעוצב מחדש */}
-      <aside className="w-[380px] border-l bg-white dark:bg-zinc-900 hidden lg:flex flex-col shadow-xl z-20">
-        <header className="p-4 bg-[#f0f2f5] dark:bg-zinc-800 flex justify-between items-center border-b border-slate-200 dark:border-zinc-700">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg">
-              <LayoutDashboard size={20} />
+      {/* Sidebar - Modern Luxury Style */}
+      <aside className="w-[400px] border-l bg-white/80 backdrop-blur-xl hidden lg:flex flex-col shadow-2xl z-20">
+        <header className="p-6 flex justify-between items-center border-b border-slate-100">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-800 rounded-[22px] flex items-center justify-center text-white shadow-lg shadow-blue-200">
+              <Zap size={24} fill="white" />
             </div>
-            <span className="font-black text-slate-800 dark:text-white italic">SABAN PANEL</span>
+            <div>
+              <h1 className="font-black text-xl tracking-tighter text-slate-900">SABAN OS</h1>
+              <p className="text-[10px] font-bold text-blue-600 tracking-widest uppercase">Premium Logistics</p>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <button className="p-2 hover:bg-slate-200 rounded-full transition-colors"><History size={18} /></button>
-            <button className="p-2 hover:bg-slate-200 rounded-full transition-colors"><Settings size={18} /></button>
-          </div>
+          <Settings className="text-slate-400 hover:rotate-90 transition-transform cursor-pointer" size={20} />
         </header>
 
-        <div className="flex-1 overflow-y-auto">
-          {/* כפתור מחשבון מהיר ב-Sidebar */}
-          <div className="p-4">
-            <button 
-              onClick={openGlobalCalculator}
-              className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-[20px] font-black flex items-center justify-center gap-3 shadow-lg hover:shadow-blue-500/20 transition-all active:scale-95"
-            >
-              <Ruler size={20} />
-              מחשבון כמויות מ"ר
-            </button>
-          </div>
+        <div className="flex-1 p-6 space-y-6 overflow-y-auto">
+          {/* Quick Action Button */}
+          <button 
+            onClick={openGlobalCalculator}
+            className="w-full p-5 bg-black text-white rounded-[28px] font-black flex items-center justify-between group hover:bg-blue-600 transition-all shadow-xl active:scale-95"
+          >
+            <div className="flex items-center gap-3">
+              <Ruler size={22} className="group-hover:rotate-12 transition-transform" />
+              <span>מחשבון כמויות מ"ר</span>
+            </div>
+            <BadgeCheck size={18} className="text-blue-400" />
+          </button>
 
-          <div className="p-4 border-t border-slate-100 dark:border-zinc-800">
-            <div className="p-4 bg-emerald-50 dark:bg-emerald-900/10 rounded-3xl border border-emerald-100 dark:border-emerald-800 flex items-center gap-4">
-              <div className="w-12 h-12 bg-emerald-600 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-md">S</div>
-              <div className="flex-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-black text-sm text-slate-800 dark:text-white">ח. סבן - {phone}</span>
-                  <BadgeCheck size={14} className="text-blue-500" />
-                </div>
-                <div className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest mt-1">מסונכרן למחסן</div>
+          {/* User Profile Card */}
+          <div className="p-5 bg-slate-50 rounded-[30px] border border-white shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+            <div className="w-14 h-14 bg-emerald-500 rounded-[20px] flex items-center justify-center text-white font-black text-2xl shadow-inner">S</div>
+            <div className="flex-1">
+              <div className="flex items-center justify-between">
+                <span className="font-black text-slate-800">ח. סבן מרכזי</span>
+                <div className="w-2 h-2 bg-emerald-500 rounded-full" />
               </div>
+              <p className="text-xs font-bold text-slate-400 mt-1">{phone}</p>
             </div>
           </div>
         </div>
       </aside>
 
-      {/* אזור הצ'אט המרכזי */}
-      <main className="flex-1 flex flex-col relative bg-[#e5ddd5] dark:bg-[#0b141a]">
-        <header className="p-3 bg-[#f0f2f5]/95 dark:bg-zinc-900/95 backdrop-blur-md border-b flex justify-between items-center z-10 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-emerald-600 rounded-2xl flex items-center justify-center text-white font-bold text-xs shadow-md">S</div>
+      {/* Main Chat Area */}
+      <main className="flex-1 flex flex-col relative bg-[#F8F9FA]">
+        {/* Chat Header */}
+        <header className="h-20 bg-white/90 backdrop-blur-md border-b flex justify-between items-center px-8 z-10 shadow-sm">
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <div className="w-11 h-11 bg-slate-900 rounded-[18px] flex items-center justify-center text-white font-bold text-xs shadow-lg">S</div>
+              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full" />
+            </div>
             <div>
-              <div className="font-black text-[15px] dark:text-white leading-tight">ח. סבן (מרכז הזמנות)</div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                <span className="text-[10px] text-emerald-500 font-black uppercase tracking-tighter">Gemini 3.1 Live AI</span>
-              </div>
+              <div className="font-black text-lg text-slate-900 leading-none">מרכז הזמנות</div>
+              <div className="text-[10px] text-emerald-600 font-black uppercase mt-1 tracking-tighter">AI Assistant Online</div>
             </div>
           </div>
-          <div className="flex gap-6 text-slate-500 pl-4">
-            <button className="hover:text-blue-600 transition-colors" title="מחשבון"><Ruler size={19} onClick={openGlobalCalculator} /></button>
-            <button className="hover:text-emerald-600 transition-colors"><Video size={19} /></button>
-            <button className="hover:text-emerald-600 transition-colors"><Phone size={19} /></button>
-            <button className="hover:text-slate-800 transition-colors"><Search size={19} /></button>
+          <div className="flex gap-8 text-slate-400">
+             <Ruler className="cursor-pointer hover:text-blue-600 transition-colors" size={22} onClick={openGlobalCalculator} />
+             <Phone className="cursor-pointer hover:text-slate-900 transition-colors" size={22} />
+             <Search className="cursor-pointer hover:text-slate-900 transition-colors" size={22} />
           </div>
         </header>
 
-        {/* זרימת ההודעות */}
-        <div className="flex-1 relative overflow-hidden">
+        {/* Message Flow */}
+        <div className="flex-1 relative">
            <ChatShell>
               <MessageList />
            </ChatShell>
         </div>
 
-        {/* אזור ההקלדה */}
-        <footer className="p-4 bg-[#f0f2f5] dark:bg-zinc-900 flex items-center gap-2 border-t border-slate-200 dark:border-zinc-800">
-          <Composer onSend={handleSendMessage} disabled={isLoading} />
+        {/* Floating Composer Area */}
+        <footer className="p-6 bg-transparent absolute bottom-0 w-full z-20">
+          <div className="max-w-4xl mx-auto bg-white/80 backdrop-blur-2xl border-2 border-white p-2 rounded-[32px] shadow-[0_20px_50px_rgba(0,0,0,0.1)] flex items-center gap-2">
+            <Composer onSend={handleSendMessage} disabled={isLoading} />
+          </div>
         </footer>
       </main>
 
-      {/* רכיבי צד ואוברליי - מחשבון, הצעות מחיר, מלאי */}
       <ActionOverlays />
-      
     </div>
+  );
+}
+
+// ייצוא עטוף ב-Providers למניעת שגיאות Build
+export default function WhatsAppClonePage() {
+  return (
+    <BusinessConfigProvider>
+      <ChatActionsProvider>
+        <WhatsAppCloneContent />
+      </ChatActionsProvider>
+    </BusinessConfigProvider>
   );
 }
