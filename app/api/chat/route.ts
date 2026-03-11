@@ -47,7 +47,7 @@ export async function POST(req: Request) {
     const executorDNA = config?.filter(r => r.agent_type === 'executor' && r.is_active).map(r => r.instruction).join("\n") || "";
     const activeKeysConfig = config?.filter(r => r.agent_type === 'api_key_status');
 
-    // 3. מנוע חיפוש מלאי חכם (רב-עמודתי)
+    // 3. מנוע חיפוש מלאי חכם
     const rawWords = lastUserMsg
       .replace(/[^\u0590-\u05FF0-9\s]/g, ' ')
       .split(/\s+/)
@@ -73,19 +73,24 @@ export async function POST(req: Request) {
       stockAlert = stock <= 0 ? `⚠️ חסר במלאי!` : stock < 10 ? `⚠️ רק ${stock} יחידות נותרו!` : "";
     }
 
-    // 4. ניהול בריכת המפתחות (POOL)
+    // 4. ניהול בריכת המפתחות (POOL) ומודלים מעודכנים למרץ 2026
     const keyPoolString = process.env.GOOGLE_AI_KEY_POOL || "";
     const keys = keyPoolString.split(',').map(k => k.trim()).filter(k => k.length > 10);
-    const modelPool = ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-1.5-pro"];
+    
+    // מודלים מעודכנים לפי ה-Log: ה-Pro 3.1 חזק בטירוף, ה-Flash-Lite מהיר וזול
+    const modelPool = [
+      "gemini-3.1-flash-lite-preview", // הכי מהיר וחסכוני ב-Quota
+      "gemini-3.1-pro-preview",       // הכי חכם (לשעבר 3-pro-preview)
+      "gemini-3-flash-preview"        // גיבוי חזק
+    ];
 
     let aiResponse = "";
     let success = false;
 
-    // 5. לוגיקת הרוטציה הקריטית
+    // 5. לוגיקת הרוטציה - ניסיון מפתח אחרי מפתח, מודל אחרי מודל
     for (let i = 0; i < keys.length; i++) {
       if (success) break;
 
-      // בדיקה אם המפתח הושבת ידנית ב-Supabase
       const isKeyDisabled = activeKeysConfig?.find(k => k.instruction === `KEY_${i+1}`)?.is_active === false;
       if (isKeyDisabled) continue;
 
@@ -100,16 +105,26 @@ export async function POST(req: Request) {
             systemInstruction: `
               ${executorDNA}
               יועץ חיצוני: ${advisorData?.reply || ""}
-              נתוני מוצר מהמלאי: ${foundProduct ? foundProduct.product_name : "לא נמצא מוצר ספציפי"}
+              מוצר מהמלאי: ${foundProduct ? foundProduct.product_name : "לא נמצא"}
               מק"ט: ${foundProduct ? foundProduct.sku : "אין"}
               מצב מלאי: ${stockAlert}
               
-              הנחיה למענה: אם מצאת מוצר, שלב את המילה MAGIC_URL בסיום. 
-              תמיד תחתום בסוף: H.SABAN 1994
+              דגשים למענה: 
+              1. סגנון אנושי, פשוט וישיר (לא רובוטי).
+              2. אם מצאת מוצר, שלב MAGIC_URL בסוף.
+              3. חתימה חובה: H.SABAN 1994
             `
           });
 
-          const result = await model.generateContent(lastUserMsg);
+          // שימוש ב-GenerationConfig מותאם למודלים החדשים
+          const result = await model.generateContent({
+            contents: [{ role: 'user', parts: [{ text: lastUserMsg }] }],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 800,
+            }
+          });
+
           const responseText = result.response.text();
 
           if (responseText) {
@@ -121,20 +136,21 @@ export async function POST(req: Request) {
             success = true;
           }
         } catch (e: any) {
-          console.warn(`Key ${i+1} failed with model ${modelName}. Error: ${e.message}`);
-          await updateDashboardQuota(i + 1, modelName, "QUOTA_EXCEEDED");
+          console.warn(`Attempt failed: Key ${i+1}, Model ${modelName}. Error: ${e.message}`);
+          await updateDashboardQuota(i + 1, modelName, "FAILED");
+          // אם זו שגיאת Quota (429), נעבור למודל הבא או למפתח הבא
         }
       }
     }
 
-    // 6. הזרקת לינקים חכמה (Magic Links)
+    // 6. הזרקת לינקים (Magic Links)
     if (foundProduct && aiResponse.includes("MAGIC_URL")) {
       const link = foundProduct.product_magic_link || `https://sidor.vercel.app/product-pages/index.html?id=${foundProduct.sku}`;
       aiResponse = aiResponse.replace("MAGIC_URL", link);
       if (stockAlert.includes("⚠️")) aiResponse += `\n${stockAlert}`;
     }
 
-    // 7. עדכון ה-Pipeline למשלוח אוטומטי (WhatsApp/Sms)
+    // 7. עדכון ה-Pipeline למשלוח
     if (phone && aiResponse) {
       const cleanPhone = phone.replace('+', '').trim();
       await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), { 
@@ -144,10 +160,10 @@ export async function POST(req: Request) {
       });
     }
 
-    return NextResponse.json({ text: aiResponse });
+    return NextResponse.json({ text: aiResponse || "מצטער, יש עומס זמני במערכת. נסה שוב בעוד דקה." });
 
   } catch (error: any) {
-    console.error("Critical Error in AI Brain:", error.message);
+    console.error("Critical Error:", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
