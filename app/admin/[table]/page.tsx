@@ -1,27 +1,21 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useParams } from "next/navigation"; // שימוש ב-Hook בטוח ל-Client
+import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { 
-  Plus, 
-  Search, 
-  Edit2, 
-  Trash2, 
-  Download, 
-  Filter,
-  RefreshCw,
-  Database,
-  ChevronRight,
-  AlertCircle
+  Plus, Search, Edit2, Trash2, Download, Filter,
+  RefreshCw, Database, ChevronRight, AlertCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import DynamicModal from "@/components/admin/DynamicModal";
 
 export default function DynamicTablePage() {
   const params = useParams();
-  // חילוץ בטוח - אם אנחנו בנתיב [table], הערך יגיע מכאן
-  const tableName = params?.table as string;
+  
+  // חילוץ שם הטבלה - המרת ה-Params לטקסט נקי
+  const rawTable = params?.table;
+  const tableName = Array.isArray(rawTable) ? rawTable[0] : rawTable;
   
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,11 +23,11 @@ export default function DynamicTablePage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // 1. פונקציית טעינת נתונים
+  // 1. פונקציית טעינת נתונים עם חסימת 404
   const fetchData = useCallback(async () => {
-    // הגנה קריטית: אל תבצע קריאה אם tableName הוא literal "[table]" או לא קיים
-    if (!tableName || tableName === "[table]") {
-      console.log("Waiting for valid table name...");
+    // בדיקה קריטית: אם השם הוא "[table]" או ריק - עוצרים מיד!
+    if (!tableName || tableName === "[table]" || tableName.includes("[") ) {
+      console.log("סנכרון נעצר: שם טבלה לא תקין עדיין");
       return;
     }
 
@@ -49,32 +43,32 @@ export default function DynamicTablePage() {
       if (supabaseError) throw supabaseError;
       setData(result || []);
     } catch (err: any) {
-      console.error("Fetch Error:", err.message);
+      console.error("Supabase Error:", err.message);
       setError(err.message);
     } finally {
       setLoading(false);
     }
   }, [tableName]);
 
-  // 2. חיבור ל-Realtime וטעינה ראשונית
+  // 2. אפקט טעינה
   useEffect(() => {
-    fetchData();
+    // רק אם יש שם טבלה אמיתי (למשל 'inventory' ולא '[table]')
+    if (tableName && tableName !== "[table]" && !tableName.includes("[")) {
+      fetchData();
 
-    if (!tableName || tableName === "[table]") return;
+      const channel = supabase
+        .channel(`realtime-${tableName}`)
+        .on('postgres_changes', { event: '*', table: tableName, schema: 'public' }, () => {
+          fetchData(); 
+        })
+        .subscribe();
 
-    const channel = supabase
-      .channel(`table-db-sync-${tableName}`)
-      .on('postgres_changes', { event: '*', table: tableName, schema: 'public' }, () => {
-        fetchData(); 
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
   }, [tableName, fetchData]);
 
-  // 3. סינון חיפוש
   const filteredData = data.filter((item) =>
     Object.values(item).some(
       (val) => val && val.toString().toLowerCase().includes(searchTerm.toLowerCase())
@@ -83,14 +77,12 @@ export default function DynamicTablePage() {
 
   const columns = data.length > 0 ? Object.keys(data[0]) : [];
 
-  // מצב שגיאה בטעינת טבלה
-  if (error) {
+  // מצב טעינה ראשוני כשעוד אין tableName
+  if (!tableName || tableName === "[table]") {
     return (
-      <div className="p-12 flex flex-col items-center justify-center min-h-screen bg-slate-50 text-center" dir="rtl">
-        <AlertCircle size={48} className="text-red-500 mb-4" />
-        <h2 className="text-2xl font-black text-slate-900">שגיאה בחיבור לטבלה</h2>
-        <p className="text-slate-500 mt-2 font-bold">לא הצלחנו למשוך נתונים מהטבלה: <span className="text-red-600 underline">{tableName}</span></p>
-        <Button onClick={fetchData} className="mt-6 bg-blue-600 rounded-2xl font-black">נסה שוב</Button>
+      <div className="p-24 text-center flex flex-col items-center justify-center min-h-screen">
+         <RefreshCw size={32} className="animate-spin text-blue-500 mb-4" />
+         <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">מזהה נתיב דאטה...</p>
       </div>
     );
   }
@@ -105,10 +97,10 @@ export default function DynamicTablePage() {
             <Database size={12} />
             <span>Saban Studio</span>
             <ChevronRight size={10} />
-            <span className="text-blue-600 italic">Data Management</span>
+            <span className="text-blue-600 italic">Database Management</span>
           </div>
           <h1 className="text-3xl font-black text-slate-900 uppercase tracking-tight">
-             ניהול <span className="text-blue-600">{tableName?.replace(/_/g, ' ')}</span>
+             ניהול <span className="text-blue-600">{tableName.replace(/_/g, ' ')}</span>
           </h1>
         </div>
         
@@ -128,14 +120,14 @@ export default function DynamicTablePage() {
           <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input
             type="text"
-            placeholder="חפש במאגר..."
-            className="w-full pr-12 pl-4 py-3.5 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all outline-none text-slate-800"
+            placeholder="חיפוש מהיר..."
+            className="w-full pr-12 pl-4 py-3.5 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500 transition-all outline-none"
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
       </div>
 
-      {/* Table Content */}
+      {/* Table */}
       <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl overflow-hidden">
         <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-right border-collapse">
@@ -150,11 +142,10 @@ export default function DynamicTablePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50 text-sm">
-              {loading ? (
+              {loading && data.length === 0 ? (
                 <tr>
-                  <td colSpan={columns.length + 1} className="p-24 text-center">
-                    <RefreshCw size={32} className="animate-spin text-blue-200 mx-auto mb-4" />
-                    <span className="text-slate-400 font-black uppercase text-[10px] tracking-widest">Connecting to Database...</span>
+                  <td colSpan={columns.length + 1} className="p-24 text-center text-slate-400 italic font-bold">
+                    טוען נתונים מהשרת...
                   </td>
                 </tr>
               ) : (
@@ -162,15 +153,11 @@ export default function DynamicTablePage() {
                   <tr key={i} className="hover:bg-blue-50/40 transition-colors group">
                     {columns.map((col) => (
                       <td key={col} className="p-6 font-bold text-slate-700">
-                        {col.includes('price') || col.includes('total') ? (
-                          <span className="text-blue-600 font-black italic">₪{row[col]}</span>
-                        ) : (
-                          <span className="truncate max-w-[200px] block opacity-80">{row[col]?.toString()}</span>
-                        )}
+                        {row[col]?.toString()}
                       </td>
                     ))}
                     <td className="p-6">
-                      <div className="flex justify-center gap-2">
+                      <div className="flex justify-center gap-2 md:opacity-0 group-hover:opacity-100 transition-opacity">
                         <button className="p-2 text-slate-400 hover:text-blue-600"><Edit2 size={16} /></button>
                         <button className="p-2 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button>
                       </div>
