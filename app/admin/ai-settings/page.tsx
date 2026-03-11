@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
-// פיצול הייבוא מבטיח ש-Vercel יזהה את האייקון בוודאות
-import { Database } from "lucide-react"; 
+
+// ייבוא מפורט וברור למנוע שגיאות Prerender
 import { 
+  Database, 
+  Search, 
   Zap, 
   Save, 
   Edit3, 
@@ -15,9 +17,14 @@ import {
   ShieldAlert, 
   MessageSquare, 
   ChevronDown, 
-  Check 
+  Check,
+  Plus,
+  Settings
 } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
+
+export default function SabanAIStudioAdmin() {
 
 export default function SabanAIStudioAdmin() {
   const [rules, setRules] = useState<any[]>([]);
