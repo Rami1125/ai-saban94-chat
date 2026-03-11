@@ -25,8 +25,6 @@ import {
 import { Button } from "@/components/ui/button";
 
 export default function SabanAIStudioAdmin() {
-
-export default function SabanAIStudioAdmin() {
   const [rules, setRules] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [logs, setLogs] = useState<{t: string, m: string, s: string}[]>([]);
