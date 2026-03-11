@@ -1,21 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Heebo } from "next/font/google";
 import "./globals.css";
-import { GlobalErrorBoundary } from "../components/GlobalErrorBoundary";
-import { BusinessConfigProvider } from "../context/BusinessConfigContext";
-import { ChatActionsProvider } from "../context/ChatActionsContext";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
-const heebo = Heebo({ subsets: ["hebrew", "latin"], variable: "--font-heebo" });
+const heebo = Heebo({ subsets: ["hebrew"], variable: "--font-heebo" });
 
 export const metadata: Metadata = {
-  title: "ח. סבן – יועץ חומרים | ייעוץ טכני חכם לחומרי בניין",
-  description: "ייעוץ טכני חכם לחומרי בניין – גבס, מלט, איטום, ברזל ועוד.",
+  title: "Saban OS Pro",
   manifest: "/manifest.json",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "black-translucent",
-  },
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent" },
 };
 
 export const viewport: Viewport = {
@@ -23,23 +15,29 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
-  userScalable: false, // תיקון: camelCase במקום user-scalable
+  userScalable: false,
   viewportFit: "cover",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="he" dir="rtl">
-      <body className={`${heebo.variable} ${inter.variable} font-sans overscroll-none`}>
-        <GlobalErrorBoundary>
-          <BusinessConfigProvider>
-            <ChatActionsProvider>{children}</ChatActionsProvider>
-          </BusinessConfigProvider>
-        </GlobalErrorBoundary>
+      <body className={`${heebo.variable} font-sans overscroll-none bg-[#F2F2F2]`}>
+        {children}
+        <script dangerouslySetInnerHTML={{ __html: `
+          window.playSuccessSound = () => {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = "square";
+            osc.frequency.setValueAtTime(880, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.1, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.start(); osc.stop(ctx.currentTime + 0.1);
+          };
+        `}} />
       </body>
     </html>
   );
