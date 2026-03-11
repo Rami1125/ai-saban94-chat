@@ -6,7 +6,7 @@ import {
   Zap, Save, Edit3, Trash2, RefreshCw, 
   Play, Terminal, ShieldAlert, Database, // <--- תוסיף את זה כאן
   MessageSquare, ChevronDown, Check 
-} from "lucide-react";;
+} from "lucide-react";
 
 export default function SabanOSPro() {
   const [activeTab, setActiveTab] = useState("studio");
