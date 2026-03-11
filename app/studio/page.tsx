@@ -3,9 +3,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { 
-  Zap, Save, Box, Users, MessageSquare, 
-  Menu, X, RefreshCw, Terminal, Play, Database
-} from "lucide-react";
+  Zap, Save, Edit3, Trash2, RefreshCw, 
+  Play, Terminal, ShieldAlert, Database, // <--- תוסיף את זה כאן
+  MessageSquare, ChevronDown, Check 
+} from "lucide-react";;
 
 export default function SabanOSPro() {
   const [activeTab, setActiveTab] = useState("studio");
