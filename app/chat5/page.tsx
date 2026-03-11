@@ -1,86 +1,83 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { Suspense } from "react";
 import dynamic from "next/dynamic";
 
 /**
- * יבוא דינמי של הקומפוננטות כדי להבטיח שה-Build יעבור חלק ב-Vercel.
- * זה פותר בעיות שבהן השרת מחפש קובץ עם אותיות גדולות/קטנות ולא מוצא.
+ * קומפוננטות בטעינה דינמית לשיפור ביצועים ומניעת שגיאות SSR
  */
 
-const ChatShell = dynamic(() => import("@/components/chat-shell"));
+const ChatShell = dynamic(() => import("@/components/chat-shell"), { 
+  ssr: true,
+  fallback: <div className="min-h-screen bg-black" /> 
 });
 
-const AnimatedOrb = dynamic(() => import("./components/animated-orb").then(m => m.AnimatedOrb || m.default), { 
+const AnimatedOrb = dynamic(() => import("@/components/animated-orb").then(m => m.AnimatedOrb || m.default), { 
   ssr: false 
 });
 
-const MessageList = dynamic(() => import("./components/message-list").then(m => m.MessageList || m.default), { 
+const MessageList = dynamic(() => import("@/components/message-list").then(m => m.MessageList || m.default), { 
   ssr: false 
 });
 
-const Composer = dynamic(() => import("./components/Composer").then(m => m.Composer || m.default), { 
+const Composer = dynamic(() => import("@/components/Composer").then(m => m.Composer || m.default), { 
   ssr: false 
 });
 
-const ProductCard = dynamic(() => import("./components/ProductCard").then(m => m.ProductCard || m.default), { 
+const ProductCard = dynamic(() => import("@/components/ProductCard").then(m => m.ProductCard || m.default), { 
   ssr: false 
 });
 
-const CalculatorOverlay = dynamic(() => import("./components/CalculatorOverlay").then(m => m.CalculatorOverlay || m.default), { 
+const CalculatorOverlay = dynamic(() => import("@/components/CalculatorOverlay").then(m => m.CalculatorOverlay || m.default), { 
   ssr: false 
 });
 
-const ActionOverlays = dynamic(() => import("./components/ActionOverlays").then(m => m.ActionOverlays || m.default), { 
+const ActionOverlays = dynamic(() => import("@/components/ActionOverlays").then(m => m.ActionOverlays || m.default), { 
   ssr: false 
 });
 
-export default function SabanAICanvas() {
-  const [messages, setMessages] = useState<any[]>([]);
-
-  const handleSendMessage = (content: string) => {
-    if (!content.trim()) return;
-    
-    const newUserMessage = {
-      id: Date.now(),
-      role: "user",
-      content: content
-    };
-    
-    setMessages((prev) => [...prev, newUserMessage]);
-    
-    // כאן תוסיף בעתיד את הקריאה ל-API של Gemini/SabanOS
-  };
-
+export default function ChatPage() {
   return (
-    <main className="relative min-h-screen bg-black text-white overflow-hidden">
-      <ChatShell>
-        {/* אלמנטים ויזואליים מרכזיים */}
-        <div className="absolute inset-0 z-0 pointer-events-none">
-          <AnimatedOrb />
-        </div>
+    <main className="relative min-h-screen w-full bg-black overflow-hidden text-white">
+      {/* שכבת רקע ואנימציה */}
+      <div className="fixed inset-0 z-0">
+        <AnimatedOrb />
+      </div>
 
-        {/* שכבת התוכן */}
-        <div className="relative z-10 flex flex-col h-full w-full max-w-4xl mx-auto px-4">
-          
-          {/* רשימת ההודעות */}
-          <section className="flex-1 overflow-y-auto py-20 no-scrollbar">
-            <MessageList messages={messages} />
-          </section>
-
-          {/* רכיבים צפים (Overlays) */}
-          <div className="space-y-4 mb-4">
-            <ProductCard />
-            <CalculatorOverlay />
-            <ActionOverlays />
+      {/* מעטפת הצ'אט הראשית */}
+      <div className="relative z-10 flex flex-col h-screen">
+        <ChatShell>
+          <div className="flex-1 overflow-y-auto px-4 py-6 custom-scrollbar">
+            <Suspense fallback={<div className="flex justify-center p-4">טוען הודעות...</div>}>
+              <MessageList />
+            </Suspense>
           </div>
 
-          {/* שורת הקלט */}
-          <footer className="pb-8">
-            <Composer onSend={handleSendMessage} />
-          </footer>
-        </div>
-      </ChatShell>
+          <div className="p-4 bg-gradient-to-t from-black via-black/80 to-transparent">
+            <Composer />
+          </div>
+        </ChatShell>
+      </div>
+
+      {/* שכבות אינטראקטיביות (Overlays) */}
+      <aside className="relative z-20">
+        <CalculatorOverlay />
+        <ActionOverlays />
+      </aside>
+
+      {/* עיצוב גלובלי פשוט ל-Scrollbar במידת הצורך */}
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 10px;
+        }
+      `}</style>
     </main>
   );
 }
