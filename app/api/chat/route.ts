@@ -1,169 +1,57 @@
+import { createClient } from '@supabase/supabase-js';
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { supabase } from "@/lib/supabase";
-import { rtdb } from "@/lib/firebase";
-import { ref, push, update } from "firebase/database";
-import { NextResponse } from "next/server";
 
-// 1. ניהול לוגים ודשבורד בזמן אמת
-async function updateDashboardQuota(keyIndex: number, modelName: string, status: string) {
-  const dashRef = ref(rtdb, `saban94/dashboard/quota_logs/${Date.now()}`);
-  await update(dashRef, { key_index: keyIndex, model: modelName, status, timestamp: Date.now() });
-}
-
-async function logToDailyChat(message: string, userId: string) {
-  const chatRef = ref(rtdb, 'chat-sidor');
-  await push(chatRef, {
-    text: message,
-    user_name: userId || 'לקוח',
-    timestamp: Date.now()
-  });
-}
-
-// קריאה לייעוץ חיצוני (Sidor AI)
-async function callSidorConsultant(message: string) {
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000); 
-    const res = await fetch(`https://sidor.vercel.app/api/gemini`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message }),
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
-    return res.ok ? await res.json() : null;
-  } catch (e) { return null; }
-}
+const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 export async function POST(req: Request) {
   try {
-    const { messages, phone, user_id } = await req.json();
-    const lastUserMsg = messages[messages.length - 1].content;
+    const { messages, userId, phone } = await req.json();
+    const lastUserMessage = messages[messages.length - 1].content;
 
-    // 2. שליפת הגדרות מערכת (DNA) ובדיקת מפתחות פעילים
-    const { data: config } = await supabase.from('system_rules')
-      .select('instruction, agent_type, is_active');
-    
-    const executorDNA = config?.filter(r => r.agent_type === 'executor' && r.is_active).map(r => r.instruction).join("\n") || "";
-    const activeKeysConfig = config?.filter(r => r.agent_type === 'api_key_status');
+    // 1. שליפת חוקי ADMIN ו-DNA מה-Supabase
+    const { data: adminSettings } = await supabase
+      .from('system_settings')
+      .select('content')
+      .eq('key', 'saban_ai_dna')
+      .single();
 
-    // 3. מנוע חיפוש מלאי חכם
-    const rawWords = lastUserMsg
-      .replace(/[^\u0590-\u05FF0-9\s]/g, ' ')
-      .split(/\s+/)
-      .filter((word: string) => word.length >= 2 && !['אני', 'רוצה', 'לגבי', 'בנושא', 'מחפש'].includes(word));
+    // 2. חיפוש מוצר במלאי (Semantic Search)
+    const { data: product } = await supabase
+      .from('inventory')
+      .select('*')
+      .textSearch('search_tsv', lastUserMessage, { config: 'simple', type: 'phrase' })
+      .limit(1)
+      .single();
 
-    const conditions = rawWords.map((word: string) => 
-      `product_name.ilike.%${word}%,sku.ilike.%${word}%,keywords.ilike.%${word}%`
-    ).join(',');
+    // 3. בניית הנחיות המוח
+    const systemPrompt = `
+      CONTEXT: אתה היועץ הראשי של "ח. סבן חומרי בניין".
+      ADMIN_DNA: ${adminSettings?.content || "דבר בעברית פשוטה, מקצועית, ותמציתית."}
+      
+      PRODUCT_CONTEXT: ${product ? `נמצא מוצר: ${product.product_name}. מחיר: ${product.price}. צריכה למ"מ: ${product.consumption_per_mm}.` : "לא נמצא מוצר ספציפי."}
+      
+      RULES:
+      - אם המשתמש שואל על כמות, בצע חישוב: (שטח במ"ר * צריכה למ"מ) / גודל אריזה.
+      - תמיד תברך ותייעץ בצורה חברית אך מקצועית (סגנון 'מתכנת אומנותי').
+      - אל תחזור על השאלה.
+    `;
 
-    const [advisorData, { data: products }] = await Promise.all([
-      callSidorConsultant(lastUserMsg),
-      supabase.from('inventory')
-        .select('*, stock_quantity, product_magic_link, sku')
-        .or(conditions || `product_name.ilike.%${lastUserMsg}%`)
-        .order('stock_quantity', { ascending: false })
-        .limit(1)
-    ]);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const result = await model.generateContent([systemPrompt, ...messages.map(m => m.content)]);
+    const text = result.response.text();
 
-    const foundProduct = products?.[0] || null;
-    let stockAlert = "";
-    if (foundProduct) {
-      const stock = foundProduct.stock_quantity || 0;
-      stockAlert = stock <= 0 ? `⚠️ חסר במלאי!` : stock < 10 ? `⚠️ רק ${stock} יחידות נותרו!` : "";
-    }
+    // שמירה ללוגים (חיסכון באנרגיה וניטור)
+    await supabase.from('chat_history').insert({ user_id: userId, message: lastUserMessage, response: text });
 
-    // 4. ניהול בריכת המפתחות (POOL) ומודלים מעודכנים למרץ 2026
-    const keyPoolString = process.env.GOOGLE_AI_KEY_POOL || "";
-    const keys = keyPoolString.split(',').map(k => k.trim()).filter(k => k.length > 10);
-    
-    // מודלים מעודכנים לפי ה-Log: ה-Pro 3.1 חזק בטירוף, ה-Flash-Lite מהיר וזול
-    const modelPool = [
-      "gemini-3.1-flash-lite-preview", // הכי מהיר וחסכוני ב-Quota
-      "gemini-3.1-pro-preview",       // הכי חכם (לשעבר 3-pro-preview)
-      "gemini-3-flash-preview"        // גיבוי חזק
-    ];
+    return Response.json({ 
+      text, 
+      product: product || null,
+      shouldNotify: true // טריגר לצליל ב-Frontend
+    });
 
-    let aiResponse = "";
-    let success = false;
-
-    // 5. לוגיקת הרוטציה - ניסיון מפתח אחרי מפתח, מודל אחרי מודל
-    for (let i = 0; i < keys.length; i++) {
-      if (success) break;
-
-      const isKeyDisabled = activeKeysConfig?.find(k => k.instruction === `KEY_${i+1}`)?.is_active === false;
-      if (isKeyDisabled) continue;
-
-      const genAI = new GoogleGenerativeAI(keys[i]);
-
-      for (const modelName of modelPool) {
-        if (success) break;
-
-        try {
-          const model = genAI.getGenerativeModel({
-            model: modelName,
-            systemInstruction: `
-              ${executorDNA}
-              יועץ חיצוני: ${advisorData?.reply || ""}
-              מוצר מהמלאי: ${foundProduct ? foundProduct.product_name : "לא נמצא"}
-              מק"ט: ${foundProduct ? foundProduct.sku : "אין"}
-              מצב מלאי: ${stockAlert}
-              
-              דגשים למענה: 
-              1. סגנון אנושי, פשוט וישיר (לא רובוטי).
-              2. אם מצאת מוצר, שלב MAGIC_URL בסוף.
-              3. חתימה חובה: H.SABAN 1994
-            `
-          });
-
-          // שימוש ב-GenerationConfig מותאם למודלים החדשים
-          const result = await model.generateContent({
-            contents: [{ role: 'user', parts: [{ text: lastUserMsg }] }],
-            generationConfig: {
-              temperature: 0.7,
-              maxOutputTokens: 800,
-            }
-          });
-
-          const responseText = result.response.text();
-
-          if (responseText) {
-            aiResponse = responseText;
-            await Promise.all([
-              updateDashboardQuota(i + 1, modelName, "SUCCESS"),
-              logToDailyChat(lastUserMsg, user_id)
-            ]);
-            success = true;
-          }
-        } catch (e: any) {
-          console.warn(`Attempt failed: Key ${i+1}, Model ${modelName}. Error: ${e.message}`);
-          await updateDashboardQuota(i + 1, modelName, "FAILED");
-          // אם זו שגיאת Quota (429), נעבור למודל הבא או למפתח הבא
-        }
-      }
-    }
-
-    // 6. הזרקת לינקים (Magic Links)
-    if (foundProduct && aiResponse.includes("MAGIC_URL")) {
-      const link = foundProduct.product_magic_link || `https://sidor.vercel.app/product-pages/index.html?id=${foundProduct.sku}`;
-      aiResponse = aiResponse.replace("MAGIC_URL", link);
-      if (stockAlert.includes("⚠️")) aiResponse += `\n${stockAlert}`;
-    }
-
-    // 7. עדכון ה-Pipeline למשלוח
-    if (phone && aiResponse) {
-      const cleanPhone = phone.replace('+', '').trim();
-      await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), { 
-        text: aiResponse, 
-        timestamp: Date.now(),
-        status: "pending"
-      });
-    }
-
-    return NextResponse.json({ text: aiResponse || "מצטער, יש עומס זמני במערכת. נסה שוב בעוד דקה." });
-
-  } catch (error: any) {
-    console.error("Critical Error:", error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error("Brain Error:", error);
+    return Response.json({ text: "תקלה בחיבור למוח." }, { status: 500 });
   }
 }
