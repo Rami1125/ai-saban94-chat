@@ -3,38 +3,35 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { 
-  Terminal, Database, Play, Save, Edit3, Trash2, 
-  RefreshCw, ShieldCheck, Zap, MessageSquare 
+  Zap, Save, Edit3, Trash2, RefreshCw, 
+  Play, Terminal, ChevronLeft, ChevronRight,
+  MoreVertical, Search, CheckCircle2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export default function SabanAIStudio() {
+export default function SabanAIStudioMobile() {
   const [rules, setRules] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [logs, setLogs] = useState<{t: string, m: string, s: string}[]>([]);
-  const [simInput, setSimInput] = useState("");
-  const [simOutput, setSimOutput] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
 
-  // 1. מלשינון (Logger)
   const addLog = (m: string, s: "info" | "success" | "error" = "info") => {
-    setLogs(prev => [{ t: new Date().toLocaleTimeString(), m, s }, ...prev].slice(0, 5));
+    setLogs(prev => [{ t: new Date().toLocaleTimeString().slice(0, 5), m, s }, ...prev].slice(0, 3));
   };
 
-  // 2. משיכת חוקי מערכת (System Rules / Knowledge)
   const fetchRules = useCallback(async () => {
     setLoading(true);
-    addLog("מתחבר ל-saban_unified_knowledge...", "info");
     try {
       const { data, error } = await supabase
         .from("saban_unified_knowledge")
         .select("*")
         .order("created_at", { ascending: false });
-
       if (error) throw error;
       setRules(data || []);
-      addLog("חוקי ה-AI נטענו בהצלחה", "success");
+      addLog("סנכרון נתונים הושלם", "success");
     } catch (err: any) {
-      addLog(`שגיאה: ${err.message}`, "error");
+      addLog(err.message, "error");
     } finally {
       setLoading(false);
     }
@@ -42,136 +39,138 @@ export default function SabanAIStudio() {
 
   useEffect(() => { fetchRules(); }, [fetchRules]);
 
-  // 3. מחיקת חוק
-  const deleteRule = async (id: string) => {
-    if (!confirm("למחוק את החוק הזה מהמוח של ה-AI?")) return;
-    try {
-      const { error } = await supabase.from("saban_unified_knowledge").delete().eq("id", id);
-      if (error) throw error;
-      addLog("חוק נמחק מהמערכת", "success");
+  const handleQuickSave = async (id: string) => {
+    addLog("מעדכן חוק...", "info");
+    const { error } = await supabase
+      .from("saban_unified_knowledge")
+      .update({ ai_response: editValue })
+      .eq("id", id);
+    
+    if (!error) {
+      addLog("החוק עודכן בהצלחה", "success");
+      setEditingId(null);
       fetchRules();
-    } catch (err: any) {
-      addLog(`שגיאת מחיקה: ${err.message}`, "error");
     }
   };
 
   return (
-    <div className="p-6 bg-[#F8FAFC] min-h-screen font-sans" dir="rtl">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-8 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-blue-600 rounded-2xl shadow-lg shadow-blue-100">
-            <Zap className="text-white" size={24} />
+    <div className="min-h-screen bg-[#F1F5F9] pb-20 font-sans antialiased" dir="rtl">
+      
+      {/* Mobile Top Bar - Fixed */}
+      <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200 p-4 flex justify-between items-center shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-200">
+            <Zap className="text-white" size={20} fill="currentColor" />
           </div>
-          <div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight">Saban AI Studio</h1>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Knowledge & Logic Manager</p>
-          </div>
+          <h1 className="text-xl font-black text-slate-900 tracking-tight">AI Studio</h1>
         </div>
-        <div className="flex gap-3">
-          <Button onClick={fetchRules} variant="outline" className="rounded-xl border-slate-200 font-bold h-11">
-            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-          </Button>
-          <Button className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-6 h-11 font-black shadow-lg shadow-blue-200">
-            + חוק חדש
-          </Button>
-        </div>
+        <button onClick={fetchRules} className="p-2 text-slate-500 active:scale-95 transition-transform">
+          <RefreshCw size={22} className={loading ? "animate-spin" : ""} />
+        </button>
       </div>
 
-      <div className="grid grid-cols-12 gap-6">
+      <main className="p-4 space-y-4">
         
-        {/* טבלת חוקים (שאלה/תשובה) */}
-        <div className="col-span-8 space-y-6">
-          <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl overflow-hidden">
-            <div className="p-6 border-b border-slate-50 flex justify-between items-center bg-slate-50/30">
-              <h2 className="font-black text-slate-800 flex items-center gap-2">
-                <ShieldCheck className="text-blue-500" size={18} />
-                טבלת חוקים ומענה (System Logic)
-              </h2>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-right">
-                <thead>
-                  <tr className="bg-slate-50/50">
-                    <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/3">שאלה / טריגר</th>
-                    <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/3">מענה AI (החוק)</th>
-                    <th className="p-5 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">פעולות</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {rules.map((rule) => (
-                    <tr key={rule.id} className="hover:bg-blue-50/30 transition-colors group">
-                      <td className="p-5 font-bold text-slate-700 text-sm italic">"{rule.question_trigger || rule.input}"</td>
-                      <td className="p-5 text-slate-600 text-sm leading-relaxed">{rule.ai_response || rule.output}</td>
-                      <td className="p-5">
-                        <div className="flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                          <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-white rounded-lg shadow-sm transition-all"><Edit3 size={16} /></button>
-                          <button onClick={() => deleteRule(rule.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-white rounded-lg shadow-sm transition-all"><Trash2 size={16} /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+        {/* Quick Simulator - Floating Card style */}
+        <div className="bg-slate-900 rounded-[2rem] p-5 text-white shadow-xl overflow-hidden relative">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Live Simulator</span>
+          </div>
+          <div className="h-20 overflow-y-auto text-sm font-bold text-blue-100 mb-4 px-2">
+            מעבד נתונים מ-Note 25... ה-AI מוכן למענה לפי חוקי סבן.
+          </div>
+          <div className="relative">
+            <input 
+              placeholder="שאל את המוח..."
+              className="w-full bg-white/10 border border-white/10 rounded-2xl p-4 pr-12 text-sm focus:bg-white/20 outline-none transition-all placeholder:text-white/30"
+            />
+            <Play className="absolute right-4 top-1/2 -translate-y-1/2 text-blue-400" size={18} fill="currentColor" />
           </div>
         </div>
 
-        {/* סימולטור ומלשינון */}
-        <div className="col-span-4 space-y-6">
-          
-          {/* Real-time Simulator */}
-          <div className="bg-slate-900 rounded-[2.5rem] p-6 text-white shadow-2xl flex flex-col min-h-[350px]">
-            <div className="flex items-center gap-2 text-blue-400 font-black text-[10px] uppercase tracking-[0.2em] mb-6">
-              <Play size={12} fill="currentColor" /> Live Simulator
-            </div>
-            <div className="flex-1 space-y-4 mb-6 overflow-y-auto custom-scrollbar p-2">
-              <div className="text-xs text-slate-500 font-mono italic">
-                {`> Saban_Engine_v4.2 initialized...`}
-              </div>
-              {simOutput && (
-                <div className="bg-blue-600/10 border-r-4 border-blue-500 p-4 rounded-xl animate-in slide-in-from-right-2">
-                  <p className="text-xs font-black text-blue-400 mb-2">AI RESPONSE:</p>
-                  <p className="text-sm font-bold leading-relaxed">{simOutput}</p>
-                </div>
-              )}
-            </div>
-            <div className="relative">
-              <input 
-                value={simInput}
-                onChange={(e) => setSimInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    setSimOutput("מעבד תשובה לפי חוקי ה-Unified Knowledge...");
-                    addLog(`סימולציה נשלחה: ${simInput}`, "info");
-                  }
-                }}
-                placeholder="בדוק חוק מול ה-AI..."
-                className="w-full bg-slate-800 border-none rounded-2xl p-4 text-sm font-bold placeholder:text-slate-500 focus:ring-2 focus:ring-blue-500 transition-all outline-none"
-              />
-              <MessageSquare className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600" size={18} />
-            </div>
-          </div>
-
-          {/* מלשינון (Logger) */}
-          <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm">
-            <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-              <Terminal size={14} className="text-orange-500" /> מלשינון אירועים
+        {/* Knowledge Base Table - Card Layout for Mobile */}
+        <div className="space-y-3">
+          <div className="flex justify-between items-center px-2">
+            <h2 className="text-sm font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+              <Database size={14} /> חוקי מערכת ({rules.length})
             </h2>
-            <div className="space-y-3">
-              {logs.map((l, i) => (
-                <div key={i} className="flex gap-3 items-start p-2 rounded-lg hover:bg-slate-50 transition-colors">
-                  <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${l.s === 'error' ? 'bg-red-500' : l.s === 'success' ? 'bg-green-500' : 'bg-blue-500'}`} />
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-800 leading-tight">{l.m}</p>
-                    <span className="text-[8px] font-black text-slate-300 uppercase">{l.t}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <Button variant="ghost" className="text-blue-600 font-bold text-xs">+ הוסף</Button>
           </div>
 
+          {rules.map((rule) => (
+            <div key={rule.id} className="bg-white rounded-[1.5rem] p-4 border border-slate-100 shadow-sm active:bg-slate-50 transition-colors">
+              <div className="flex justify-between items-start mb-2">
+                <span className="bg-blue-50 text-blue-600 text-[10px] font-black px-2 py-1 rounded-md">TRIGGER</span>
+                <MoreVertical size={16} className="text-slate-300" />
+              </div>
+              <p className="text-sm font-bold text-slate-900 mb-3 leading-snug">
+                {rule.question_trigger || rule.input}
+              </p>
+              
+              <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-[9px] font-black text-slate-400 uppercase">AI Logic</span>
+                  {editingId !== rule.id && (
+                    <button onClick={() => { setEditingId(rule.id); setEditValue(rule.ai_response || rule.output); }} className="text-blue-500">
+                      <Edit3 size={14} />
+                    </button>
+                  )}
+                </div>
+                
+                {editingId === rule.id ? (
+                  <div className="space-y-2">
+                    <textarea 
+                      className="w-full bg-white border border-blue-200 rounded-lg p-2 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      rows={3}
+                    />
+                    <div className="flex gap-2">
+                      <Button onClick={() => handleQuickSave(rule.id)} className="flex-1 bg-green-600 h-8 rounded-lg text-[10px] font-black text-white">שמור</Button>
+                      <Button onClick={() => setEditingId(null)} variant="ghost" className="flex-1 h-8 rounded-lg text-[10px] font-black text-slate-400">ביטול</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                    {rule.ai_response || rule.output}
+                  </p>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
+
+        {/* Mobile Logger - Bottom Floating */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-lg">
+          <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 flex items-center gap-2">
+            <Terminal size={12} className="text-orange-500" /> Device Logs
+          </h3>
+          <div className="space-y-2">
+            {logs.map((l, i) => (
+              <div key={i} className="flex items-center gap-3 text-[10px] font-bold">
+                <span className="text-slate-300">[{l.t}]</span>
+                <span className={l.s === 'error' ? 'text-red-500' : l.s === 'success' ? 'text-green-600' : 'text-blue-600'}>{l.m}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </main>
+
+      {/* Mobile Navigation Dock */}
+      <div className="fixed bottom-0 inset-x-0 bg-white/90 backdrop-blur-lg border-t border-slate-100 p-3 px-8 flex justify-between items-center z-[100] shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+        <button className="flex flex-col items-center gap-1 text-blue-600">
+          <Zap size={20} fill="currentColor" />
+          <span className="text-[9px] font-black uppercase">Studio</span>
+        </button>
+        <button className="flex flex-col items-center gap-1 text-slate-300">
+          <Database size={20} />
+          <span className="text-[9px] font-black uppercase">Data</span>
+        </button>
+        <button className="flex flex-col items-center gap-1 text-slate-300">
+          <Search size={20} />
+          <span className="text-[9px] font-black uppercase">Search</span>
+        </button>
       </div>
     </div>
   );
