@@ -108,11 +108,21 @@ export async function POST(req: Request) {
       }
     }
 
-    // 4. עיבוד סופי ועדכון ה-Pipeline
-    if (product && aiResponse.includes("MAGIC_URL")) {
-      const finalLink = product.product_magic_link || `https://sidor.vercel.app/product?sku=${product.sku}`;
-      aiResponse = aiResponse.replace("MAGIC_URL", finalLink);
-    }
+// 4. עיבוד סופי - החלפה חכמה של הלינק
+if (product) {
+  // יצירת הלינק הסופי: עדיפות ללינק מה-DB, ואז לפורמט SKU
+  const finalLink = product.product_magic_link || `https://sidor.vercel.app/product-pages/index.html?id=${product.sku}`;
+  
+  // שימוש ב-Regex כדי למצוא את MAGIC_URL גם אם יש מסביבו רווחים, סוגריים או אותיות קטנות
+  const magicUrlRegex = /MAGIC_URL/gi; 
+
+  if (magicUrlRegex.test(aiResponse)) {
+    aiResponse = aiResponse.replace(magicUrlRegex, finalLink);
+  } else if (!aiResponse.includes(finalLink)) {
+    // ליתר ביטחון: אם ה-AI שכח לכתוב MAGIC_URL אבל מצאנו מוצר, נוסיף את הלינק בסוף
+    aiResponse += `\n\n🔗 [לצפייה במוצר]: ${finalLink}`;
+  }
+}
 
     if (phone && aiResponse) {
       const cleanPhone = phone.replace(/\D/g, '');
