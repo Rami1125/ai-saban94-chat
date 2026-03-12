@@ -1,22 +1,14 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { NextResponse } from 'next/server';
+import { getSupabaseClient } from '@/lib/supabase'; // שימוש ב-Lazy Init שסידרנו
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
+export async function POST(req: Request) {
   try {
     const { message } = await req.json();
     
-    // שליפת מפתחות מה-Secrets של המערכת
-    const supabaseUrl = Deno.env.get("NEXT_PUBLIC_SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("NEXT_PUBLIC_SUPABASE_ANON_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // איתחול הלקוח רק בתוך הפונקציה (Runtime בלבד)
+    const supabase = getSupabaseClient();
 
-    // חיפוש חכם - שימוש ב-product_name כפי שמופיע ב-CSV שלך
+    // חיפוש במלאי
     const { data: products, error: dbError } = await supabase
       .from("inventory")
       .select("*")
@@ -25,40 +17,27 @@ Deno.serve(async (req) => {
 
     if (dbError) throw dbError;
 
-    // בניית הקשר (Context) עבור ג'מיני
+    // בניית Context עבור ג'מיני
     const productContext = products && products.length > 0 
-      ? `מצאתי את המוצרים הבאים במלאי: ${products.map(p => 
-          `${p.product_name} (מק"ט: ${p.sku}, מחיר: ₪${p.price || 'צרו קשר'}, צריכה: ${p.coverage_per_sqm || 'לפי דרישה'})`
-        ).join(" | ")}`
-      : "לא נמצאו מוצרים תואמים במלאי כרגע.";
+      ? products.map(p => `${p.product_name} (₪${p.price})`).join(", ")
+      : "אין כרגע במלאי";
 
-    // קריאה לג'מיני (Gemini 1.5 Flash)
-    const geminiKey = Deno.env.get("GOOGLE_GENERATIVE_AI_API_KEY");
+    // קריאה לג'מיני
+    const geminiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        contents: [{
-          parts: [{
-            text: `אתה עוזר חכם ומקצועי של "סבן חומרי בניין". השב בעברית בלבד.
-            השתמש במידע הבא מהמלאי כדי לענות: ${productContext}.
-            אם נמצא מוצר, ציין את יתרונותיו (features). השאלה: ${message}`
-          }]
-        }]
+        contents: [{ parts: [{ text: `השב כנציג סבן חומרי בניין. מלאי: ${productContext}. שאלה: ${message}` }] }]
       })
     });
 
     const aiData = await aiRes.json();
     const reply = aiData.candidates[0].content.parts[0].text;
 
-    return new Response(JSON.stringify({ reply, products }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" }
-    });
+    return NextResponse.json({ reply, products });
 
-  } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), { 
-      status: 500, 
-      headers: corsHeaders 
-    });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
-});
+}
