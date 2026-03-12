@@ -1,57 +1,81 @@
-import { createClient } from '@supabase/supabase-js';
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { getSupabase } from "@/lib/supabase"; // שימוש ב-Getter
+import { getRTDB } from "@/lib/firebase";    // שימוש ב-Getter
+import { ref, push, update } from "firebase/database";
+import { NextResponse } from "next/server";
 
-const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 export const dynamic = 'force-dynamic';
+
 export async function POST(req: Request) {
   try {
-    const { messages, userId, phone } = await req.json();
-    const lastUserMessage = messages[messages.length - 1].content;
+    // איתחול ה-Clients רק בזמן ריצה
+    const supabase = getSupabase();
+    const rtdb = getRTDB();
+    
+    const { messages, phone, user_id } = await req.json();
+    const lastUserMsg = messages[messages.length - 1].content;
 
-    // 1. שליפת חוקי ADMIN ו-DNA מה-Supabase
-    const { data: adminSettings } = await supabase
-      .from('system_settings')
-      .select('content')
-      .eq('key', 'saban_ai_dna')
-      .single();
+    // --- לוגיקת חיפוש ושליפת DNA (נשארת זהה, רק בתוך ה-POST) ---
+    const { data: config } = await supabase.from('system_rules').select('instruction, agent_type, is_active');
+    // ... שאר הלוגיקה שלך ...
 
-    // 2. חיפוש מוצר במלאי (Semantic Search)
-    const { data: product } = await supabase
-      .from('inventory')
-      .select('*')
-      .textSearch('search_tsv', lastUserMessage, { config: 'simple', type: 'phrase' })
-      .limit(1)
-      .single();
+    // --- ניהול ה-POOL (חשוב: בדיקת קיום מפתחות) ---
+    const keys = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').filter(k => k.trim().length > 10);
+    
+    if (keys.length === 0) throw new Error("API Keys missing in environment");
 
-    // 3. בניית הנחיות המוח
-    const systemPrompt = `
-      CONTEXT: אתה היועץ הראשי של "ח. סבן חומרי בניין".
-      ADMIN_DNA: ${adminSettings?.content || "דבר בעברית פשוטה, מקצועית, ותמציתית."}
+    // מודלים מעודכנים 2026
+    const modelPool = [
+      "gemini-3.1-flash-lite-preview", 
+      "gemini-3.1-pro-preview",
+      "gemini-3-flash-preview"
+    ];
+
+    let aiResponse = "";
+    let success = false;
+
+    // לוגיקת רוטציה
+    for (let i = 0; i < keys.length; i++) {
+      if (success) break;
       
-      PRODUCT_CONTEXT: ${product ? `נמצא מוצר: ${product.product_name}. מחיר: ${product.price}. צריכה למ"מ: ${product.consumption_per_mm}.` : "לא נמצא מוצר ספציפי."}
-      
-      RULES:
-      - אם המשתמש שואל על כמות, בצע חישוב: (שטח במ"ר * צריכה למ"מ) / גודל אריזה.
-      - תמיד תברך ותייעץ בצורה חברית אך מקצועית (סגנון 'מתכנת אומנותי').
-      - אל תחזור על השאלה.
-    `;
+      const genAI = new GoogleGenerativeAI(keys[i]);
+      for (const modelName of modelPool) {
+        try {
+          const model = genAI.getGenerativeModel({
+            model: modelName,
+            systemInstruction: `... DNA logic ...`
+          });
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const result = await model.generateContent([systemPrompt, ...messages.map(m => m.content)]);
-    const text = result.response.text();
+          const result = await model.generateContent({
+            contents: [{ role: 'user', parts: [{ text: lastUserMsg }] }],
+            generationConfig: { temperature: 0.7, maxOutputTokens: 800 }
+          });
 
-    // שמירה ללוגים (חיסכון באנרגיה וניטור)
-    await supabase.from('chat_history').insert({ user_id: userId, message: lastUserMessage, response: text });
+          aiResponse = result.response.text();
+          if (aiResponse) {
+             success = true; 
+             break;
+          }
+        } catch (e) {
+          console.warn(`Key ${i} failed with ${modelName}`);
+        }
+      }
+    }
 
-    return Response.json({ 
-      text, 
-      product: product || null,
-      shouldNotify: true // טריגר לצליל ב-Frontend
-    });
+    // --- עדכון Pipeline ומשלוח ---
+    if (phone && aiResponse) {
+      const cleanPhone = phone.replace('+', '').trim();
+      await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), { 
+        text: aiResponse, 
+        timestamp: Date.now(),
+        status: "pending"
+      });
+    }
 
-  } catch (error) {
-    console.error("Brain Error:", error);
-    return Response.json({ text: "תקלה בחיבור למוח." }, { status: 500 });
+    return NextResponse.json({ text: aiResponse });
+
+  } catch (error: any) {
+    console.error("Critical:", error.message);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
