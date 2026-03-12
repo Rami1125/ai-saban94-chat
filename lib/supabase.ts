@@ -3,19 +3,23 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-// משתנה גלובלי שיחזיק את המופע היחיד
-let supabase: any;
+// משתנה פנימי לניהול המופע
+let supabaseInstance: any;
 
 export const getSupabase = () => {
-  if (!supabase) {
-    supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  if (!supabaseInstance) {
+    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
-        storageKey: 'saban-os-auth-v1' // מפתח ייחודי למניעת התנגשויות
+        storageKey: 'saban-os-auth-v1'
       }
     });
   }
-  return supabase;
+  return supabaseInstance;
 };
+
+// --- הפתרון לשגיאות ה-Build ---
+// מייצאים מופע מוכן מראש שכל הדפים הישנים יוכלו להשתמש בו בלי שינוי קוד
+export const supabase = getSupabase();
