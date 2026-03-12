@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     const [configRes, inventoryRes] = await Promise.all([
       supabase.from('system_rules').select('instruction, agent_type, is_active'),
       supabase.from('inventory')
-        .select('product_name, stock_quantity, product_magic_link, sku, price, unit_type, description')
+        .select('product_name, stock_quantity, product_magic_link, sku, price, unit_type, description, image_url, youtube_url')
         .or(`product_name.ilike.%${cleanSearch}%,sku.ilike.%${cleanSearch}%`)
         .limit(1)
         .maybeSingle()
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
     if (!product && cleanSearch.includes(" ")) {
       const firstWord = cleanSearch.split(" ")[0];
       const fallbackSearch = await supabase.from('inventory')
-        .select('product_name, stock_quantity, product_magic_link, sku, price, unit_type, description')
+        .select('product_name, stock_quantity, product_magic_link, sku, price, unit_type, description, image_url, youtube_url')
         .ilike('product_name', `%${firstWord}%`)
         .limit(1)
         .maybeSingle();
@@ -52,8 +52,8 @@ export async function POST(req: Request) {
     const keys = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').map(k => k.trim()).filter(k => k.length > 10);
     const modelPool = [
       "gemini-3.1-flash-lite-preview", 
-      "gemini-3.1-pro-preview",       
-      "gemini-3-flash-preview"        
+      "gemini-3.1-pro-preview",        
+      "gemini-3-flash-preview"         
     ];
     
     let aiResponse = "";
@@ -71,27 +71,22 @@ export async function POST(req: Request) {
           const model = genAI.getGenerativeModel({
             model: modelName,
             systemInstruction: `
+              STRICT_PRIORITY: את הפקודות הבאות עליך לבצע ללא יוצא מן הכלל:
+              
               ${executorDNA}
+              
               תפקיד: מנהל מכירות דיגיטלי ב-"ח. סבן חומרי בניין".
               
-              --- כלי עבודה: כרטיס מוצר מהמלאי ---
-              ${product ? `
-              מצאתי במערכת מוצר מתאים:
-              📦 *${product.product_name}*
-              --------------------------------
-              📝 תיאור: ${product.description || "חומר בניין מקצועי"}
-              💰 מחיר: ₪${product.price} ${product.unit_type ? `ל-${product.unit_type}` : ""}
-              ✅ מלאי: ${product.stock_quantity > 0 ? "זמין לאספקה" : "צור קשר לבדיקת מלאי"}
-              🆔 מק"ט: ${product.sku}
-              --------------------------------
-              🔗 לרכישה: MAGIC_URL
-              ` : "לא נמצא מוצר ספציפי במלאי. השב באדיבות על מגוון חומרי הבניין שאנו מחזיקים."}
+              --- נתוני מוצר בזמן אמת (JSON) ---
+              ${product ? JSON.stringify(product) : "לא נמצא מוצר ספציפי במלאי."}
 
-              הנחיות:
-              1. ענה בעברית פשוטה, "בגובה העיניים", כמו איש מכירות מנוסה.
-              2. אם יש מוצר, הצג את הכרטיס המודגש לעיל.
-              3. בסוף כל הודעה, תמיד תחתום בברכה: "תודה שבחרתה בח.סבן חומרי בנין".
-              סיים בחתימה: תודה שבחרת בח.סבן חומרי בניין | ח.סבן חומרי בנין התלמיד 6 הוד השרון
+              --- הנחיות עבודה ---
+              1. אם קיים מוצר, השתמש בפורמט כרטיס המוצר המדויק שהוגדר ב-DNA (חוק הברזל).
+              2. חובה להשתמש ב-Placeholder שנקרא MAGIC_URL עבור הלינק.
+              3. אל תמציא מחירים או נתונים שאינם ב-JSON.
+              4. ענה בעברית פשוטה וישירה.
+              
+              סיום בחתימה: תודה שבחרת בח.סבן חומרי בניין | ח.סבן חומרי בנין התלמיד 6 הוד השרון
             `
           });
 
@@ -108,21 +103,23 @@ export async function POST(req: Request) {
       }
     }
 
-// 4. עיבוד סופי - החלפה חכמה של הלינק
-if (product) {
-  // לינק עדיפות מה-DB, ואז פורמט SKU תקני
-  const finalLink = product.product_magic_link || `https://sidor.vercel.app/product-pages/index.html?id=${product.sku}`;
-  
-  // שימוש ב-Regex כדי לתפוס את MAGIC_URL בכל מצב (גם אם ה-AI הוסיף רווח או אות קטנה)
-  const magicUrlRegex = /MAGIC_URL/gi; 
+    // 4. עיבוד סופי - החלפה חכמה וחסינה של הלינק
+    if (product) {
+      // לינק עדיפות מה-DB, ואז פורמט SKU תקני
+      const finalLink = product.product_magic_link || `https://sidor.vercel.app/product-pages/index.html?id=${product.sku}`;
+      
+      // שימוש ב-Regex גלובלי (g) שאינו רגיש לאותיות (i) כדי להחליף את MAGIC_URL
+      const magicUrlRegex = /MAGIC_URL/gi; 
 
-  if (magicUrlRegex.test(aiResponse)) {
-    aiResponse = aiResponse.replace(magicUrlRegex, finalLink);
-  } else {
-    // ליתר ביטחון - אם המודל שכח את ה-Placeholder, נדביק את הלינק בסוף
-    aiResponse += `\n\n🔗 לצפייה במוצר: ${finalLink}`;
-  }
-}
+      if (magicUrlRegex.test(aiResponse)) {
+        aiResponse = aiResponse.replace(magicUrlRegex, finalLink);
+      } else {
+        // ליתר ביטחון - אם המודל לא הציב את ה-Placeholder, נדביק את הלינק בסוף
+        if (!aiResponse.includes(finalLink)) {
+          aiResponse += `\n\n🔗 [לחץ כאן לצפייה במוצר]: ${finalLink}`;
+        }
+      }
+    }
 
     if (phone && aiResponse) {
       const cleanPhone = phone.replace(/\D/g, '');
