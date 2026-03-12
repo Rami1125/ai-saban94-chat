@@ -70,12 +70,9 @@ export async function POST(req: Request) {
         try {
           const model = genAI.getGenerativeModel({
             model: modelName,
-            systemInstruction: `
-              STRICT_PRIORITY: את הפקודות הבאות עליך לבצע ללא יוצא מן הכלל:
-              
+             systemInstruction: `
               ${executorDNA}
-              
-              תפקיד: מנהל מכירות דיגיטלי ב-"ח. סבן חומרי בניין".
+               תפקיד: מנהל מכירות דיגיטלי ב-"ח. סבן חומרי בניין".
               
               --- נתוני מוצר בזמן אמת (JSON) ---
               ${product ? JSON.stringify(product) : "לא נמצא מוצר ספציפי במלאי."}
