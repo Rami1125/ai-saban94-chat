@@ -12,10 +12,9 @@ import { toast } from "sonner";
 
 const formSchema = z.object({
   customer_name: z.string().min(2, "שם לקוח חובה"),
-  phone_number: z.string().min(10, "מספר טלפון לא תקין"),
+  phone_number: z.string().min(10, "טלפון לא תקין"),
   delivery_address: z.string().min(5, "כתובת חובה"),
-  project_name: z.string().optional(),
-  driver_name: z.string().min(2, "חובה לבחור נהג"),
+  driver_name: z.string().min(2, "חובה נהג"),
   scheduled_time: z.string(),
   truck_type: z.string()
 });
@@ -23,25 +22,24 @@ const formSchema = z.object({
 export default function OrderForm({ onOrderCreated }: { onOrderCreated: () => void }) {
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const supabase = getSupabase();
-  
   const { register, handleSubmit, setValue, watch, reset, formState: { isSubmitting } } = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: { scheduled_time: "07:00", truck_type: "crane" }
   });
 
-  const customerName = watch("customer_name");
+  const nameInput = watch("customer_name");
 
   useEffect(() => {
-    if (customerName?.length > 2) {
+    if (nameInput?.length > 2) {
       const search = async () => {
         const { data } = await supabase.from('dispatch_orders')
-          .select('customer_name, phone_number, delivery_address, project_name')
-          .ilike('customer_name', `%${customerName}%`).limit(3);
+          .select('customer_name, phone_number, delivery_address')
+          .ilike('customer_name', `%${nameInput}%`).limit(3);
         if (data) setSuggestions(data);
       };
       search();
     } else setSuggestions([]);
-  }, [customerName, supabase]);
+  }, [nameInput, supabase]);
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     const { error } = await supabase.from('dispatch_orders').insert([{
@@ -51,35 +49,36 @@ export default function OrderForm({ onOrderCreated }: { onOrderCreated: () => vo
     }]);
 
     if (!error) {
-      toast.success("הזמנה נשמרה במוח של סבן");
+      toast.success("הזמנה נשמרה בסידור");
       reset();
       onOrderCreated();
-    } else toast.error("שגיאה בשמירה");
+    }
   };
 
   return (
-    <Card className="border-none shadow-xl" dir="rtl">
-      <CardHeader className="bg-slate-900 text-white rounded-t-xl">
-        <CardTitle className="text-lg font-black flex items-center gap-2">
-          <Truck size={20} className="text-blue-400" /> הזמנה חדשה למחר
+    <Card className="border-none shadow-2xl overflow-hidden" dir="rtl">
+      <CardHeader className="bg-blue-600 text-white p-6 text-right">
+        <CardTitle className="flex items-center gap-2 text-xl font-black uppercase">
+          <Truck size={24} /> יצירת הזמנה חדשה
         </CardTitle>
       </CardHeader>
       <CardContent className="p-6">
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
           <div className="relative">
-            <Input {...register("customer_name")} className="h-12 pr-10" placeholder="שם הלקוח (חיפוש בהיסטוריה...)" />
-            <User className="absolute right-3 top-3.5 text-slate-400" size={18} />
+            <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block">שם לקוח / חברה</label>
+            <Input {...register("customer_name")} className="h-14 pr-12 text-lg font-bold" placeholder="חיפוש בהיסטוריה..." />
+            <User className="absolute right-4 top-9 text-slate-400" size={20} />
             {suggestions.length > 0 && (
-              <div className="absolute z-10 w-full bg-white border rounded-lg shadow-2xl mt-1">
+              <div className="absolute z-50 w-full bg-white border-2 border-blue-100 rounded-xl shadow-2xl mt-1 overflow-hidden">
                 {suggestions.map((s, i) => (
                   <div key={i} onClick={() => {
                     setValue("customer_name", s.customer_name);
                     setValue("phone_number", s.phone_number);
                     setValue("delivery_address", s.delivery_address);
                     setSuggestions([]);
-                  }} className="p-3 hover:bg-slate-50 cursor-pointer border-b last:border-0">
-                    <div className="font-bold text-sm">{s.customer_name}</div>
-                    <div className="text-[10px] text-slate-500">{s.delivery_address}</div>
+                  }} className="p-4 hover:bg-blue-50 cursor-pointer border-b last:border-0">
+                    <div className="font-black text-slate-800">{s.customer_name}</div>
+                    <div className="text-xs text-slate-400">{s.delivery_address}</div>
                   </div>
                 ))}
               </div>
@@ -87,25 +86,22 @@ export default function OrderForm({ onOrderCreated }: { onOrderCreated: () => vo
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <Input {...register("phone_number")} className="h-12" placeholder="טלפון לקוח" />
-            <Input {...register("driver_name")} className="h-12" placeholder="שם הנהג" />
+            <Input {...register("phone_number")} className="h-12 font-bold" placeholder="טלפון לקוח" />
+            <Input {...register("driver_name")} className="h-12 font-bold" placeholder="שם נהג" />
           </div>
 
-          <Input {...register("delivery_address")} className="h-12" placeholder="כתובת פרויקט מדויקת" />
+          <Input {...register("delivery_address")} className="h-14 font-bold" placeholder="כתובת פרויקט מדויקת" />
 
           <div className="grid grid-cols-2 gap-4">
-             <div className="relative">
-               <Input type="time" {...register("scheduled_time")} className="h-12 pr-10" />
-               <Clock className="absolute right-3 top-3.5 text-slate-400" size={18} />
-             </div>
-             <select {...register("truck_type")} className="h-12 border rounded-md px-3 bg-white text-sm font-bold">
-               <option value="crane">מנוף</option>
-               <option value="flatbed">פתוחה</option>
-             </select>
+            <Input type="time" {...register("scheduled_time")} className="h-12 font-mono text-center text-lg" />
+            <select {...register("truck_type")} className="h-12 border-2 border-slate-100 rounded-md px-3 font-bold bg-white">
+              <option value="crane">מנוף</option>
+              <option value="flatbed">פתוחה</option>
+            </select>
           </div>
 
-          <Button type="submit" disabled={isSubmitting} className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-white font-black text-lg rounded-xl shadow-lg shadow-blue-100">
-            {isSubmitting ? "מעבד נתונים..." : "שבץ בסידור ושמור היסטוריה"}
+          <Button type="submit" disabled={isSubmitting} className="w-full h-16 bg-slate-900 hover:bg-black text-white text-xl font-black rounded-2xl shadow-xl mt-4">
+            {isSubmitting ? "שומר..." : "שבץ בסידור ושמור היסטוריה"}
           </Button>
         </form>
       </CardContent>
