@@ -7,33 +7,29 @@ import { ref, update } from "firebase/database";
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-  
-    export async function POST(req: Request) {
-    try {
+export async function POST(req: Request) {
+  try {
     const supabase = getSupabase();
     const rtdb = getRTDB();
     
     const { messages, phone } = await req.json();
     const lastUserMsg = messages[messages.length - 1].content;
 
-    // --- הטמעת חיפוש חכם כאן ---
-    // 1. ניקוי השאלה ממילים מיותרות וסימני שאלה
+    // --- הטמעת חיפוש חכם מתוקנת ---
     const cleanSearch = lastUserMsg.replace(/[?？]/g, "").trim();
     
-    // 2. שליפת DNA וחיפוש מוצר גמיש
     const [configRes, inventoryRes] = await Promise.all([
       supabase.from('system_rules').select('instruction, agent_type, is_active'),
       supabase.from('inventory')
         .select('product_name, stock_quantity, product_magic_link, sku, price, unit_type, description')
-        // מחפש אם שם המוצר מכיל חלק מהמילים שהלקוח כתב
         .or(`product_name.ilike.%${cleanSearch}%,sku.ilike.%${cleanSearch}%`)
         .limit(1)
         .maybeSingle()
     ]);
 
+    // משתנה שניתן לשינוי (let) ומוגדר רק פעם אחת
     let product = inventoryRes.data;
 
-    // לוגיקה נוספת: אם לא נמצא, ננסה לחפש רק לפי המילה הראשונה (למשל "גבס")
     if (!product && cleanSearch.includes(" ")) {
       const firstWord = cleanSearch.split(" ")[0];
       const fallbackSearch = await supabase.from('inventory')
@@ -41,7 +37,9 @@ export const runtime = 'nodejs';
         .ilike('product_name', `%${firstWord}%`)
         .limit(1)
         .maybeSingle();
-      if (fallbackSearch.data) product = fallbackSearch.data;
+      if (fallbackSearch.data) {
+        product = fallbackSearch.data;
+      }
     }
     // --- סוף הטמעת חיפוש חכם ---
 
@@ -50,15 +48,12 @@ export const runtime = 'nodejs';
       .map(r => r.instruction)
       .join("\n") || "נציג מכירות ח. סבן";
 
-    const product = inventoryRes.data;
-
-    // 2. ניהול מפתחות ומודלים - מעודכן למרץ 2026
+    // 2. ניהול מפתחות ומודלים - מרץ 2026
     const keys = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').map(k => k.trim()).filter(k => k.length > 10);
-    // שימוש במודלים הכי מתקדמים של Gemini נכון להיום
-     const modelPool = [
-      "gemini-3.1-flash-lite-preview", // הכי מהיר וחדש (מרץ 3)
-      "gemini-3.1-pro-preview",       // הכי חכם (מרץ 9)
-      "gemini-3-flash-preview"        // גיבוי יציב
+    const modelPool = [
+      "gemini-3.1-flash-lite-preview", 
+      "gemini-3.1-pro-preview",       
+      "gemini-3-flash-preview"        
     ];
     
     let aiResponse = "";
@@ -90,7 +85,7 @@ export const runtime = 'nodejs';
               🆔 מק"ט: ${product.sku}
               --------------------------------
               🔗 לרכישה: MAGIC_URL
-              ` : "לא נמצא מוצר ספציפי במלאי. השב באדיבות על מגוון חומרי הבניין שלנו."}
+              ` : "לא נמצא מוצר ספציפי במלאי. השב באדיבות על מגוון חומרי הבניין שאנו מחזיקים."}
 
               הנחיות:
               1. ענה בעברית פשוטה, "בגובה העיניים", כמו איש מכירות מנוסה.
@@ -107,8 +102,8 @@ export const runtime = 'nodejs';
             aiResponse = responseText;
             success = true;
           }
-        } catch (e) {
-          console.warn(`Error with key/model. Switching...`);
+        } catch (e: any) {
+          console.warn(`Switching key/model due to error...`);
         }
       }
     }
@@ -130,7 +125,7 @@ export const runtime = 'nodejs';
 
     return NextResponse.json({ 
       text: aiResponse || "שלום, כאן ח. סבן. איך נוכל לעזור לכם היום בפרויקט?",
-      product: product // שולח את האובייקט ל-Frontend לשימוש ב-UI
+      product: product 
     });
 
   } catch (error: any) {
