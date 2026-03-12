@@ -136,15 +136,15 @@ export default function InventoryStudio() {
             <CardTitle className="text-lg font-bold flex items-center gap-2 text-slate-800">
               ניהול תוכן ומדיה למלאי
             </CardTitle>
-            <div className="relative w-72">
-              <Search className="absolute right-3 top-2.5 text-slate-400" size={16} />
-              <Input 
-                placeholder="חיפוש לפי שם או מק'ט..." 
-                className="pr-9 h-9" 
+          <div className="relative w-72">
+          <Search className="absolute right-3 top-2.5 text-slate-400" size={16} />
+           <Input 
+            placeholder="חיפוש לפי שם או מק'ט..." 
+              className="pr-9 h-9" 
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
+               onChange={(e) => setSearch(e.target.value)}
+               />
+         </div>
           </CardHeader>
           <div className="overflow-x-auto max-h-[650px] overflow-y-auto">
             <Table>
