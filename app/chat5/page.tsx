@@ -8,7 +8,7 @@ const ChatShell = dynamic(() => import("@/components/ChatShell"), {
   loading: () => <div className="h-screen w-full bg-black" /> 
 });
 
-const MessageList = dynamic(() => import("@/components/chat/MessageList"), { ssr: false });
+const MessageList = dynamic(() => import("@/components/chat/message-list"), { ssr: false });
 const Composer = dynamic(() => import("@/components/chat/Composer"), { ssr: false });
 const ActionOverlays = dynamic(() => import("@/components/chat/ActionOverlays"), { ssr: false });
 
