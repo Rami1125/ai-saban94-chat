@@ -30,7 +30,23 @@ export default function DispatchStudio() {
     fetchDispatch();
     // כאן בהמשך נזריק את השליחה האוטומטית ל-JONI
   };
-
+  
+    const sendWhatsAppUpdate = async (order: any, type: "CLIENT_UPDATE" | "CHANNEL_POST") => {
+  try {
+    const res = await fetch('/api/dispatch/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        orderId: order.id, 
+        status: order.status, 
+        type: type 
+      })
+    });
+    if (res.ok) alert("הודעה נשלחה ל-JONI בהצלחה!");
+  } catch (err) {
+    console.error("Error sending update", err);
+  }
+};
   return (
     <div className="p-4 bg-[#f8fafc] min-h-screen font-sans pb-20" dir="rtl">
       <header className="mb-6 flex justify-between items-center">
