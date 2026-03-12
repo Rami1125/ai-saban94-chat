@@ -7,15 +7,9 @@ import { ref, update } from "firebase/database";
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-export async function POST(req: Request) {
-  try {
-    const supabase = getSupabase();
-    const rtdb = getRTDB();
-    
-    const { messages, phone } = await req.json();
-    const lastUserMsg = messages[messages.length - 1].content;
-export async function POST(req: Request) {
-  try {
+  
+    export async function POST(req: Request) {
+    try {
     const supabase = getSupabase();
     const rtdb = getRTDB();
     
