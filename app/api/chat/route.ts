@@ -15,11 +15,11 @@ export async function POST(req: Request) {
     const { messages, phone } = await req.json();
     const lastUserMsg = messages[messages.length - 1].content;
 
-    // 1. חיפוש DNA ומלאי
+    // 1. שליפת DNA של העסק וחיפוש מוצר במלאי
     const [configRes, inventoryRes] = await Promise.all([
       supabase.from('system_rules').select('instruction, agent_type, is_active'),
       supabase.from('inventory')
-        .select('product_name, stock_quantity, product_magic_link, sku, price')
+        .select('product_name, stock_quantity, product_magic_link, sku, price, unit_type')
         .or(`product_name.ilike.%${lastUserMsg}%,sku.ilike.%${lastUserMsg}%`)
         .limit(1)
         .maybeSingle()
@@ -32,17 +32,16 @@ export async function POST(req: Request) {
 
     const foundProduct = inventoryRes.data;
 
-    // 2. ניהול מפתחות ומודלים (מעודכן למרץ 2026)
+    // 2. ניהול מפתחות ומודלים - Key Pool
     const keys = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').map(k => k.trim()).filter(k => k.length > 10);
-    const modelPool = ["gemini-3.1-flash-lite-preview", "gemini-3.1-pro-preview"];
+    const modelPool = ["gemini-1.5-flash", "gemini-1.5-pro"]; // מודלים יציבים לשימוש ייצורי
     
     let aiResponse = "";
     let success = false;
 
-    // 3. לוגיקת הרוטציה
+    // 3. לוגיקת רוטציה בין מפתחות ומודלים
     for (const key of keys) {
       if (success) break;
-      
       const genAI = new GoogleGenerativeAI(key);
       
       for (const modelName of modelPool) {
@@ -51,38 +50,49 @@ export async function POST(req: Request) {
         try {
           const model = genAI.getGenerativeModel({
             model: modelName,
-  systemInstruction: `
-    אתה נציג המכירות הדיגיטלי של "ח. סבן חומרי בניין". 
-    המטרה שלך: למכור ולהיות פרקטי.
-    
-    כלי עבודה קריטי - חיפוש במלאי:
-    ${foundProduct ? 
-      `נמצא מוצר רלוונטי במלאי:
-       שם: ${foundProduct.product_name}
-       מחיר: ${foundProduct.price} ש"ח
-       סטטוס: ${foundProduct.stock_quantity > 0 ? "זמין במלאי" : "חסר זמנית"}
-       לינק לרכישה: ${foundProduct.product_magic_link}` 
-      : "לא נמצא מוצר ספציפי בשאילתה, אבל יש לנו הכל במחסן."
-    }  `
+            systemInstruction: `
+              ${executorDNA}
+              
+              תפקיד: מנהל מכירות ב-"ח. סבן חומרי בניין".
+              סגנון: מקצועי, תכליתי ("תכל'ס"), אמין.
+              
+              --- כלי עבודה: כרטיס מוצר ---
+              ${foundProduct ? `
+              מצאתי במלאי מוצר רלוונטי:
+              📦 *${foundProduct.product_name}*
+              --------------------------------
+              💰 מחיר: ₪${foundProduct.price} ${foundProduct.unit_type ? `ל-${foundProduct.unit_type}` : ""}
+              ✅ סטטוס: ${foundProduct.stock_quantity > 0 ? "זמין במלאי" : "חסר זמנית - צור קשר לבדיקה"}
+              🆔 מק"ט: ${foundProduct.sku}
+              --------------------------------
+              🔗 להזמנה ותשלום: MAGIC_URL
+              ` : "לא נמצא מוצר ספציפי במלאי לשאילתה זו. ענה באופן כללי על מגוון חומרי הבניין שלנו."}
+
+              הנחיות למענה:
+              1. ענה בעברית פשוטה וישירה.
+              2. אם יש foundProduct, הצג אותו בדיוק במבנה ה"כרטיס" שלמעלה.
+              3. אם המשתמש שאל שאלה כללית, הצע לו עזרה בחישוב כמויות או הובלה.
+              4. חתימה: תודה שבחרתה בח.סבן חומרי בנין.
+            `
           });
 
           const result = await model.generateContent(lastUserMsg);
-          const text = result.response.text();
+          const responseText = result.response.text();
           
-          if (text) {
-            aiResponse = text;
+          if (responseText) {
+            aiResponse = responseText;
             success = true;
           }
         } catch (e) {
-          console.warn(`Failed with model ${modelName}, trying next...`);
+          console.warn(`Key/Model error: ${modelName}. Trying next...`);
         }
       }
     }
 
-    // 4. עיבוד לינקים ועדכון Pipeline
+    // 4. עיבוד סופי: החלפת לינקים ועדכון Firebase Pipeline
     if (foundProduct && aiResponse.includes("MAGIC_URL")) {
-      const link = foundProduct.product_magic_link || `https://sidor.vercel.app/product?sku=${foundProduct.sku}`;
-      aiResponse = aiResponse.replace("MAGIC_URL", link);
+      const finalLink = foundProduct.product_magic_link || `https://saban.co.il/p/${foundProduct.sku}`;
+      aiResponse = aiResponse.replace("MAGIC_URL", finalLink);
     }
 
     if (phone && aiResponse) {
@@ -94,10 +104,12 @@ export async function POST(req: Request) {
       });
     }
 
-    return NextResponse.json({ text: aiResponse || "המערכת זמינה, איך אפשר לעזור?" });
+    return NextResponse.json({ 
+      text: aiResponse || "אהלן, כאן ח.סבן. איך אפשר לעזור לכם היום בפרויקט?" 
+    });
 
   } catch (error: any) {
-    console.error("Critical Route Error:", error);
+    console.error("Critical API Error:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
