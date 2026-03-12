@@ -1,41 +1,15 @@
 "use client";
 
-import React, { Suspense } from "react";
-import dynamic from "next/dynamic";
+// קבצים שנמצאים בתוך תיקיית chat (שים לב לשינוי הנתיב)
+const MessageList = dynamic(() => import("@/components/chat/message-list"), { ssr: false });
+const Composer = dynamic(() => import("@/components/chat/Composer"), { ssr: false });
+const ActionOverlays = dynamic(() => import("@/components/chat/ActionOverlays"), { ssr: false });
 
-/**
- * קומפוננטות בטעינה דינמית.
- * שימוש בקידומת @/components שהיא הסטנדרט ב-Next.js למניעת שגיאות נתיבים.
- */
-
-const ChatShell = dynamic(() => import("@/components/chat-shell"), { 
-  ssr: true,
-  fallback: <div className="min-h-screen bg-black flex items-center justify-center text-zinc-500 font-sans">טוען ממשק...</div> 
-});
-
-const AnimatedOrb = dynamic(() => import("@/components/animated-orb").then(m => m.AnimatedOrb || m.default), { 
-  ssr: false 
-});
-
-const MessageList = dynamic(() => import("@/components/message-list").then(m => m.MessageList || m.default), { 
-  ssr: false 
-});
-
-const Composer = dynamic(() => import("@/components/Composer").then(m => m.Composer || m.default), { 
-  ssr: false 
-});
-
-const ProductCard = dynamic(() => import("@/components/ProductCard").then(m => m.ProductCard || m.default), { 
-  ssr: false 
-});
-
-const CalculatorOverlay = dynamic(() => import("@/components/CalculatorOverlay").then(m => m.CalculatorOverlay || m.default), { 
-  ssr: false 
-});
-
-const ActionOverlays = dynamic(() => import("@/components/ActionOverlays").then(m => m.ActionOverlays || m.default), { 
-  ssr: false 
-});
+// קבצים שנמצאים בתיקיית components הראשית
+const ChatShell = dynamic(() => import("@/components/chat-shell"), { ssr: true });
+const AnimatedOrb = dynamic(() => import("@/components/animated-orb"), { ssr: false });
+const ProductCard = dynamic(() => import("@/components/ProductCard"), { ssr: false });
+const CalculatorOverlay = dynamic(() => import("@/components/CalculatorOverlay"), { ssr: false });
 
 export default function ChatPage() {
   return (
