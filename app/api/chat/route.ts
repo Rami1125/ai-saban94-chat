@@ -110,17 +110,17 @@ export async function POST(req: Request) {
 
 // 4. עיבוד סופי - החלפה חכמה של הלינק
 if (product) {
-  // יצירת הלינק הסופי: עדיפות ללינק מה-DB, ואז לפורמט SKU
+  // לינק עדיפות מה-DB, ואז פורמט SKU תקני
   const finalLink = product.product_magic_link || `https://sidor.vercel.app/product-pages/index.html?id=${product.sku}`;
   
-  // שימוש ב-Regex כדי למצוא את MAGIC_URL גם אם יש מסביבו רווחים, סוגריים או אותיות קטנות
+  // שימוש ב-Regex כדי לתפוס את MAGIC_URL בכל מצב (גם אם ה-AI הוסיף רווח או אות קטנה)
   const magicUrlRegex = /MAGIC_URL/gi; 
 
   if (magicUrlRegex.test(aiResponse)) {
     aiResponse = aiResponse.replace(magicUrlRegex, finalLink);
-  } else if (!aiResponse.includes(finalLink)) {
-    // ליתר ביטחון: אם ה-AI שכח לכתוב MAGIC_URL אבל מצאנו מוצר, נוסיף את הלינק בסוף
-    aiResponse += `\n\n🔗 [לצפייה במוצר]: ${finalLink}`;
+  } else {
+    // ליתר ביטחון - אם המודל שכח את ה-Placeholder, נדביק את הלינק בסוף
+    aiResponse += `\n\n🔗 לצפייה במוצר: ${finalLink}`;
   }
 }
 
