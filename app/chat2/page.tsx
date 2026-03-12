@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { MessageList } from "@/components/chat/message-list";
 import { 
   Send, Bot, User, Sun, Moon, 
   RefreshCw, Trash2, ChevronLeft, Loader2,
