@@ -1,13 +1,27 @@
 import { createClient } from '@supabase/supabase-js';
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { NextResponse } from 'next/server';
 
-const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 export const dynamic = 'force-dynamic';
+
 export async function POST(req: Request) {
   try {
+    // איתחול ה-Client בתוך הפונקציה בלבד
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const geminiKey = process.env.GEMINI_API_KEY;
+
+    if (!supabaseUrl || !supabaseKey || !geminiKey) {
+       console.error("Missing Environment Variables");
+       return NextResponse.json({ error: "Server configuration missing" }, { status: 500 });
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const genAI = new GoogleGenerativeAI(geminiKey);
+
     const { messages, userId, phone } = await req.json();
     const lastUserMessage = messages[messages.length - 1].content;
+    
 
     // 1. שליפת חוקי ADMIN ו-DNA מה-Supabase
     const { data: adminSettings } = await supabase
