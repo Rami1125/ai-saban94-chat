@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     const { messages, phone } = await req.json();
     const lastUserMsg = messages[messages.length - 1].content;
 
-    // --- 1. חיפוש מוצר חכם ---
+    // --- 1. חיפוש מוצר חכם (Search_Text + Priority) ---
     const cleanSearch = lastUserMsg.replace(/[?？]/g, "").trim();
     
     const [configRes, settingsRes, inventoryRes] = await Promise.all([
@@ -30,18 +30,7 @@ export async function POST(req: Request) {
 
     let product = inventoryRes.data;
 
-    // מנגנון גיבוי לחיפוש אם המילה הראשונה קיימת
-    if (!product && cleanSearch.includes(" ")) {
-      const firstWord = cleanSearch.split(" ")[0];
-      const fallbackSearch = await supabase.from('inventory')
-        .select('*')
-        .ilike('product_name', `%${firstWord}%`)
-        .limit(1)
-        .maybeSingle();
-      if (fallbackSearch.data) product = fallbackSearch.data;
-    }
-
-    // --- 2. בניית ה-DNA המאוחד ---
+    // --- 2. איחוד המוח המרכזי (DNA) ---
     const rulesDNA = configRes.data
       ?.filter(r => r.agent_type === 'executor' && r.is_active)
       .map(r => r.instruction)
@@ -50,9 +39,9 @@ export async function POST(req: Request) {
     const settingsDNA = settingsRes.data?.content || "";
     const finalDNA = `${settingsDNA}\n${rulesDNA}`;
 
-    // --- 3. ניהול מפתחות ומודלים ---
+    // --- 3. ניהול מפתחות וסבב מודלים ---
     const keys = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').map(k => k.trim()).filter(k => k.length > 10);
-    const modelPool = ["gemini-3.1-flash-lite-preview", "gemini-3.1-pro-preview", "gemini-3-flash-preview"];
+    const modelPool = ["gemini-1.5-flash", "gemini-1.5-pro"]; 
     
     let aiResponse = "";
     let success = false;
@@ -67,20 +56,18 @@ export async function POST(req: Request) {
           const model = genAI.getGenerativeModel({
             model: modelName,
             systemInstruction: `
-              ### STRICT RULES (חוקי הברזל) ###
+              ### DNA מחייב (חוקי הברזל) ###
               ${finalDNA}
               
-              ### PRODUCT DATA (JSON) ###
-              ${product ? JSON.stringify(product) : "STATUS: NO_PRODUCT_FOUND"}
+              ### נתוני מלאי בזמן אמת (JSON) ###
+              ${product ? JSON.stringify(product) : "סטטוס: מוצר לא נמצא במערכת"}
 
-              ### EXECUTION PROTOCOL ###
-              1. IF PRODUCT: הצג אך ורק כרטיס מוצר ויזואלי בראש התשובה.
-              2. פרמטרים חובה בכרטיס: שם מוצר, image_url, מחיר, מק"ט, ותכונות (זמן ייבוש/יישום מה-JSON).
-              3. לינק: השתמש אך ורק ב-Placeholder: MAGIC_URL.
-              4. חישוב: אם הלקוח ביקש כמויות, בצע חישוב לפי נתוני ה-Coverage ב-JSON או לפי חוק הגבס (3 מ"ר ללוח).
-              5. סגנון: ישיר, מקצועי, ללא משפטי נימוס מיותרים.
-              
-              חתימה מחייבת: תודה שבחרת בח.סבן חומרי בניין | ח.סבן חומרי בנין התלמיד 6 הוד השרון
+              ### הנחיות ביצוע קריטיות ###
+              1. אם נמצא מוצר: הצג בראש התשובה כרטיס מעוצב הכולל שם, מחיר, תמונה ו-ID.
+              2. פרטים טכניים: שלוף והצג במפורש את 'drying_time', 'application_method' ו-'features' מה-JSON.
+              3. מחשבון: אם המשתמש שאל על כמויות/מ"ר, בצע את החישוב (גבס = 3 מ"ר ללוח).
+              4. לינקים: השתמש רק ב-MAGIC_URL. אל תמציא לינקים.
+              5. סגנון: תמציתי, מקצועי, ללא הקדמות. חתימה בסוף בלבד.
             `
           });
 
@@ -91,24 +78,18 @@ export async function POST(req: Request) {
             success = true;
           }
         } catch (e) {
-          console.warn(`Switching due to error...`);
+          console.error("Model rotation error:", e);
         }
       }
     }
 
-    // --- 4. הזרקת לינק הקסם ---
+    // --- 4. הזרקת לינקים ו-Final Polish ---
     if (product) {
       const finalLink = product.product_magic_link || `https://sidor.vercel.app/product-pages/index.html?id=${product.sku}`;
-      const magicUrlRegex = /MAGIC_URL/gi; 
-
-      if (magicUrlRegex.test(aiResponse)) {
-        aiResponse = aiResponse.replace(magicUrlRegex, finalLink);
-      } else if (!aiResponse.includes(finalLink)) {
-        aiResponse += `\n\n🔗 לצפייה במוצר: ${finalLink}`;
-      }
+      aiResponse = aiResponse.replace(/MAGIC_URL/gi, finalLink);
     }
 
-    // --- 5. עדכון פייפליין וחזרה ---
+    // --- 5. עדכון לוג ה-Pipeline ---
     if (phone && aiResponse) {
       const cleanPhone = phone.replace(/\D/g, '');
       await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), {
@@ -121,7 +102,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ text: aiResponse, product });
 
   } catch (error) {
-    console.error("Critical Error:", error);
+    console.error("Critical System Failure:", error);
     return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }
 }
