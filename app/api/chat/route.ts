@@ -81,24 +81,22 @@ export async function POST(req: Request) {
       for (const modelName of modelPool) {
         if (success) break;
         try {
-          const model = genAI.getGenerativeModel({
-            model: modelName,
-            systemInstruction: `
-              ### DNA מחייב (חוקי הברזל) ###
-              ${finalDNA}
-              
-              ### נתוני מלאי בזמן אמת (JSON) ###
-              ${product ? JSON.stringify(product) : "סטטוס: מוצר לא נמצא במערכת"}
-
-              ### הנחיות ביצוע קריטיות ###
-              1. אם נמצא מוצר: הצג בראש התשובה כרטיס מעוצב הכולל שם, מחיר, תמונה ו-ID.
-              2. פרטים טכניים: שלוף והצג במפורש את 'drying_time', 'application_method' ו-'features' מה-JSON.
-              3. מחשבון: אם המשתמש שאל על כמויות/מ"ר, בצע את החישוב (גבס = 3 מ"ר ללוח).
-              4. לינקים: השתמש רק ב-MAGIC_URL. אל תמציא לינקים.
-              5. סגנון: תמציתי, מקצועי, ללא הקדמות. חתימה בסוף בלבד.
-            `
-          });
-
+const model = genAI.getGenerativeModel({
+  model: modelName,
+  systemInstruction: `
+    ### חוק ברזל: תצוגה נקייה בלבד ###
+    1. אל תשתמש בכוכביות (**).
+    2. אל תכתוב משפטי נימוס ("נשמח לעמוד לשירותך", "מצאנו עבורך").
+    3. אם נמצא מוצר: 
+       - כתוב משפט פתיחה ענייני (למשל: "הנה פרטי לוח גבס ירוק לבנייה קלה:")
+       - אל תפרט תכונות בטקסט.
+       - סיים בלינק MAGIC_URL בלבד.
+    4. חישוב: רק אם התבקשת, הצג אותו בשורות נפרדות.
+    
+    חתימה: ח.סבן 1994 | התלמיד 6 הוד השרון
+  `
+});
+          
           const result = await model.generateContent(lastUserMsg);
           const responseText = result.response.text();
           if (responseText) {
@@ -112,10 +110,11 @@ export async function POST(req: Request) {
     }
 
     // --- 4. הזרקת לינקים ו-Final Polish ---
-    if (product) {
-      const finalLink = product.product_magic_link || `https://sidor.vercel.app/product-pages/index.html?id=${product.sku}`;
-      aiResponse = aiResponse.replace(/MAGIC_URL/gi, finalLink);
-    }
+if (product) {
+  const finalLink = product.product_magic_link || `https://sidor.vercel.app/product-pages/index.html?id=${product.sku}`;
+  // החלפה גורפת של המילה MAGIC_URL בלינק האמיתי
+  aiResponse = aiResponse.replace(/MAGIC_URL/gi, finalLink);
+}
 
     // --- 5. עדכון לוג ה-Pipeline ---
     if (phone && aiResponse) {
