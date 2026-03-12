@@ -41,15 +41,8 @@ export async function POST(req: Request) {
 
     // 3. לוגיקת רוטציה בין מפתחות ומודלים
     for (const key of keys) {
-      if (success) break;
-      const genAI = new GoogleGenerativeAI(key);
-      
-      for (const modelName of modelPool) {
-        if (success) break;
-        
-        try {
-          const model = genAI.getGenerativeModel({
-            model: modelName,
+      if (success) break;const model = genAI.getGenerativeModel({
+  model: "gemini-3.1-flash-lite-preview",
             systemInstruction: `
               ${executorDNA}
               
