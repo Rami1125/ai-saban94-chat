@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useState, useCallback } from 'react';
-import { getSupabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase"; // ✅ הדרך הנכונה
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
