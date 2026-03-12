@@ -84,47 +84,37 @@ export async function POST(req: Request) {
    const model = genAI.getGenerativeModel({
    model: modelName,
             systemInstruction: `
-              ${executorDNA}
-              יועץ: ${advisorData?.reply || ""}
-              נתוני מוצר: ${foundProduct ? foundProduct.product_name : "לא נמצא"}
-              מק"ט: ${foundProduct ? foundProduct.sku : ""}
-              מלאי: ${stockAlert}
+              ### DNA מחייב (חוקי הברזל) ###
+              ${finalDNA}
               
-              חוק חשוב: אם מצאת מוצר מתאים בנתונים למעלה, סיים את התשובה תמיד במילה: MAGIC_URL
-              חתימה: H.SABAN 1994
+              ### נתוני מלאי בזמן אמת (JSON) ###
+              ${product ? JSON.stringify(product) : "סטטוס: מוצר לא נמצא במערכת"}
+
+              ### הנחיות ביצוע קריטיות ###
+              1. אם נמצא מוצר: הצג בראש התשובה כרטיס מעוצב הכולל שם, מחיר, תמונה ו-ID.
+              2. פרטים טכניים: שלוף והצג במפורש את 'drying_time', 'application_method' ו-'features' מה-JSON.
+              3. מחשבון: אם המשתמש שאל על כמויות/מ"ר, בצע את החישוב (גבס = 3 מ"ר ללוח).
+              4. לינקים: השתמש רק ב-MAGIC_URL. אל תמציא לינקים.
+              5. סגנון: תמציתי, מקצועי, ללא הקדמות. חתימה בסוף בלבד.
             `
           });
 
           const result = await model.generateContent(lastUserMsg);
           const responseText = result.response.text();
-
           if (responseText) {
             aiResponse = responseText;
-            await Promise.all([
-              updateDashboardQuota(i + 1, modelName, "SUCCESS"),
-              logToDailyChat(lastUserMsg, user_id)
-            ]);
-            success = true; // מסמן הצלחה ויוצא מהלופים
+            success = true;
           }
-        } catch (e: any) {
-          console.warn(`Key ${i+1} Model ${modelName} Quota Exceeded`);
-          await updateDashboardQuota(i + 1, modelName, "QUOTA_EXCEEDED");
+        } catch (e) {
+          console.error("Model rotation error:", e);
         }
       }
     }
 
-    // 6. הזרקת לינקים ומשלוח ל-Pipeline
-    if (foundProduct && aiResponse.includes("MAGIC_URL")) {
-      // שליפת הלינק הישיר (עדיפות ל-magic_link ואז ל-SKU)
-      const link = foundProduct.product_magic_link || `https://sidor.vercel.app/product-pages/index.html?id=${foundProduct.sku}`;
-      
-      // החלפה נקייה של הלינק
-      aiResponse = aiResponse.replace("MAGIC_URL", link);
-      
-      // הוספת התראת מלאי רק אם יש חוסר (⚠️)
-      if (stockAlert.includes("⚠️")) {
-        aiResponse += `\n${stockAlert}`;
-      }
+    // --- 4. הזרקת לינקים ו-Final Polish ---
+    if (product) {
+      const finalLink = product.product_magic_link || `https://sidor.vercel.app/product-pages/index.html?id=${product.sku}`;
+      aiResponse = aiResponse.replace(/MAGIC_URL/gi, finalLink);
     }
 
     // --- 5. עדכון לוג ה-Pipeline ---
