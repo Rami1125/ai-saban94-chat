@@ -81,40 +81,51 @@ export async function POST(req: Request) {
       for (const modelName of modelPool) {
         if (success) break;
         try {
-const model = genAI.getGenerativeModel({
-  model: modelName,
-  systemInstruction: `
-    ### חוק ברזל: תצוגה נקייה בלבד ###
-    1. אל תשתמש בכוכביות (**).
-    2. אל תכתוב משפטי נימוס ("נשמח לעמוד לשירותך", "מצאנו עבורך").
-    3. אם נמצא מוצר: 
-       - כתוב משפט פתיחה ענייני (למשל: "הנה פרטי לוח גבס ירוק לבנייה קלה:")
-       - אל תפרט תכונות בטקסט.
-       - סיים בלינק MAGIC_URL בלבד.
-    4. חישוב: רק אם התבקשת, הצג אותו בשורות נפרדות.
-    
-    חתימה: ח.סבן 1994 | התלמיד 6 הוד השרון
-  `
-});
-          
+   const model = genAI.getGenerativeModel({
+   model: modelName,
+            systemInstruction: `
+              ${executorDNA}
+              יועץ: ${advisorData?.reply || ""}
+              נתוני מוצר: ${foundProduct ? foundProduct.product_name : "לא נמצא"}
+              מק"ט: ${foundProduct ? foundProduct.sku : ""}
+              מלאי: ${stockAlert}
+              
+              חוק חשוב: אם מצאת מוצר מתאים בנתונים למעלה, סיים את התשובה תמיד במילה: MAGIC_URL
+              חתימה: H.SABAN 1994
+            `
+          });
+
           const result = await model.generateContent(lastUserMsg);
           const responseText = result.response.text();
+
           if (responseText) {
             aiResponse = responseText;
-            success = true;
+            await Promise.all([
+              updateDashboardQuota(i + 1, modelName, "SUCCESS"),
+              logToDailyChat(lastUserMsg, user_id)
+            ]);
+            success = true; // מסמן הצלחה ויוצא מהלופים
           }
-        } catch (e) {
-          console.error("Model rotation error:", e);
+        } catch (e: any) {
+          console.warn(`Key ${i+1} Model ${modelName} Quota Exceeded`);
+          await updateDashboardQuota(i + 1, modelName, "QUOTA_EXCEEDED");
         }
       }
     }
 
-    // --- 4. הזרקת לינקים ו-Final Polish ---
-if (product) {
-  const finalLink = product.product_magic_link || `https://sidor.vercel.app/product-pages/index.html?id=${product.sku}`;
-  // החלפה גורפת של המילה MAGIC_URL בלינק האמיתי
-  aiResponse = aiResponse.replace(/MAGIC_URL/gi, finalLink);
-}
+    // 6. הזרקת לינקים ומשלוח ל-Pipeline
+    if (foundProduct && aiResponse.includes("MAGIC_URL")) {
+      // שליפת הלינק הישיר (עדיפות ל-magic_link ואז ל-SKU)
+      const link = foundProduct.product_magic_link || `https://sidor.vercel.app/product-pages/index.html?id=${foundProduct.sku}`;
+      
+      // החלפה נקייה של הלינק
+      aiResponse = aiResponse.replace("MAGIC_URL", link);
+      
+      // הוספת התראת מלאי רק אם יש חוסר (⚠️)
+      if (stockAlert.includes("⚠️")) {
+        aiResponse += `\n${stockAlert}`;
+      }
+    }
 
     // --- 5. עדכון לוג ה-Pipeline ---
     if (phone && aiResponse) {
