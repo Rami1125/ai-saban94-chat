@@ -14,16 +14,42 @@ export async function POST(req: Request) {
     
     const { messages, phone } = await req.json();
     const lastUserMsg = messages[messages.length - 1].content;
+export async function POST(req: Request) {
+  try {
+    const supabase = getSupabase();
+    const rtdb = getRTDB();
+    
+    const { messages, phone } = await req.json();
+    const lastUserMsg = messages[messages.length - 1].content;
 
-    // 1. שליפת DNA של העסק וחיפוש מוצר במלאי (כרטיס מוצר)
+    // --- הטמעת חיפוש חכם כאן ---
+    // 1. ניקוי השאלה ממילים מיותרות וסימני שאלה
+    const cleanSearch = lastUserMsg.replace(/[?？]/g, "").trim();
+    
+    // 2. שליפת DNA וחיפוש מוצר גמיש
     const [configRes, inventoryRes] = await Promise.all([
       supabase.from('system_rules').select('instruction, agent_type, is_active'),
       supabase.from('inventory')
         .select('product_name, stock_quantity, product_magic_link, sku, price, unit_type, description')
-        .or(`product_name.ilike.%${lastUserMsg}%,sku.ilike.%${lastUserMsg}%`)
+        // מחפש אם שם המוצר מכיל חלק מהמילים שהלקוח כתב
+        .or(`product_name.ilike.%${cleanSearch}%,sku.ilike.%${cleanSearch}%`)
         .limit(1)
         .maybeSingle()
     ]);
+
+    let product = inventoryRes.data;
+
+    // לוגיקה נוספת: אם לא נמצא, ננסה לחפש רק לפי המילה הראשונה (למשל "גבס")
+    if (!product && cleanSearch.includes(" ")) {
+      const firstWord = cleanSearch.split(" ")[0];
+      const fallbackSearch = await supabase.from('inventory')
+        .select('product_name, stock_quantity, product_magic_link, sku, price, unit_type, description')
+        .ilike('product_name', `%${firstWord}%`)
+        .limit(1)
+        .maybeSingle();
+      if (fallbackSearch.data) product = fallbackSearch.data;
+    }
+    // --- סוף הטמעת חיפוש חכם ---
 
     const executorDNA = configRes.data
       ?.filter(r => r.agent_type === 'executor' && r.is_active)
