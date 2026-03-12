@@ -60,22 +60,36 @@ export default function OrderForm({ onOrderCreated }: { onOrderCreated: () => vo
     setSuggestions([]);
   };
 
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    const today = new Date().toISOString().split('T')[0];
-    const { error } = await supabase.from('dispatch_orders').insert([{
-      ...values,
-      scheduled_date: today,
-      status: 'pending'
-    }]);
+// בתוך הקומפוננטה OrderForm
+const supabase = getSupabase(); // קרא לזה פעם אחת למעלה
 
-    if (!error) {
-      toast.success("הזמנה נוצרה ונשמרה בהיסטוריה");
-      reset();
-      onOrderCreated();
-    } else {
-      toast.error("שגיאה בשמירת ההזמנה");
-    }
-  };
+const onSubmit = async (values: z.infer<typeof formSchema>) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    
+    // וודא שאתה משתמש ב-values הנכונים
+    const { data, error } = await supabase
+      .from('dispatch_orders')
+      .insert([{
+        customer_name: values.customer_name,
+        phone_number: values.phone_number,
+        delivery_address: values.delivery_address,
+        project_name: values.project_name,
+        driver_name: values.driver_name,
+        scheduled_time: values.scheduled_time,
+        truck_type: values.truck_type,
+        scheduled_date: today,
+        status: 'pending'
+      }]);
+
+    if (error) throw error;
+    
+    toast.success("הזמנה נוצרה בהצלחה!");
+    if (onOrderCreated) onOrderCreated(); // בדיקה שזה פונקציה לפני הקריאה
+  } catch (err: any) {
+    toast.error("שגיאה: " + err.message);
+  }
+};
 
   return (
     <Card className="border-none shadow-2xl bg-white/90 backdrop-blur-md" dir="rtl">
