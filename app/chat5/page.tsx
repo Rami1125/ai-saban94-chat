@@ -1,15 +1,15 @@
 "use client";
 
-// קבצים שנמצאים בתוך תיקיית chat (שים לב לשינוי הנתיב)
+// קבצים בתוך תיקיית chat
 const MessageList = dynamic(() => import("@/components/chat/message-list"), { ssr: false });
-const Composer = dynamic(() => import("@/components/chat/Composer"), { ssr: false });
-const ActionOverlays = dynamic(() => import("@/components/chat/ActionOverlays"), { ssr: false });
+const Composer = dynamic(() => import("@/components/chat/composer"), { ssr: false });
+const ActionOverlays = dynamic(() => import("@/components/chat/action-overlays"), { ssr: false });
 
-// קבצים שנמצאים בתיקיית components הראשית
+// קבצים בתיקיית components הראשית (שים לב לאותיות קטנות/גדולות)
 const ChatShell = dynamic(() => import("@/components/chat-shell"), { ssr: true });
 const AnimatedOrb = dynamic(() => import("@/components/animated-orb"), { ssr: false });
-const ProductCard = dynamic(() => import("@/components/ProductCard"), { ssr: false });
-const CalculatorOverlay = dynamic(() => import("@/components/CalculatorOverlay"), { ssr: false });
+const ProductCard = dynamic(() => import("@/components/product-card"), { ssr: false });
+const CalculatorOverlay = dynamic(() => import("@/components/calculator-overlay"), { ssr: false });
 
 export default function ChatPage() {
   return (
