@@ -16,16 +16,27 @@ export async function POST(req: Request) {
     const lastUserMsg = messages[messages.length - 1].content;
 
     // --- הטמעת חיפוש חכם מתוקנת ---
+// ניקוי סימני שאלה לחיפוש נקי
     const cleanSearch = lastUserMsg.replace(/[?？]/g, "").trim();
     
+    // שליפת חוקים ומלאי במקביל
     const [configRes, inventoryRes] = await Promise.all([
       supabase.from('system_rules').select('instruction, agent_type, is_active'),
       supabase.from('inventory')
-        .select('product_name, stock_quantity, product_magic_link, sku, price, unit_type, description, image_url, youtube_url')
-        .or(`product_name.ilike.%${cleanSearch}%,sku.ilike.%${cleanSearch}%`)
+        .select('*')
+        // חיפוש חכם ב-3 עמודות במקביל כדי לא לפספס
+        .or(`product_name.ilike.%${cleanSearch}%,sku.ilike.%${cleanSearch}%,search_text.ilike.%${cleanSearch}%`)
         .limit(1)
         .maybeSingle()
     ]);
+
+    let product = inventoryRes.data;
+
+    // DNA מהטבלה
+    const executorDNA = configRes.data
+      ?.filter(r => r.agent_type === 'executor' && r.is_active)
+      .map(r => r.instruction)
+      .join("\n") || "נציג מכירות ח. סבן";
 
     // משתנה שניתן לשינוי (let) ומוגדר רק פעם אחת
     let product = inventoryRes.data;
