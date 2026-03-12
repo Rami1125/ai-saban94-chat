@@ -8,8 +8,10 @@ import { MessageList } from "@/components/chat/message-list";
 import { Composer } from "@/components/chat/Composer";
 import { ActionOverlays } from "@/components/chat/ActionOverlays";
 import { useToast } from "@/hooks/use-toast";
+import { getSupabase } from '@/lib/supabase';
 
-// ייבוא ה-Providers כדי למנוע קריסת Build
+export async function POST(req) {
+  const supabase = getSupabase(); // האיתחול קורה רק כאן, בזמן ריצה (Runtime)
 import { ChatActionsProvider } from "@/context/ChatActionsContext";
 import { BusinessConfigProvider } from "@/context/BusinessConfigContext";
 
