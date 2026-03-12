@@ -3,6 +3,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Send, Smile, MoreVertical, Phone, Video, Search, CheckCheck, Bot } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+// וודא שייבאת את ה-ProductCard מהקובץ שבו שמרת אותו
+import { ProductCard } from "@/components/chat/ProductCard"; 
 
 interface Message {
   id: string;
@@ -25,7 +27,6 @@ export default function WhatsAppChatPage() {
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // מספר טלפון לניסוי - יסונכרן ל-JONI ולסטודיו
   const TEST_PHONE = "972508860896";
 
   const scrollToBottom = () => {
@@ -52,7 +53,6 @@ export default function WhatsAppChatPage() {
     setIsTyping(true);
 
     try {
-      // חיבור ל-API האמיתי של ח. סבן
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -98,57 +98,58 @@ export default function WhatsAppChatPage() {
         <div className="flex items-center justify-between max-w-4xl mx-auto">
           <div className="flex items-center gap-3">
             <div className="relative">
-              <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-[#075e54] font-black text-xl shadow-inner">
-                S
-              </div>
+              <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-[#075e54] font-black text-xl shadow-inner">S</div>
               <div className="absolute bottom-0 left-0 w-3 h-3 bg-[#25d366] rounded-full border-2 border-[#075e54]" />
             </div>
-            <div className="flex flex-col">
-              <h1 className="text-white font-bold text-sm md:text-base leading-tight">ח. סבן 1994</h1>
+            <div className="flex flex-col text-white">
+              <h1 className="font-bold text-sm md:text-base leading-tight">ח. סבן 1994</h1>
               <span className="text-emerald-200 text-[10px] md:text-xs">מחובר למערכת JONI</span>
             </div>
           </div>
           <div className="flex items-center gap-4 text-white/90">
-             <Video size={20} className="cursor-pointer hover:text-white transition-all" />
-             <Phone size={20} className="cursor-pointer hover:text-white transition-all" />
-             <MoreVertical size={20} className="cursor-pointer hover:text-white transition-all" />
+             <Video size={20} className="cursor-pointer" />
+             <Phone size={20} className="cursor-pointer" />
+             <MoreVertical size={20} className="cursor-pointer" />
           </div>
         </div>
       </header>
 
-      {/* Messages */}
-      <main className="flex-1 overflow-y-auto px-4 py-6 md:px-10">
-        <div className="max-w-4xl mx-auto flex flex-col gap-3">
-          <AnimatePresence>
+      {/* Chat Space */}
+      <main className="flex-1 overflow-y-auto px-4 py-6">
+        <div className="max-w-3xl mx-auto flex flex-col gap-4">
+          <AnimatePresence initial={false}>
             {messages.map((msg) => (
               <motion.div
                 key={msg.id}
-                initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
                 className={`flex ${msg.role === "assistant" ? "justify-start" : "justify-end"}`}
               >
-                <div className={`relative max-w-[85%] md:max-w-[70%] px-4 py-2 rounded-xl shadow-sm ${
-                  msg.role === "assistant" 
-                    ? "bg-white dark:bg-[#1d2a32] text-[#111b21] dark:text-[#e9edef] rounded-tl-none" 
-                    : "bg-[#d9fdd3] dark:bg-[#005c4b] text-[#111b21] dark:text-[#e9edef] rounded-tr-none"
-                }`}>
-                  <div className="text-[14px] leading-relaxed" dangerouslySetInnerHTML={{ __html: msg.content }} />
-                  
-                  {/* הצגת כרטיס מוצר אם קיים */}
-                  {msg.product && (
-                    <div className="mt-3 bg-black/5 dark:bg-black/20 p-3 rounded-lg border border-black/10 flex flex-col gap-1">
-                      <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400">📦 מוצר מהמלאי</span>
-                      <div className="font-black text-sm">{msg.product.product_name}</div>
-                      <div className="text-emerald-600 dark:text-emerald-400 font-bold text-lg">₪{msg.product.price}</div>
+                <div className="flex flex-col gap-2 max-w-[90%] md:max-w-[75%]">
+                  {/* בועת הטקסט */}
+                  <div className={`px-4 py-2 rounded-2xl shadow-sm ${
+                    msg.role === "assistant" 
+                      ? "bg-white dark:bg-[#1d2a32] text-slate-800 dark:text-slate-100 rounded-tl-none" 
+                      : "bg-[#d9fdd3] dark:bg-[#005c4b] text-slate-800 dark:text-slate-100 rounded-tr-none"
+                  }`}>
+                    <div className="text-[15px] leading-relaxed" dangerouslySetInnerHTML={{ __html: msg.content }} />
+                    <div className="flex justify-end mt-1">
+                      <span className="text-[10px] opacity-50">
+                        {msg.timestamp.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}
+                      </span>
                     </div>
-                  )}
-
-                  <div className="flex items-center justify-end gap-1 mt-1">
-                    <span className="text-[10px] opacity-50">
-                      {msg.timestamp.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}
-                    </span>
-                    {msg.role === "user" && <CheckCheck size={14} className="text-[#53bdeb]" />}
                   </div>
+
+                  {/* הצגת כרטיס מוצר פרימיום - מוזרק מחוץ לבועת הטקסט למראה נקי */}
+                  {msg.product && (
+                    <motion.div 
+                      initial={{ scale: 0.9, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ delay: 0.2 }}
+                    >
+                      <ProductCard product={msg.product} />
+                    </motion.div>
+                  )}
                 </div>
               </motion.div>
             ))}
@@ -166,28 +167,25 @@ export default function WhatsAppChatPage() {
         </div>
       </main>
 
-      {/* Input */}
+      {/* Input Section */}
       <footer className="bg-[#f0f2f5] dark:bg-[#1f2c34] p-3 border-t border-slate-200 dark:border-slate-800">
         <div className="max-w-4xl mx-auto flex items-center gap-2">
-          <Smile size={24} className="text-slate-500 cursor-pointer hover:text-[#075e54]" />
+          <Smile size={24} className="text-slate-500 cursor-pointer" />
           <input
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyPress}
-            placeholder="הקלד הודעה ל-סבן AI..."
+            placeholder="שאל את סבן AI על חומרי בניין..."
             className="flex-1 bg-white dark:bg-[#2a3942] rounded-full px-5 py-2.5 outline-none text-sm shadow-sm"
           />
           <button
             onClick={handleSend}
             disabled={!inputValue.trim() || isTyping}
-            className={`p-3 rounded-full transition-all ${inputValue.trim() ? "bg-[#25d366] text-white shadow-md active:scale-95" : "bg-slate-300 text-slate-500"}`}
+            className={`p-3 rounded-full transition-all ${inputValue.trim() ? "bg-[#25d366] text-white" : "bg-slate-300 text-slate-500"}`}
           >
             <Send size={20} className="rotate-180" />
           </button>
-        </div>
-        <div className="text-center mt-2">
-           <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Powered by JONI & Gemini 2026</span>
         </div>
       </footer>
     </div>
