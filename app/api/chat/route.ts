@@ -1,5 +1,3 @@
-"use client";
-
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getSupabase } from "@/lib/supabase";
