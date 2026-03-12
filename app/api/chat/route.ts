@@ -24,17 +24,19 @@ export async function POST(req: Request) {
       ? searchWords.map(word => `%${word}%`).join(',')
       : `%${cleanSearch}%`;
 
-    const [configRes, settingsRes, inventoryRes] = await Promise.all([
-      supabase.from('system_rules').select('instruction, agent_type, is_active'),
-      supabase.from('system_settings').select('content').eq('key', 'saban_ai_dna').maybeSingle(),
-      supabase.from('inventory')
-        .select('*')
-        .or(`product_name.ilike.any({${flexibleSearch}}),search_text.ilike.any({${flexibleSearch}}),sku.ilike.%${cleanSearch}%`)
-        .order('stock_quantity', { ascending: false }) // עדיפות למוצרים שבמלאי
-        .limit(1)
-        .maybeSingle()
-    ]);
+const searchWords = cleanSearch.split(' ').filter(word => word.length > 2);
+const flexibleSearch = `{${searchWords.map(word => `%${word}%`).join(',')}}`;
 
+const [configRes, settingsRes, inventoryRes] = await Promise.all([
+  supabase.from('system_rules').select('instruction, agent_type, is_active'),
+  supabase.from('system_settings').select('content').eq('key', 'saban_ai_dna').maybeSingle(),
+  supabase.from('inventory')
+    .select('*')
+    .or(`product_name.ilike.any(${flexibleSearch}),search_text.ilike.any(${flexibleSearch}),sku.ilike.%${cleanSearch}%`) // הסרתי את הסוגריים המיותרים {} מסביב ל-any
+    .order('stock_quantity', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+]);
     let product = inventoryRes.data;
 
     // --- 2. מנגנון Fallback - חיפוש לפי מילה ראשונה משמעותית ---
@@ -96,7 +98,6 @@ export async function POST(req: Request) {
               3. מחשבון: אם המשתמש שאל על כמויות/מ"ר, בצע את החישוב (גבס = 3 מ"ר ללוח).
               4. לינקים: השתמש רק ב-MAGIC_URL. אל תמציא לינקים.
               5. סגנון: תמציתי, מקצועי, ללא הקדמות. חתימה בסוף בלבד.
-            `במידה ולא נמצאה התאמה ישירה בשם המוצר, סרוק את שדה ה-search_text. אם מצאת מילת מפתח רלוונטית לצורך של המשתמש (למשל 'איטום' או 'גבס'), הצג את המוצר המתאים ביותר והסבר מדוע הוא רלוונטי.
           });
 
           const result = await model.generateContent(lastUserMsg);
