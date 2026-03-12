@@ -3,18 +3,16 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-// מניעת יצירת מופעים מרובים
-let supabaseInstance: any;
+let client: any;
 
 export const getSupabase = () => {
-  if (!supabaseInstance) {
-    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
+  if (!client) {
+    client = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true
+        storageKey: 'saban-os-auth'
       }
     });
   }
-  return supabaseInstance;
+  return client;
 };
