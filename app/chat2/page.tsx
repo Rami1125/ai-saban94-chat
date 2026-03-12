@@ -9,11 +9,22 @@ import {
   Package, ShoppingCart, CheckCircle2
 } from "lucide-react";
 
+interface Product {
+  id: string | number;
+  product_name: string;
+  sku: string;
+  price?: number;
+  image_url?: string;
+  in_stock: boolean;
+  description?: string;
+}
+
 interface Message {
-  id: number;
+  id: string; // עדיף string (UUID) מ-number ל-React keys
   role: 'user' | 'assistant';
   content: string;
-  product?: any; // הוספת תמיכה במוצר מה-Inventory
+  products?: Product[]; // שים לב: מערך, כי ה-AI יכול למצוא כמה מוצרים
+  isLoading?: boolean; // מעולה להצגת "Skeleton" בזמן שה-AI חושב
 }
 
 export default function SabanChatPage() {
