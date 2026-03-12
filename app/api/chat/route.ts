@@ -35,7 +35,11 @@ export async function POST(req: Request) {
     // 2. ניהול מפתחות ומודלים - מעודכן למרץ 2026
     const keys = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').map(k => k.trim()).filter(k => k.length > 10);
     // שימוש במודלים הכי מתקדמים של Gemini נכון להיום
-    const modelPool = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"];
+const modelPool = [
+      "gemini-3.1-flash-lite-preview", // הכי מהיר וחדש (מרץ 3)
+      "gemini-3.1-pro-preview",       // הכי חכם (מרץ 9)
+      "gemini-3-flash-preview"        // גיבוי יציב
+    ];
     
     let aiResponse = "";
     let success = false;
