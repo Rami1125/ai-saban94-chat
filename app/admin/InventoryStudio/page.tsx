@@ -139,7 +139,7 @@ export default function InventoryStudio() {
             <div className="relative w-72">
               <Search className="absolute right-3 top-2.5 text-slate-400" size={16} />
               <Input 
-                placeholder="חיפוש לפי שם או מק\"ט..." 
+                placeholder="חיפוש לפי שם או מק'ט..." 
                 className="pr-9 h-9" 
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
