@@ -11,10 +11,10 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
-// אתחול בטוח: בודק אם אנחנו בדפדפן או בשרת ומונע אתחול כפול
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-
-// הגדרת ה-Realtime Database עם תמיכה ב-Singleton
+// איתחול סינגלטון
+const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const rtdb = getDatabase(app);
 
-export { app, rtdb };
+// זה מה שהיה חסר ל-Route
+export const getRTDB = () => rtdb;
+export { rtdb };
