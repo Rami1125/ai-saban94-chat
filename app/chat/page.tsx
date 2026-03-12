@@ -8,16 +8,10 @@ import { MessageList } from "@/components/chat/message-list";
 import { Composer } from "@/components/chat/Composer";
 import { ActionOverlays } from "@/components/chat/ActionOverlays";
 import { useToast } from "@/hooks/use-toast";
-import { getSupabase } from '@/lib/supabase';
-
-export async function POST(req) {
-  const supabase = getSupabase(); // האיתחול קורה רק כאן, בזמן ריצה (Runtime)
 import { ChatActionsProvider } from "@/context/ChatActionsContext";
 import { BusinessConfigProvider } from "@/context/BusinessConfigContext";
-
 import { 
-  Phone, Video, Search, LayoutDashboard, 
-  Settings, History, BadgeCheck, Ruler, Zap
+  Phone, Video, Search, Settings, BadgeCheck, Ruler, Zap 
 } from "lucide-react";
 
 function WhatsAppCloneContent() {
@@ -59,10 +53,7 @@ function WhatsAppCloneContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: [...messages, { role: 'user', content }], phone })
       });
-      const data = await res.json();
-      if (res.ok) {
-        // המענה יתעדכן אוטומטית דרך ה-onValue מ-Firebase
-      }
+      if (!res.ok) throw new Error("Failed to send message");
     } catch (error: any) {
       toast({ title: "שגיאה", description: error.message, variant: "destructive" });
     } finally {
@@ -78,8 +69,7 @@ function WhatsAppCloneContent() {
 
   return (
     <div className="flex h-screen bg-[#F2F2F2] dark:bg-zinc-950 overflow-hidden font-sans selection:bg-blue-100" dir="rtl">
-      
-      {/* Sidebar - Modern Luxury Style */}
+      {/* Sidebar - SabanOS Style */}
       <aside className="w-[400px] border-l bg-white/80 backdrop-blur-xl hidden lg:flex flex-col shadow-2xl z-20">
         <header className="p-6 flex justify-between items-center border-b border-slate-100">
           <div className="flex items-center gap-4">
@@ -95,7 +85,6 @@ function WhatsAppCloneContent() {
         </header>
 
         <div className="flex-1 p-6 space-y-6 overflow-y-auto">
-          {/* Quick Action Button */}
           <button 
             onClick={openGlobalCalculator}
             className="w-full p-5 bg-black text-white rounded-[28px] font-black flex items-center justify-between group hover:bg-blue-600 transition-all shadow-xl active:scale-95"
@@ -107,29 +96,20 @@ function WhatsAppCloneContent() {
             <BadgeCheck size={18} className="text-blue-400" />
           </button>
 
-          {/* User Profile Card */}
-          <div className="p-5 bg-slate-50 rounded-[30px] border border-white shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+          <div className="p-5 bg-slate-50 rounded-[30px] border border-white shadow-sm flex items-center gap-4">
             <div className="w-14 h-14 bg-emerald-500 rounded-[20px] flex items-center justify-center text-white font-black text-2xl shadow-inner">S</div>
             <div className="flex-1">
-              <div className="flex items-center justify-between">
-                <span className="font-black text-slate-800">ח. סבן מרכזי</span>
-                <div className="w-2 h-2 bg-emerald-500 rounded-full" />
-              </div>
+              <span className="font-black text-slate-800">ח. סבן מרכזי</span>
               <p className="text-xs font-bold text-slate-400 mt-1">{phone}</p>
             </div>
           </div>
         </div>
       </aside>
 
-      {/* Main Chat Area */}
       <main className="flex-1 flex flex-col relative bg-[#F8F9FA]">
-        {/* Chat Header */}
         <header className="h-20 bg-white/90 backdrop-blur-md border-b flex justify-between items-center px-8 z-10 shadow-sm">
           <div className="flex items-center gap-4">
-            <div className="relative">
-              <div className="w-11 h-11 bg-slate-900 rounded-[18px] flex items-center justify-center text-white font-bold text-xs shadow-lg">S</div>
-              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full" />
-            </div>
+            <div className="w-11 h-11 bg-slate-900 rounded-[18px] flex items-center justify-center text-white font-bold text-xs">S</div>
             <div>
               <div className="font-black text-lg text-slate-900 leading-none">מרכז הזמנות</div>
               <div className="text-[10px] text-emerald-600 font-black uppercase mt-1 tracking-tighter">AI Assistant Online</div>
@@ -142,14 +122,12 @@ function WhatsAppCloneContent() {
           </div>
         </header>
 
-        {/* Message Flow */}
         <div className="flex-1 relative">
            <ChatShell>
               <MessageList />
            </ChatShell>
         </div>
 
-        {/* Floating Composer Area */}
         <footer className="p-6 bg-transparent absolute bottom-0 w-full z-20">
           <div className="max-w-4xl mx-auto bg-white/80 backdrop-blur-2xl border-2 border-white p-2 rounded-[32px] shadow-[0_20px_50px_rgba(0,0,0,0.1)] flex items-center gap-2">
             <Composer onSend={handleSendMessage} disabled={isLoading} />
@@ -162,7 +140,6 @@ function WhatsAppCloneContent() {
   );
 }
 
-// ייצוא עטוף ב-Providers למניעת שגיאות Build
 export default function WhatsAppClonePage() {
   return (
     <BusinessConfigProvider>
