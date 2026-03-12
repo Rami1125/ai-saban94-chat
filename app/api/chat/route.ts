@@ -69,24 +69,24 @@ export async function POST(req: Request) {
         
         try {
           const model = genAI.getGenerativeModel({
-            model: modelName,
-            systemInstruction: `
-            ### STRICT SYSTEM RULES (DNA) ###
-            ${executorDNA}
-  
-            ### IDENTITY ###
-            תפקיד: מנהל מכירות דיגיטלי ב-"ח. סבן חומרי בניין".
-  
-  ### DATA SOURCE (JSON) ###
-  ${product ? JSON.stringify(product) : "STATUS: NO_PRODUCT_FOUND"}
+            model: modelName,systemInstruction: `
+              ### STRICT SYSTEM RULES (DNA) ###
+              ${executorDNA}
+              
+              ### IDENTITY ###
+              תפקיד: מנהל מכירות דיגיטלי ב-"ח. סבן חומרי בניין".
+              
+              ### DATA SOURCE (JSON) ###
+              ${product ? JSON.stringify(product) : "STATUS: NO_PRODUCT_FOUND"}
 
-  ### MANDATORY EXECUTION RULES ###
-  1. IF PRODUCT FOUND: הצג *רק* את כרטיס המוצר לפי מבנה "חוק הברזל" ב-DNA. 
-  2. PLACEHOLDER: חובה להשתמש במחרוזת MAGIC_URL עבור הלינק. אל תנסה לכתוב לינק בעצמך.
-  3. DATA INTEGRITY: אל תמציא מחירים, תיאורים או מלאי. אם ערך חסר ב-JSON, כתוב "צור קשר לפרטים".
-  4. NO CONVERSATION: אם נמצא מוצר, אל תוסיף משפטי פתיחה ("בטח", "הנה המידע"). הצג ישירות את הכרטיס.
-  5. SIGNATURE: תודה שבחרת בח.סבן חומרי בניין | ח.סבן חומרי בנין התלמיד 6 הוד השרון.
-`
+              ### MANDATORY EXECUTION RULES ###
+              1. IF PRODUCT FOUND: הצג *רק* את כרטיס המוצר לפי מבנה "חוק הברזל" מה-DNA למעלה.
+              2. PLACEHOLDER: חובה להשתמש במחרוזת MAGIC_URL עבור הלינק. אל תכתוב לינק בעצמך.
+              3. DATA INTEGRITY: אל תמציא מחירים. אם המחיר 0, כתוב "צור קשר להצעת מחיר".
+              4. NO CONVERSATION: אם נמצא מוצר, אל תוסיף משפטי פתיחה. לך ישר לכרטיס.
+              5. SIGNATURE: תודה שבחרת בח.סבן חומרי בניין | ח.סבן חומרי בנין התלמיד 6 הוד השרון.
+            `
+          });
 
           const result = await model.generateContent(lastUserMsg);
           const responseText = result.response.text();
@@ -95,30 +95,26 @@ export async function POST(req: Request) {
             aiResponse = responseText;
             success = true;
           }
-        } catch (e: any) {
-          console.warn(`Switching key/model due to error...`);
+        } catch (e) {
+          console.warn(`Switching key/model...`);
         }
       }
     }
 
-    // 4. עיבוד סופי - החלפה חכמה וחסינה של הלינק
+    // החלפת לינק קסם - השלב שבו ה-URL מוזרק לטקסט
     if (product) {
-      // לינק עדיפות מה-DB, ואז פורמט SKU תקני
       const finalLink = product.product_magic_link || `https://sidor.vercel.app/product-pages/index.html?id=${product.sku}`;
-      
-      // שימוש ב-Regex גלובלי (g) שאינו רגיש לאותיות (i) כדי להחליף את MAGIC_URL
       const magicUrlRegex = /MAGIC_URL/gi; 
 
       if (magicUrlRegex.test(aiResponse)) {
         aiResponse = aiResponse.replace(magicUrlRegex, finalLink);
-      } else {
-        // ליתר ביטחון - אם המודל לא הציב את ה-Placeholder, נדביק את הלינק בסוף
-        if (!aiResponse.includes(finalLink)) {
-          aiResponse += `\n\n🔗 [לחץ כאן לצפייה במוצר]: ${finalLink}`;
-        }
+      } else if (!aiResponse.includes(finalLink)) {
+        // בטחון: אם ה-AI "שכח", נוסיף בסוף
+        aiResponse += `\n\n🔗 לצפייה במוצר: ${finalLink}`;
       }
     }
 
+    // עדכון Firebase Pipeline
     if (phone && aiResponse) {
       const cleanPhone = phone.replace(/\D/g, '');
       await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), {
@@ -128,13 +124,10 @@ export async function POST(req: Request) {
       });
     }
 
-    return NextResponse.json({ 
-      text: aiResponse || "שלום, כאן ח. סבן. איך נוכל לעזור לכם היום בפרויקט?",
-      product: product 
-    });
+    return NextResponse.json({ text: aiResponse, product });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error("Critical Error:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }
 }
