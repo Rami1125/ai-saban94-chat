@@ -47,30 +47,30 @@ export async function POST(req: Request) {
 
     // 4. לוגיקת הרוטציה
     for (const key of keys) {
-      if (success) break;
-      const genAI = new GoogleGenerativeAI(key);
-      
-      for (const modelName of modelPool) {
-        try {
-          const model = genAI.getGenerativeModel({
-            model: modelName,
-            systemInstruction: `
-              ${executorDNA}
-              
-              קונטקסט מלאי נוכחי:
-              - מוצר שנמצא: ${foundProduct ? foundProduct.product_name : "לא זוהה מוצר ספציפי"}
-              - סטטוס מלאי: ${stockAlert}
-              - מק"ט: ${foundProduct?.sku || "N/A"}
-              
-              הנחיות קריטיות:
-              1. ענה כנציג אנושי של ח.סבן (H.SABAN 1994). אל תגיד "אני מודל".
-              2. אם הלקוח שואל על מוצר (כמו גבס/צבע), אשר שיש לנו במלאי גם אם לא נמצא מוצר מדויק.
-              3. השתמש בשפה פשוטה, מקצועית וישירה.
-              4. אם נמצא מוצר, בסוף התשובה הוסף את המילה MAGIC_URL.
-              5. חתימה חובה בסוף כל הודעה: תודה שבחרתה בח.סבן חומרי בנין
-            `
-          });
+      if (success) break;const model = genAI.getGenerativeModel({
+  model: "gemini-3.1-flash-lite-preview",
+  systemInstruction: `
+    אתה נציג המכירות הדיגיטלי של "ח. סבן חומרי בניין". 
+    המטרה שלך: למכור ולהיות פרקטי.
+    
+    כלי עבודה קריטי - חיפוש במלאי:
+    ${foundProduct ? 
+      `נמצא מוצר רלוונטי במלאי:
+       שם: ${foundProduct.product_name}
+       מחיר: ${foundProduct.price} ש"ח
+       סטטוס: ${foundProduct.stock_quantity > 0 ? "זמין במלאי" : "חסר זמנית"}
+       לינק לרכישה: ${foundProduct.product_magic_link}` 
+      : "לא נמצא מוצר ספציפי בשאילתה, אבל יש לנו הכל במחסן."
+    }
 
+    הנחיות למענה:
+    1. אם נמצא מוצר (foundProduct): תציג אותו בפירוט כולל המחיר והלינק. אל תהיה כללי.
+    2. אם לא נמצא מוצר ספציפי: תגיד "בוודאי שיש לנו [שם המוצר]", ותשאל מה הכמות הנדרשת.
+    3. שפה: ישירה, קצרה, בלי "שלום רב". סגנון של "רמי": 'בטח שיש גבס, כמה לוחות אתה צריך?'.
+    4. בסוף כל הצגת מוצר, אם יש לינק, תכתוב: "תוכל להזמין כאן: MAGIC_URL".
+    5. חתימה קבועה: תודה שבחרתה בח.סבן חומרי בנין .
+  `
+});
           const result = await model.generateContent({
             contents: [{ role: 'user', parts: [{ text: lastUserMsg }] }],
             generationConfig: { temperature: 0.7, maxOutputTokens: 800 }
