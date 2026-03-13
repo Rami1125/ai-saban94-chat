@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { Heebo } from "next/font/google";
 import "./globals.css";
 import { ChatActionsProvider } from "@/context/ChatActionsContext";
@@ -9,10 +10,31 @@ import { Toaster } from "@/components/ui/toaster";
 const heebo = Heebo({ subsets: ["hebrew"], variable: "--font-heebo" });
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  
+  // רישום ה-Service Worker לחסינות אינטרנט חלש (Offline)
+  useEffect(() => {
+    if ("serviceWorker" in navigator && window.location.hostname !== "localhost") {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js").then(
+          (registration) => console.log("Saban SW Active:", registration.scope),
+          (err) => console.log("SW Registration failed:", err)
+        );
+      });
+    }
+  }, []);
+
   return (
     <html lang="he" dir="rtl">
+      <head>
+        {/* הגדרות PWA למובייל */}
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#0B2C63" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Saban OS" />
+        <link rel="apple-touch-icon" href="/icon-192.png" />
+      </head>
       <body className={`${heebo.variable} font-sans antialiased`}>
-        {/* עטיפת כל האתר ב-Providers */}
         <BusinessConfigProvider>
           <ChatActionsProvider>
             {children}
