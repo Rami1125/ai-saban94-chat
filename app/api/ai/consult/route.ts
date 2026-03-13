@@ -44,17 +44,11 @@ const currentSchedule = scheduleRes.data || [];
     const dynamicRules = rulesRes.data?.map(r => r.instruction).join("\n") || "";
 
     // --- 2. איחוד ספר החוקים ל-DNA אחד חזק (Saban Executive DNA V4) ---
-    const finalSystemDNA = `
+const finalSystemDNA = `
       ${baseDNA}
       
       ### חוקי ברזל וניהול לוגיסטי (DNA מחייב):
       ${dynamicRules}
-      
-      ### מצב סידור עבודה נוכחי (Saban Real-Time Dispatch):
-      ${JSON.stringify(currentSchedule)}
-
-      ### נתוני מלאי ומוצרים (Inventory):
-      ${product ? JSON.stringify(product) : "אין מידע זמין על מוצר ספציפי"}
 
       ### הנחיות מענה וביצוע (פקודות ראמי):
       1. **סמכות**: ראמי הוא המנהל. בצע פקודות 'שתף' או 'עבד' ללא שאלות מיותרות.
@@ -69,9 +63,32 @@ const currentSchedule = scheduleRes.data || [];
          - ג. ברירת הובלה: שאל 'חכמת (מנוף) או איסוף עצמי?' (הצג PickupCard אם רלוונטי).
          - ד. שיתוף: הצג SabanWhatsAppButton לסיכום ההזמנה.
       5. **אפס עיכובים**: שאל שאלת עומק אחת קצרה ומכוונת אם חסר נתון קריטי.
-      6. **חתימה מחייבת**: תודה על הפניה בשם ראמי. שורה תחתונה: 'ראמי, הכל מוכן לביצוע. מחכה לפקודה. 🦾'
+
+      ### מצב סידור עבודה נוכחי:
+      ${JSON.stringify(currentSchedule)}
+
+      ### נתוני מלאי ומוצרים:
+      ${product ? JSON.stringify(product) : "אין מידע זמין על מוצר ספציפי"}
+
+      ### חוקי עיצוב וסגנון (חובה):
+      - איסור מוחלט על פסקאות של יותר מ-2 שורות.
+      - שימוש ברווח כפול בין בלוקים.
+      - כל נתון טכני חייב להתחיל באימוג'י תואם (📦, ⚖️, 🛠️, ⏳, 📍).
+      - אם יש חישוב (מ"ר/טון) - הצג אותו בתיבת קוד (Code Block) או בבולד.
+      
+      ### תבנית מבנה מענה מחייבת:
+      ### 🏗️ [כותרת נושא]
+      * [נתון 1]
+      * [נתון 2]
+      
+      [כאן יופיע ה-UI Component]
+      
+      **[שאלת סגירה מודגשת]?**
+
+      ### חתימה מחייבת:
+      תודה על הפניה בשם ראמי. 
+      ראמי, הכל מוכן לביצוע. מחכה לפקודה. 🦾
     `.trim();
-    
     // --- 3. ניהול מפתחות וסבב מודלים (Gemini 3) ---
     const keys = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').map(k => k.trim()).filter(k => k.length > 10);
     const modelPool = ["gemini-3.1-flash-lite-preview", "gemini-3-flash-preview"];
