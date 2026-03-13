@@ -170,21 +170,6 @@ export default function DispatchStudio() {
                       <span className="flex items-center gap-2"><Send size={20} /> שלח לו"ז לחכמת</span>
                     )}
                   </Button>
-                  <Button 
-  size="sm" 
-  variant="outline" 
-  className="border-green-500 text-green-600 hover:bg-green-50 gap-2"
-  onClick={() => {
-    fetch('/api/dispatch/customer-notify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderId: order.id })
-    }).then(() => toast.success("עדכון נשלח לבר אורן בווטסאפ!"));
-  }}
->
-  <MessageCircle size={16} />
-  עדכן לקוח
-</Button>
                   <Button variant="outline" className="h-12 w-12 rounded-xl border-slate-200 text-slate-300">
                     <Info size={20} />
                   </Button>
@@ -193,8 +178,23 @@ export default function DispatchStudio() {
             </Card>
           </motion.div>
         ))}
+             <Button 
+  size="sm" 
+  variant="outline" 
+  className="flex-1 border-green-500 text-green-600 hover:bg-green-50 gap-2 font-bold"
+  onClick={() => {
+    fetch('/api/dispatch/customer-notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId: order.id })
+    }).then(() => toast.success("הודעה נשלחה לבר אורן!"));
+  }}
+>
+  <MessageCircle size={16} />
+  עדכן לקוח
+</Button>
       </AnimatePresence>
-
+ 
       {orders.length === 0 && (
         <Card className="p-16 text-center border-dashed border-2 bg-slate-50/50">
           <p className="text-slate-400 font-bold">אין הזמנות להיום בחמ"ל</p>
