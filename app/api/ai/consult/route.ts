@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     // קבלת הנתונים עם הגנה בסיסית
     const body = await req.json();
     const { question, messages } = body;
-    
+    const history = messages.slice(0, -1);
     // שליפת תוכן השאלה (תמיכה גם בפורמט צ'אט וגם בשאלה בודדת)
     const userQuery = question || (messages && messages[messages.length - 1]?.content);
 
@@ -40,11 +40,12 @@ export async function POST(req: Request) {
 
 const currentSchedule = scheduleRes.data || [];
     const product = inventoryRes.data;
-    const baseDNA = settingsRes.data?.content || "אתה העוזר הלוגיסטי והשותף המבצע של ראמי בחמ\"ל סבן.";
+    const baseDNA = settingsRes.data?.content || "אתה העוזר של ראמי והשותף המבצע של ראמי בסידור ח.סבן חומרי בנין.";
     const dynamicRules = rulesRes.data?.map(r => r.instruction).join("\n") || "";
 
     // --- 2. איחוד ספר החוקים ל-DNA אחד חזק (Saban Executive DNA V4) ---
 const finalSystemDNA = `
+אתה של ראמי מנהל מחלקת הזמנות ח.סבן. הלקוח הנוכחי הוא: ${userName}.
       ${baseDNA}
       
       ### חוקי ברזל וניהול לוגיסטי (DNA מחייב):
