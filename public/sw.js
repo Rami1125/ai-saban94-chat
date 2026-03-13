@@ -1,22 +1,22 @@
-const CACHE_NAME = 'saban-os-v1';
-const ASSETS_TO_CACHE = [
+const CACHE_NAME = 'saban-full-v2';
+const APP_ROUTES = [
+  '/',
   '/admin/master',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png',
-  // הוסף כאן נתיבים לקבצי CSS/JS מרכזיים אם יש
+  '/admin/dispatch',
+  '/admin/inventory',
+  '/manifest.json'
 ];
 
-// התקנה: שמירת קבצים בסיסיים
+// התקנה - שומר את כל נתיבי האפליקציה בזיכרון
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
+      return cache.addAll(APP_ROUTES);
     })
   );
+  self.skipWaiting();
 });
 
-// הפעלה: ניקוי קבצים ישנים
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
@@ -25,14 +25,14 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
+  self.clients.claim();
 });
 
-// אסטרטגיה: "Network First, fallback to Cache"
-// מנסה להביא מידע טרי, אם אין אינטרנט - לוקח מהזיכרון
+// ניהול בקשות - תומך בכל הנתיבים תחת ה-Root
 self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request).catch(() => {
-      return caches.match(event.request);
+      return caches.match(event.request) || caches.match('/admin/master');
     })
   );
 });
