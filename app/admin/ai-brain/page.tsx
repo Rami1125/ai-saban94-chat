@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ProductCard } from "@/components/chat/ProductCard"; 
+import ProductCard from "@/components/chat/ProductCard"; 
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function SabanStudioV2() {
