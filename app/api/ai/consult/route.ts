@@ -11,7 +11,7 @@ export async function POST(req: Request) {
     
     // קבלת הנתונים עם הגנה בסיסית
     const body = await req.json();
-    const { question, messages } = body;
+    const { question, messages, userName, travelInfo } = body;
     
     // שליפת תוכן השאלה (תמיכה גם בפורמט צ'אט וגם בשאלה בודדת)
     const userQuery = question || (messages && messages[messages.length - 1]?.content);
@@ -19,6 +19,9 @@ export async function POST(req: Request) {
     if (!userQuery) {
       return NextResponse.json({ error: "No question provided" }, { status: 400 });
     }
+
+    // הגנה על נתוני מפות למניעת קריסת ReferenceError
+    const travelData = travelInfo || { distance: "טרם נקבע", duration: "בחישוב..." };
 
     // --- 1. שליפת מידע חי + ספר חוקים און-ליין ---
     const cleanSearch = userQuery.replace(/[?？!]/g, "").trim();
@@ -34,19 +37,27 @@ export async function POST(req: Request) {
         .maybeSingle(),
       // ה-DNA הבסיסי מהגדרות המערכת
       supabase.from('system_settings').select('content').eq('key', 'saban_ai_dna').maybeSingle(),
-      // **החשוב ביותר: ספר החוקים שאתה מחנך בטבלה החדשה**
+      // ספר החוקים הפעיל מהטבלה
       supabase.from('ai_rules').select('instruction').eq('is_active', true)
     ]);
 
-const currentSchedule = scheduleRes.data || [];
+    const currentSchedule = scheduleRes.data || [];
     const product = inventoryRes.data;
     const baseDNA = settingsRes.data?.content || "אתה העוזר הלוגיסטי והשותף המבצע של ראמי בחמ\"ל סבן.";
     const dynamicRules = rulesRes.data?.map(r => r.instruction).join("\n") || "";
 
     // --- 2. איחוד ספר החוקים ל-DNA אחד חזק (Saban Executive DNA V4) ---
-const finalSystemDNA = `
+    const finalSystemDNA = `
       ${baseDNA}
       
+      ### פרטי הלקוח והקשר אישי:
+      - שם הלקוח: ${userName || 'לקוח'}
+      - פנה ללקוח בשמו הפרטי כדי ליצור תחושת שירות חברי ואישי.
+
+      ### נתוני לוגיסטיקה בזמן אמת (Google Maps API):
+      * מרחק מהמחסן (החרש 10): ${travelData.distance}
+      * זמן נסיעה משוער למשאית: ${travelData.duration}
+
       ### חוקי ברזל וניהול לוגיסטי (DNA מחייב):
       ${dynamicRules}
 
@@ -60,10 +71,11 @@ const finalSystemDNA = `
          אם הלקוח ענה בחיוב (כן/סגור/תזמין), בצע:
          - א. סיכום: מוצר, כמות, ומשקל כולל עם אימוג'ים.
          - ב. תצוגת UI: חובה להציג ProductStoreCard.
-         - ג. ברירת הובלה: שאל 'חכמת (מנוף) או איסוף עצמי?' (הצג PickupCard אם רלוונטי).
+         - ג. ברירת הובלה: הצג זמן הגעה משוער (${travelData.duration}) ושאל 'חכמת (מנוף) או איסוף עצמי?'.
          - ד. שיתוף: הצג SabanWhatsAppButton לסיכום ההזמנה.
       5. **אפס עיכובים**: שאל שאלת עומק אחת קצרה ומכוונת אם חסר נתון קריטי.
-      6. תציע פטרונות דומים 
+      6. **חלופות**: אם מוצר חסר, הצע פתרון דומה מהמלאי הזמין.
+
       ### מצב סידור עבודה נוכחי:
       ${JSON.stringify(currentSchedule)}
 
@@ -87,8 +99,10 @@ const finalSystemDNA = `
 
       ### חתימה מחייבת:
       תודה על הפניה בשם ראמי. 
-     תחתום :תודה ובשאלה מה תרצה שנבצע היום?
+      תודה, ומה תרצה שנבצע היום?
+      ראמי, הכל מוכן לביצוע. מחכה לפקודה. 🦾
     `.trim();
+
     // --- 3. ניהול מפתחות וסבב מודלים (Gemini 3) ---
     const keys = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').map(k => k.trim()).filter(k => k.length > 10);
     const modelPool = ["gemini-3.1-flash-lite-preview", "gemini-3-flash-preview"];
@@ -124,7 +138,7 @@ const finalSystemDNA = `
     });
 
   } catch (error) {
-    console.error("Critical AI Failure:", error);
+    console.error("Critical System Failure:", error);
     return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }
 }
