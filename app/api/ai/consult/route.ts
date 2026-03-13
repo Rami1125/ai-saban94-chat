@@ -8,37 +8,68 @@ export const runtime = 'nodejs';
 export async function POST(req: Request) {
   try {
     const supabase = getSupabase();
-    const { question, phone, history } = await req.json();
-
-    // --- 1. שליפת מידע חי מהמערכת (סידור + מלאי) ---
-    const cleanSearch = question.replace(/[?？!]/g, "").trim();
     
-    const [scheduleRes, inventoryRes, settingsRes] = await Promise.all([
-      // מביא את הסידור של היום ומחר
-      supabase.from('saban_dispatch').select('*').limit(20),
-      // מחפש מוצר אם השאלה היא על מלאי
+    // קבלת הנתונים עם הגנה בסיסית
+    const body = await req.json();
+    const { question, messages } = body;
+    
+    // שליפת תוכן השאלה (תמיכה גם בפורמט צ'אט וגם בשאלה בודדת)
+    const userQuery = question || (messages && messages[messages.length - 1]?.content);
+
+    if (!userQuery) {
+      return NextResponse.json({ error: "No question provided" }, { status: 400 });
+    }
+
+    // --- 1. שליפת מידע חי + ספר חוקים און-ליין ---
+    const cleanSearch = userQuery.replace(/[?？!]/g, "").trim();
+    
+    const [scheduleRes, inventoryRes, settingsRes, rulesRes] = await Promise.all([
+      // סידור עבודה עדכני
+      supabase.from('saban_dispatch').select('*').limit(30),
+      // חיפוש מלאי מהיר
       supabase.from('inventory')
         .select('*')
         .ilike('product_name', `%${cleanSearch}%`)
         .limit(1)
         .maybeSingle(),
-      // שואב את חוקי הברזל של סבן
-      supabase.from('system_settings').select('content').eq('key', 'saban_ai_dna').maybeSingle()
+      // ה-DNA הבסיסי מהגדרות המערכת
+      supabase.from('system_settings').select('content').eq('key', 'saban_ai_dna').maybeSingle(),
+      // **החשוב ביותר: ספר החוקים שאתה מחנך בטבלה החדשה**
+      supabase.from('ai_rules').select('instruction').eq('is_active', true)
     ]);
 
     const currentSchedule = scheduleRes.data || [];
     const product = inventoryRes.data;
-    const systemDNA = settingsRes.data?.content || "אתה העוזר הלוגיסטי של ח. סבן. ענה בעברית מקצועית ותמציתית.";
+    const baseDNA = settingsRes.data?.content || "אתה העוזר הלוגיסטי של ח. סבן.";
+    const dynamicRules = rulesRes.data?.map(r => r.instruction).join("\n") || "";
 
-    // --- 2. ניהול מפתחות ומודלים (Key Pool Rotation) ---
+    // --- 2. איחוד ספר החוקים ל-DNA אחד חזק ---
+    const finalSystemDNA = `
+      ${baseDNA}
+      
+      ### ספר החוקים והנחיות לוגיסטיות (DNA מחייב):
+      ${dynamicRules}
+      
+      ### נתוני סידור עבודה בזמן אמת (Saban Dispatch):
+      ${JSON.stringify(currentSchedule)}
+
+      ### נתוני מוצר רלוונטי:
+      ${product ? JSON.stringify(product) : "לא נמצא מוצר תואם במלאי"}
+
+      ### הנחיות מענה כעוזר של ראמי:
+      1. חוקי נהגים: חכמת (מנוף, החרש 10), עלי (ידני, כל הסניפים).
+      2. העברות: חובה לעצור ולבקש מספר תעודת העברה אם לא צוין.
+      3. זמינות: חשב זמן פריקה (60 דק') והצע חלופות לפי הנתונים בסידור.
+      4. סגנון: מקצועי, קצר, מדויק, "מתכנת אומנותי".
+    `.trim();
+
+    // --- 3. ניהול מפתחות וסבב מודלים (Gemini 3) ---
     const keys = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').map(k => k.trim()).filter(k => k.length > 10);
-    // שימוש במודלים החדשים ביותר של Gemini 3
     const modelPool = ["gemini-3.1-flash-lite-preview", "gemini-3-flash-preview"];
     
     let aiResponse = "";
     let success = false;
 
-    // לופ מפתחות (אם מפתח אחד נחסם, עובר לבא)
     for (const key of keys) {
       if (success) break;
       const genAI = new GoogleGenerativeAI(key);
@@ -48,36 +79,22 @@ export async function POST(req: Request) {
         try {
           const model = genAI.getGenerativeModel({
             model: modelName,
-            systemInstruction: `
-              ${systemDNA}
-              
-              ### נתוני סידור עבודה חי (Saban Dispatch) ###
-              ${JSON.stringify(currentSchedule)}
-
-              ### נתוני מוצר (אם רלוונטי) ###
-              ${product ? JSON.stringify(product) : "אין מוצר ספציפי בחיפוש זה"}
-
-              ### הנחיות למתן תשובה ###
-              1. אם שאלו על נהג (עלי/חכמת): בדוק בנתוני הסידור מתי הם תפוסים/פנויים.
-              2. אם שאלו על העברה: בדוק זמינות מחסנים (החרש/התלמיד) והצע חלונית זמן.
-              3. סגנון: תמציתי, "מתכנת אומנותי" - מדויק, נקי, ללא חפירות.
-              4. זכור: המשתמש הוא חלק מהארגון, דבר אליו כשותף.
-            `
+            systemInstruction: finalSystemDNA
           });
 
-          const result = await model.generateContent(question);
+          const result = await model.generateContent(userQuery);
           aiResponse = result.response.text();
           if (aiResponse) success = true;
         } catch (e) {
-          console.error(`Key/Model failed: ${modelName}`, e);
+          console.error(`Attempt failed with ${modelName}:`, e);
         }
       }
     }
 
-    // --- 3. החזרת תשובה למשתמש ---
+    // --- 4. החזרת תשובה ---
     return NextResponse.json({ 
-      answer: aiResponse || "סליחה ראמי, המוח עמוס כרגע. נסה שוב בעוד רגע.",
-      success: true 
+      answer: aiResponse || "מצטער ראמי, המוח עמוס. נסה שוב בעוד רגע.",
+      success: success 
     });
 
   } catch (error) {
