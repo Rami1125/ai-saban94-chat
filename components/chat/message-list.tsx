@@ -3,7 +3,7 @@
 import React, { useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bot, User, Calculator, Package, Ruler, Share2 } from "lucide-react";
-import { ProductCard } from "./ProductCard";
+import ProductCard from "@/components/chat/ProductCard";
 import { useChatActions } from "@/context/ChatActionsContext";
 
 export function MessageList() {
