@@ -169,13 +169,19 @@ export default function DispatchStudio() {
 
                   {/* כפתורי פעולה */}
                   <div className="flex gap-2 pt-2">
-                    <Button 
-                      onClick={() => sendDriverBrief(order.driver_name)}
-                      className="flex-1 bg-slate-900 hover:bg-black h-10 text-xs font-bold gap-2 rounded-xl shadow-lg shadow-slate-200"
-                    >
-                      <Send size={14} /> שלח לו"ז ל{order.driver_name}
-                    </Button>
-                    <Button variant="outline" className="h-10 text-xs font-bold px-3 rounded-xl border-slate-200 text-slate-600">
+<Button 
+  size="sm" 
+  variant={order.status === 'pending' ? 'default' : 'outline'}
+  disabled={order.status !== 'pending' && order.status !== 'in_transit'}
+  onClick={() => handleSendBrief(order)}
+  className="gap-2 font-bold"
+>
+  {order.status === 'unloading' ? (
+    <><Activity size={14} className="animate-pulse" /> בפריקה חיה...</>
+  ) : (
+    <><Send size={14} /> שלח לו"ז לחכמת</>
+  )}
+</Button>
                       פרטים
                     </Button>
                   </div>
