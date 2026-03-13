@@ -7,7 +7,7 @@ import {
   Calendar, Phone, Menu, Sparkles, CheckCircle2,
   ChevronLeft, Info, Play, Loader2, Plus
 } from "lucide-react";
-import { ProductCard } from "@/components/chat/ProductCard";
+export function ProductCard({ product }: ProductProps) { ... }
 import { toast } from "sonner";
 
 export default function SabanAICanvas({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
