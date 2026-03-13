@@ -85,7 +85,7 @@ export default function SabanProfessionalDispatch() {
       report += `\n`;
     });
 
-    report += `🤖 *לעדכונים ובירורים מול המוח:* \n🔗 https://saban-os.vercel.app/ai-ask\n`;
+    report += `🤖 *לעדכונים ובירורים העוזר של ראמי :* \n🔗 https://ai-saban94-chat.vercel.app/ai-ask`;
     window.open(`https://wa.me/?text=${encodeURIComponent(report)}`, '_blank');
   };
 
