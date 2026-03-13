@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { Send, Smile, MoreVertical, Phone, Video, Search, CheckCheck, Bot } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 // וודא שייבאת את ה-ProductCard מהקובץ שבו שמרת אותו
-import { ProductCard } from "@/components/chat/ProductCard"; 
+import ProductCard from "@/components/chat/ProductCard";
 
 interface Message {
   id: string;
