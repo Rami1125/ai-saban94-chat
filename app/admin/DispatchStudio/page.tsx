@@ -7,6 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Truck, MapPin, Send, Timer, Activity, CheckCircle2, History, Info } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { 
+  Truck, MapPin, Send, Timer, Activity, 
+  CheckCircle2, History, Info, MessageCircle // <--- תוסיף את זה כאן
+} from "lucide-react";
 
 export default function DispatchStudio() {
   const [orders, setOrders] = useState<any[]>([]);
