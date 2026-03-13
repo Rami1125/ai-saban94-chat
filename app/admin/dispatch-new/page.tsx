@@ -1,207 +1,182 @@
 "use client";
-import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { toast, Toaster } from "sonner";
-import { Truck, Calendar, Clock, User, MapPin, Warehouse, Send, Eye, MessageCircle, Copy } from "lucide-react";
+import React, { useEffect, useState, useCallback } from 'react';
 import { getSupabase } from "@/lib/supabase";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { 
+  Truck, Clock, MapPin, Warehouse, MessageSquare, 
+  Bot, X, Send, Calendar, Activity, Info 
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
-const deliveryTypes = [
-  { id: 'is_truck_delivery', label: 'הובלת משאית' },
-  { id: 'is_crane_delivery', label: 'הובלת מנוף' },
-  { id: 'is_crane_15m', label: 'מנוף 15 מטר' },
-  { id: 'is_self_pickup', label: 'משיכה עצמית' },
-  { id: 'is_external_driver', label: 'מוביל חיצוני' },
-  { id: 'is_waste_collection', label: 'איסוף בלות' },
-  { id: 'is_site_access_crane', label: 'גישה לאתר+מנוף' },
-  { id: 'is_crane_work_only', label: 'עבודת מנוף בלבד' },
+// נתוני נהגים
+const drivers = [
+  { 
+    name: 'חכמת', 
+    img: 'https://i.postimg.cc/d3S0NJJZ/Screenshot-20250623-200646-Facebook.jpg',
+    type: 'משאית מנוף'
+  },
+  { 
+    name: 'עלי', 
+    img: 'https://i.postimg.cc/tCNbgXK3/Screenshot-20250623-200744-Tik-Tok.jpg',
+    type: 'פריקה ידנית'
+  }
 ];
 
-export default function NewDispatch() {
-  const [formData, setFormData] = useState({
-    scheduled_date: new Date().toISOString().split('T')[0],
-    scheduled_time: '',
-    customer_name: '',
-    address: '',
-    warehouse_source: 'התלמיד',
-    driver_name: 'חכמת',
-    types: {} as Record<string, boolean>
-  });
+export default function DispatchDashboard() {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [isAiOpen, setIsAiOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const supabase = getSupabase();
 
-  const [previewMsg, setPreviewMsg] = useState("");
+  const fetchOrders = useCallback(async () => {
+    // שליפת הזמנות למחר (או היום לבדיקה)
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + 1);
+    const dateStr = targetDate.toISOString().split('T')[0];
 
-  // יצירת הודעת ווטסאפ מעוצבת להצגה
-  const generatePreview = () => {
-    const selectedTypes = deliveryTypes
-      .filter(t => formData.types[t.id])
-      .map(t => t.label)
-      .join(' + ');
+    const { data, error } = await supabase
+      .from('saban_dispatch')
+      .select('*')
+      .eq('scheduled_date', dateStr)
+      .order('scheduled_time', { ascending: true });
 
-    const emoji = formData.driver_name === 'חכמת' ? '🏗️' : '🚚';
-    const warehouseEmoji = formData.warehouse_source === 'התלמיד' ? '🏠' : '🏭';
+    if (!error) setOrders(data || []);
+    setLoading(false);
+  }, [supabase]);
 
-    let msg = `*דוח הזמנה חדשה - ח. סבן*\n`;
-    msg += `------------------------------\n`;
-    msg += `⏰ ${formData.scheduled_time || '--:--'} | 👤 ${formData.customer_name || 'לקוח'}\n`;
-    msg += `📍 ${formData.address || 'כתובת'}\n`;
-    msg += `${warehouseEmoji} מחסן: ${formData.warehouse_source}\n`;
-    msg += `🚛 נהג: *${formData.driver_name}*\n`;
-    if (selectedTypes) msg += `🛠️ סוג: ${selectedTypes}\n`;
-    msg += `------------------------------\n`;
-    msg += `🤖 *לשאלות ה-AI על הסידור:* \n`;
-    msg += `https://saban-os.vercel.app/ai-ask\n`;
+  useEffect(() => {
+    fetchOrders();
+    // סינכרון LIVE - אם מישהו מעדכן בטופס, הלוח מתעדכן בשנייה
+    const channel = supabase.channel('dispatch_live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'saban_dispatch' }, fetchOrders)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchOrders, supabase]);
 
-    setPreviewMsg(msg);
-  };
-
-  const handleSubmit = async () => {
-    const supabase = getSupabase();
-    const payload = {
-      scheduled_date: formData.scheduled_date,
-      scheduled_time: formData.scheduled_time,
-      customer_name: formData.customer_name,
-      address: formData.address,
-      warehouse_source: formData.warehouse_source,
-      driver_name: formData.driver_name,
-      ...formData.types
-    };
-
-    const { error } = await supabase.from('saban_dispatch').insert([payload]);
-
-    if (error) {
-      toast.error("שגיאה בשמירה: " + error.message);
-    } else {
-      toast.success("ההזמנה נשמרה בסידור! הצינור עודכן 🔥");
-    }
-  };
+  if (loading) return <div className="h-screen flex items-center justify-center font-black animate-pulse text-blue-900">טוען סידור עבודה...</div>;
 
   return (
-    <div className="max-w-2xl mx-auto p-4 pb-20 bg-slate-50 min-h-screen" dir="rtl">
-      <Toaster position="top-center" richColors />
+    <div className="min-h-screen bg-slate-50 p-4 md:p-8" dir="rtl">
       
-      <Card className="border-none shadow-2xl rounded-3xl overflow-hidden bg-white">
-        <CardHeader className="bg-[#0B2C63] text-white p-6">
-          <CardTitle className="flex items-center justify-between text-2xl font-black">
-            <div className="flex items-center gap-2 italic">SABAN<span className="text-blue-400">OS</span></div>
-            <Truck size={28} className="text-blue-400" />
-          </CardTitle>
-          <p className="text-blue-200 text-xs font-bold mt-1">הזנת סידור עבודה וניהול לוגיסטי</p>
-        </CardHeader>
+      {/* כותרת עליונה */}
+      <header className="max-w-7xl mx-auto flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-3xl font-black text-[#0B2C63] italic">SABAN<span className="text-blue-500 underline">LIVE</span></h1>
+          <p className="text-slate-500 font-bold flex items-center gap-2">
+            <Calendar size={16} /> סידור עבודה למחר: {new Date(Date.now() + 86400000).toLocaleDateString('he-IL')}
+          </p>
+        </div>
+        <Badge className="bg-green-500 text-white px-4 py-1 rounded-full animate-pulse">מחובר LIVE</Badge>
+      </header>
 
-        <CardContent className="p-6 space-y-6">
-          {/* תאריך ושעה */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="font-bold flex items-center gap-1 text-slate-700 text-sm"><Calendar size={14}/> תאריך</Label>
-              <Input type="date" value={formData.scheduled_date} onChange={e => setFormData({...formData, scheduled_date: e.target.value})} className="rounded-xl border-slate-200 focus:ring-blue-500"/>
-            </div>
-            <div className="space-y-2">
-              <Label className="font-bold flex items-center gap-1 text-slate-700 text-sm"><Clock size={14}/> שעה</Label>
-              <Input type="time" onChange={e => setFormData({...formData, scheduled_time: e.target.value})} className="rounded-xl border-slate-200 focus:ring-blue-500"/>
-            </div>
-          </div>
-
-          {/* לקוח וכתובת */}
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label className="font-bold flex items-center gap-1 text-slate-700 text-sm"><User size={14}/> שם לקוח</Label>
-              <Input placeholder="מי הלקוח?" onChange={e => setFormData({...formData, customer_name: e.target.value})} className="rounded-xl h-12 border-slate-200"/>
-            </div>
-            <div className="space-y-2">
-              <Label className="font-bold flex items-center gap-1 text-slate-700 text-sm"><MapPin size={14}/> כתובת למסירה</Label>
-              <Input placeholder="עיר, רחוב, מספר..." onChange={e => setFormData({...formData, address: e.target.value})} className="rounded-xl h-12 border-slate-200"/>
-            </div>
-          </div>
-
-          <hr className="border-slate-100" />
-
-          {/* סוג הובלה */}
-          <div className="space-y-3">
-            <Label className="font-black text-[#0B2C63] text-lg">סוג פריקה / שירות</Label>
-            <div className="grid grid-cols-2 gap-3">
-              {deliveryTypes.map(type => (
-                <div key={type.id} className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-100 rounded-2xl hover:bg-blue-50 transition-all cursor-pointer">
-                  <Checkbox 
-                    id={type.id} 
-                    onCheckedChange={(checked) => setFormData({
-                      ...formData, 
-                      types: { ...formData.types, [type.id]: !!checked }
-                    })}
-                  />
-                  <label htmlFor={type.id} className="text-xs font-bold leading-tight cursor-pointer text-slate-700">{type.label}</label>
+      {/* עמודות נהגים */}
+      <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
+        {drivers.map((driver) => (
+          <div key={driver.name} className="space-y-4">
+            {/* פרופיל נהג */}
+            <div className="flex items-center gap-4 bg-white p-4 rounded-3xl shadow-sm border border-slate-100">
+              <div className="relative">
+                <img src={driver.img} alt={driver.name} className="w-20 h-20 rounded-2xl object-cover border-4 border-blue-50 shadow-lg" />
+                <div className="absolute -bottom-2 -right-2 bg-blue-600 text-white p-1.5 rounded-lg shadow-md">
+                  <Truck size={16} />
                 </div>
-              ))}
+              </div>
+              <div>
+                <h2 className="text-2xl font-black text-slate-800">{driver.name}</h2>
+                <p className="text-blue-600 font-bold text-sm">{driver.type}</p>
+              </div>
             </div>
-          </div>
 
-          {/* מחסן ונהג */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="font-bold flex items-center gap-1 text-slate-700 text-sm"><Warehouse size={14}/> מחסן</Label>
-              <select 
-                className="w-full p-3 rounded-xl border border-slate-200 font-bold bg-white text-sm"
-                onChange={e => setFormData({...formData, warehouse_source: e.target.value})}
-              >
-                <option>התלמיד</option>
-                <option>החרש</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label className="font-bold flex items-center gap-1 text-slate-700 text-sm"><Truck size={14}/> נהג</Label>
-              <select 
-                className="w-full p-3 rounded-xl border border-slate-200 font-bold bg-white text-sm"
-                onChange={e => setFormData({...formData, driver_name: e.target.value})}
-              >
-                <option>חכמת</option>
-                <option>עלי</option>
-              </select>
-            </div>
-          </div>
+            {/* רשימת משימות לנהג */}
+            <div className="space-y-4">
+              {orders.filter(o => o.driver_name === driver.name).length > 0 ? (
+                orders.filter(o => o.driver_name === driver.name).map((order) => (
+                  <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} key={order.id}>
+                    <Card className="border-none shadow-md hover:shadow-xl transition-all rounded-2xl overflow-hidden group">
+                      <div className={`h-1.5 w-full ${driver.name === 'חכמת' ? 'bg-blue-600' : 'bg-orange-500'}`} />
+                      <CardContent className="p-5">
+                        <div className="flex justify-between items-start mb-3">
+                          <h3 className="text-lg font-black text-slate-800 leading-none">{order.customer_name}</h3>
+                          <div className="bg-slate-100 px-3 py-1 rounded-lg font-mono font-bold text-blue-700">
+                            {order.scheduled_time.slice(0, 5)}
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-2 mb-4">
+                          <div className="flex items-center gap-2 text-slate-500 text-sm font-bold">
+                            <MapPin size={14} className="text-red-500" /> {order.address}
+                          </div>
+                          <div className="flex items-center gap-2 text-slate-500 text-sm font-bold">
+                            <Warehouse size={14} className="text-blue-500" /> {order.warehouse_source}
+                          </div>
+                        </div>
 
-          {/* כפתורי פעולה */}
-          <div className="flex gap-3 pt-4">
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  onClick={generatePreview}
-                  className="flex-1 h-14 rounded-2xl border-2 border-slate-200 font-bold gap-2 text-slate-600"
-                >
-                  <Eye size={20} /> תצוגה
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-xs rounded-3xl" dir="rtl">
-                <DialogHeader>
-                  <DialogTitle className="text-center font-black">הודעת ווטסאפ מעוצבת</DialogTitle>
-                </DialogHeader>
-                <div className="bg-[#DCF8C6] p-4 rounded-2xl text-sm font-mono whitespace-pre-wrap shadow-inner">
-                  {previewMsg}
+                        {/* תגיות סוג הובלה */}
+                        <div className="flex flex-wrap gap-1.5">
+                          {order.is_crane_delivery && <Badge className="bg-blue-50 text-blue-700 border-none">מנוף</Badge>}
+                          {order.is_truck_delivery && <Badge className="bg-slate-100 text-slate-700 border-none">משאית</Badge>}
+                          {order.is_waste_collection && <Badge className="bg-orange-50 text-orange-700 border-none">פסולת</Badge>}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                ))
+              ) : (
+                <div className="text-center py-10 text-slate-300 font-bold border-2 border-dashed border-slate-200 rounded-3xl">
+                  אין הזמנות משובצות
                 </div>
-                <Button 
-                  className="w-full bg-green-600 hover:bg-green-700 text-white font-bold gap-2"
-                  onClick={() => {
-                    navigator.clipboard.writeText(previewMsg);
-                    toast.success("ההודעה הועתקה! שלח לקבוצה");
-                  }}
-                >
-                  <Copy size={18} /> העתק ושדר
-                </Button>
-              </DialogContent>
-            </Dialog>
-
-            <Button 
-              onClick={handleSubmit}
-              className="flex-[2] h-14 rounded-2xl bg-[#0B2C63] hover:bg-slate-800 text-white font-black shadow-xl gap-2 transition-transform active:scale-95"
-            >
-              <Send size={20} /> שמור בסידור
-            </Button>
+              )}
+            </div>
           </div>
-        </CardContent>
-      </Card>
+        ))}
+      </div>
+
+      {/* כפתור AI צף - ה"מלשינון" החכם */}
+      <button 
+        onClick={() => setIsAiOpen(true)}
+        className="fixed bottom-6 right-6 w-16 h-16 bg-[#0B2C63] text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 transition-transform z-50 group"
+      >
+        <Bot size={32} className="group-hover:rotate-12 transition-transform" />
+        <div className="absolute -top-2 -left-2 bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full font-black animate-bounce">AI</div>
+      </button>
+
+      {/* צ'אט AI פנימי (Popup) */}
+      <AnimatePresence>
+        {isAiOpen && (
+          <motion.div 
+            initial={{ opacity: 0, y: 100 }} 
+            animate={{ opacity: 1, y: 0 }} 
+            exit={{ opacity: 0, y: 100 }}
+            className="fixed bottom-24 right-6 left-6 md:left-auto md:w-96 bg-white rounded-3xl shadow-2xl border border-slate-200 z-50 overflow-hidden"
+          >
+            <div className="bg-[#0B2C63] p-4 text-white flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <Bot className="text-blue-400" />
+                <span className="font-black">Gemini - מוח הסידור</span>
+              </div>
+              <button onClick={() => setIsAiOpen(false)}><X size={20}/></button>
+            </div>
+            
+            <div className="h-80 p-4 overflow-y-auto bg-slate-50 space-y-4 text-sm font-bold">
+              <div className="bg-blue-100 p-3 rounded-2xl rounded-tr-none text-blue-900 ml-8">
+                שלום ראמי! אני מחובר לטבלת הסידור. מה תרצה לדעת על ההובלות למחר?
+              </div>
+              {/* כאן תבוא האינטגרציה עם ה-API של Gemini */}
+            </div>
+
+            <div className="p-4 border-t border-slate-100 flex gap-2">
+              <input 
+                type="text" 
+                placeholder="שאל אותי על החרש/עלי..." 
+                className="flex-1 bg-slate-100 rounded-xl px-4 py-2 text-sm focus:outline-none"
+              />
+              <button className="bg-blue-600 text-white p-2 rounded-xl"><Send size={18}/></button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
