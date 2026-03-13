@@ -4,7 +4,7 @@ import { getSupabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Truck, MapPin, Send, Timer, Activity, CheckCircle2, History, AlertCircle } from "lucide-react";
+import { Truck, MapPin, Send, Timer, Activity, CheckCircle2, History, Info } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 
@@ -40,9 +40,9 @@ export default function DispatchStudio() {
   }, [fetchDispatch, supabase]);
 
   const handleSendBrief = async (order: any) => {
-    // בדיקה שה-ID קיים לפני השליחה כדי למנוע 400
+    // מניעת שגיאת 400 על ידי בדיקת קיום ה-ID
     if (!order?.id) {
-      toast.error("שגיאה: מזהה הזמנה לא נמצא");
+      toast.error("מזהה הזמנה לא תקין");
       return;
     }
 
@@ -57,10 +57,10 @@ export default function DispatchStudio() {
         toast.success(`לו"ז נשלח בהצלחה ל${order.driver_name}`);
       } else {
         const errorData = await response.json();
-        toast.error(`שגיאה בשליחה: ${errorData.error || 'נתונים לא תקינים'}`);
+        toast.error(`שגיאה: ${errorData.error || 'נא לבדוק נתוני הזמנה'}`);
       }
     } catch (err) {
-      toast.error("חיבור לשרת ה-API נכשל");
+      toast.error("חיבור לשרת נכשל");
     }
   };
 
@@ -69,40 +69,37 @@ export default function DispatchStudio() {
     return Math.floor((new Date().getTime() - new Date(startTime).getTime()) / 60000);
   };
 
-  if (loading && orders.length === 0) return <div className="text-center p-10 font-bold animate-pulse">טוען נתונים מהחמ"ל...</div>;
+  if (loading && orders.length === 0) return <div className="text-center p-10 font-bold animate-pulse text-slate-400">מתחבר לחמ"ל סבן...</div>;
 
   return (
     <div className="space-y-6 text-right" dir="rtl">
-      {/* לוח מחוונים עליון - Metrics */}
+      {/* לוח מחוונים (Stats) */}
       <div className="grid grid-cols-2 gap-4">
-        <Card className="bg-slate-900 text-white border-none shadow-lg">
+        <Card className="bg-[#0f172a] text-white border-none shadow-xl">
           <CardContent className="p-4 flex flex-col items-center">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">מנופים בפריקה</span>
-            <span className="text-2xl font-black text-blue-400">
-              {orders.filter(o => o.status === 'unloading').length}
-            </span>
+            <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mb-1 text-center">מנופים בפריקה</span>
+            <span className="text-3xl font-black">{orders.filter(o => o.status === 'unloading').length}</span>
           </CardContent>
         </Card>
-        <Card className="bg-white border-none shadow-md">
+        <Card className="bg-white border border-slate-100 shadow-sm">
           <CardContent className="p-4 flex flex-col items-center">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">סה"כ הזמנות היום</span>
-            <span className="text-2xl font-black text-slate-800">{orders.length}</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 text-center">הזמנות להיום</span>
+            <span className="text-3xl font-black text-slate-800">{orders.length}</span>
           </CardContent>
         </Card>
       </div>
 
       <AnimatePresence mode="popLayout">
         {orders.map((order) => (
-          <motion.div 
-            key={order.id} 
-            layout 
-            initial={{ opacity: 0, y: 10 }} 
-            animate={{ opacity: 1, y: 0 }}
-            className="relative"
-          >
+          <motion.div key={order.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
             <Card className={`overflow-hidden border-none shadow-xl transition-all ${
               order.status === 'unloading' ? 'ring-2 ring-blue-600 bg-blue-50/20' : 'bg-white'
             }`}>
+              <div className={`h-1 w-full ${
+                order.status === 'unloading' ? 'bg-blue-600 animate-pulse' : 
+                order.status === 'completed' ? 'bg-green-500' : 'bg-slate-100'
+              }`} />
+              
               <CardContent className="p-5">
                 <div className="flex justify-between items-start mb-4">
                   <div>
@@ -114,7 +111,7 @@ export default function DispatchStudio() {
                       <MapPin size={14} className="text-blue-600"/> {order.delivery_address}
                     </p>
                   </div>
-                  <Badge variant="outline" className="bg-slate-50 font-mono text-sm px-3 py-1 border-slate-200">
+                  <Badge variant="outline" className="bg-slate-50 font-mono text-xs px-2 py-1 border-slate-200">
                     {order.scheduled_time?.slice(0, 5)}
                   </Badge>
                 </div>
@@ -124,8 +121,8 @@ export default function DispatchStudio() {
                     <div className="bg-blue-100 p-2 rounded-xl text-blue-600">
                       <Truck size={18}/>
                     </div>
-                    <div>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">נהג בתנועה</p>
+                    <div className="text-right">
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">נהג</p>
                       <p className="text-sm font-black text-slate-700">{order.driver_name}</p>
                     </div>
                   </div>
@@ -135,8 +132,8 @@ export default function DispatchStudio() {
                       <div className="bg-blue-600 p-2 rounded-xl text-white animate-pulse">
                         <Timer size={18}/>
                       </div>
-                      <div>
-                        <p className="text-[10px] text-blue-600 font-bold uppercase tracking-tighter">זמן פריקה (LIVE)</p>
+                      <div className="text-right">
+                        <p className="text-[10px] text-blue-600 font-bold uppercase">פריקה LIVE</p>
                         <p className="text-sm font-black text-blue-700">{getLiveTimer(order.actual_pto_start)} דקות</p>
                       </div>
                     </div>
@@ -145,7 +142,7 @@ export default function DispatchStudio() {
                       <div className="bg-slate-100 p-2 rounded-xl text-slate-400">
                         <History size={18}/>
                       </div>
-                      <div>
+                      <div className="text-right">
                         <p className="text-[10px] text-slate-400 font-bold uppercase">היסטוריה</p>
                         <p className="text-sm font-black text-slate-600">{order.estimated_duration_mins || '45'} דק'</p>
                       </div>
@@ -157,7 +154,7 @@ export default function DispatchStudio() {
                   <Button 
                     onClick={() => handleSendBrief(order)}
                     disabled={order.status === 'completed'}
-                    className={`flex-1 h-12 rounded-xl font-bold text-base transition-all active:scale-95 shadow-lg ${
+                    className={`flex-1 h-12 rounded-xl font-bold text-base shadow-lg transition-all active:scale-95 ${
                       order.status === 'pending' 
                         ? 'bg-blue-600 hover:bg-blue-700 text-white' 
                         : 'bg-white border-2 border-blue-600 text-blue-600 hover:bg-blue-50'
@@ -166,12 +163,12 @@ export default function DispatchStudio() {
                     {order.status === 'unloading' ? (
                       <span className="flex items-center gap-2"><Activity size={20} className="animate-spin" /> פריקה פעילה...</span>
                     ) : (
-                      <span className="flex items-center gap-2"><Send size={20} /> שלח לו"ז לנהג</span>
+                      <span className="flex items-center gap-2"><Send size={20} /> שלח לו"ז לחכמת</span>
                     )}
                   </Button>
                   
-                  <Button variant="outline" className="h-12 w-12 rounded-xl border-slate-200 text-slate-400">
-                    <AlertCircle size={22} />
+                  <Button variant="outline" className="h-12 w-12 rounded-xl border-slate-200 text-slate-300">
+                    <Info size={20} />
                   </Button>
                 </div>
               </CardContent>
@@ -182,7 +179,7 @@ export default function DispatchStudio() {
 
       {orders.length === 0 && (
         <Card className="p-16 text-center border-dashed border-2 bg-slate-50/50">
-          <p className="text-slate-400 font-bold italic">החמ"ל ריק. הכנס הזמנה חדשה כדי להתחיל ניטור.</p>
+          <p className="text-slate-400 font-bold">אין הזמנות להיום בחמ"ל</p>
         </Card>
       )}
     </div>
