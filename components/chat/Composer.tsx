@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, Send, Loader2, Package, X } from "lucide-react";
-import { ProductCard } from "./ProductCard"; 
+import ProductCard from "@/components/chat/ProductCard";
 import { useChatActions } from "@/context/ChatActionsContext"; 
 import { useConfig } from "@/context/BusinessConfigContext"; 
 import { Product } from "@/types"; 
