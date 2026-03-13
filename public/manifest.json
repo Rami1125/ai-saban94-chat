@@ -1,22 +1,42 @@
 {
-  "name": "ח.סבן חומרי בניין 1994",
-  "short_name": "SabanOS",
-  "description": "מערכת ניהול ולוגיקה חכמה לחומרי בניין",
-  "start_url": "/",
+  "name": "H.Saban Enterprise OS",
+  "short_name": "Saban OS",
+  "description": "מערכת ניהול ולוגיסטיקה כוללת - ח. סבן",
+  "start_url": "/admin/master",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#FCF9F5",
-  "theme_color": "#2563eb",
+  "orientation": "portrait",
+  "background_color": "#050A18",
+  "theme_color": "#0B2C63",
   "icons": [
     {
-      "src": "/icons/icon-192x192.png",
+      "src": "/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "maskable"
     },
     {
-      "src": "/icons/icon-512x512.png",
+      "src": "/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "לוח פיקוד מאסטר",
+      "url": "/admin/master",
+      "description": "ניהול חוקים ומלשינון"
+    },
+    {
+      "name": "סידור עבודה",
+      "url": "/admin/dispatch",
+      "description": "ניהול נהגים והובלות"
+    },
+    {
+      "name": "מחירון ומוצרים",
+      "url": "/admin/inventory",
+      "description": "חיפוש מוצרים וסיקה"
     }
   ]
 }
