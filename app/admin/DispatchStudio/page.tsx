@@ -4,7 +4,7 @@ import { getSupabase } from "@/lib/supabase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Truck, MapPin, Send, Timer, Activity, CheckCircle2, Info } from "lucide-react";
+import { Truck, MapPin, Send, Timer, Activity, CheckCircle2, Info, History } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 
@@ -50,10 +50,11 @@ export default function DispatchStudio() {
       if (response.ok) {
         toast.success(`לו"ז נשלח בהצלחה ל${order.driver_name}`);
       } else {
-        toast.error("שגיאה בשליחת הלו"ז");
+        // כאן היה התיקון - שימוש במירכאות חיצוניות שונות
+        toast.error('שגיאה בשליחת הלו"ז');
       }
     } catch (err) {
-      toast.error("חיבור לשרת נכשל");
+      toast.error('חיבור לשרת נכשל');
     }
   };
 
@@ -98,7 +99,6 @@ export default function DispatchStudio() {
                   )}
                 </div>
 
-                {/* כאן התיקון לכפתורים - עכשיו הם עטופים נכון ולחיצים */}
                 <div className="flex gap-2 mt-4">
                   <Button 
                     size="sm" 
