@@ -15,11 +15,10 @@ export async function POST(req: Request) {
     const { messages, phone } = await req.json();
     const lastUserMsg = messages[messages.length - 1].content;
 
-    // --- 1. אופטימיזציה של שאילתת החיפוש (Fuzzy & Tokenized Search) ---
+    // --- 1. אופטימיזציה של שאילתת החיפוש ---
     const cleanSearch = lastUserMsg.replace(/[?？!]/g, "").trim();
-    const searchWords = cleanSearch.split(/\s+/).filter(word => word.length > 2);
+    const searchWords = cleanSearch.split(/\s+/).filter((word: string) => word.length > 2);
     
-    // יצירת מערך Postgres תקני: עטיפה בגרשיים כפולים לטיפול ברווחים
     const flexibleSearch = searchWords.length > 0 
       ? `{${searchWords.map(word => `"%${word}%"`).join(',')}}`
       : `{"%${cleanSearch}%"}`;
@@ -37,7 +36,7 @@ export async function POST(req: Request) {
 
     let product = inventoryRes.data;
 
-    // --- 2. מנגנון Fallback - חיפוש לפי מילה ראשונה משמעותית ---
+    // --- 2. מנגנון Fallback ---
     if (!product && searchWords.length > 0) {
       const { data: fallback } = await supabase.from('inventory')
         .select('*')
@@ -47,7 +46,7 @@ export async function POST(req: Request) {
       if (fallback) product = fallback;
     }
 
-    // --- 3. איחוד מוחות (DNA Configuration) ---
+    // --- 3. איחוד מוחות (DNA) ---
     const rulesDNA = configRes.data
       ?.filter(r => r.agent_type === 'executor' && r.is_active)
       .map(r => r.instruction)
@@ -68,7 +67,7 @@ export async function POST(req: Request) {
 
     // --- 4. ניהול מפתחות וסבב מודלים ---
     const keys = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').map(k => k.trim()).filter(k => k.length > 10);
-    const modelPool = ["gemini-3.1-flash-lite-preview", "gemini-3.1-pro-preview", "gemini-3-flash-preview"];
+    const modelPool = ["gemini-1.5-flash", "gemini-1.5-pro"]; // מודלים יציבים ל-Production
     
     let aiResponse = "";
     let success = false;
@@ -88,49 +87,23 @@ export async function POST(req: Request) {
               
               ### נתוני מלאי בזמן אמת (JSON) ###
               ${product ? JSON.stringify(product) : "סטטוס: מוצר לא נמצא במערכת"}
-// בתוך פונקציית ה-POST של ה-Chat API שלך
-// System Instruction מעודכן ומקודד לביצועים
-const response = await model.generateContent({
-  contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-  systemInstruction: `
-    ### DNA מחייב (חוקי הברזל) ###
-    ${finalDNA}
-    
-    ### נתוני מלאי בזמן אמת (JSON) ###
-    ${product ? JSON.stringify(product) : "סטטוס: מוצר לא נמצא במערכת"}
 
-    ### פרוטוקול מענה - סדר פעולות מחייב: ###
-    
-    1. **תצוגה ויזואלית (UI First)**: 
-       אם נמצא מוצר ב-JSON, התשובה חייבת להיפתח בהפעלת רכיב ה-ProductStoreCard. וודא שכל השדות (image_url, youtube_id) מוזרקים כראוי.
+              ### פרוטוקול מענה - סדר פעולות מחייב: ###
+              1. **תצוגה ויזואלית (UI First)**: אם נמצא מוצר, התשובה תיפתח בהפעלת ProductStoreCard.
+              2. **מפרט טכני**: שלוף drying_time, application_method ו-features.
+              3. **מחשבון חכם**: גבס (שטח/3 + 5% פחת), דבק (שטח*5 ק"ג).
+              4. **בקרת לינקים**: השתמש רק ב-MAGIC_URL מה-JSON.
+              5. **סגנון**: תמציתי, סמכותי, ללא הקדמות.
+              
+              ### חתימה ###
+              ראמי, הכל מוכן לביצוע. מחכה לפקודה. 🦾
+            `
+          });
 
-    2. **מפרט טכני (Data Extraction)**:
-       חלץ והצג בצורה בולטת (בולטים) את הנתונים הבאים מתוך ה-JSON בלבד:
-       - ⏳ זמן ייבוש: {drying_time}
-       - 🛠️ שיטת יישום: {application_method}
-       - ✨ תכונות עיקריות: {features}
-
-    3. **מנוע חישוב (Calculations)**:
-       במידה והמשתמש ציין שטח (מ"ר), בצע חישוב אוטומטי כולל פחת:
-       - לוחות גבס: שטח חלקי 3 = מספר לוחות. (הוסף 5% פחת ועגל למעלה).
-       - דבק/פלסטומר 603: שטח כפול 5 ק"ג = סה"כ משקל. (חלק ב-25 לקבלת מספר שקים).
-
-    4. **בקרת לינקים**:
-       לינק חיצוני יחיד מותר: ה-MAGIC_URL מה-JSON. אל תוסיף טקסט לינק ידני, הטמע אותו בכפתור ה-UI.
-
-    5. **סגנון וטון**:
-       - ללא הקדמות בסגנון "שלום" או "הנה המידע". 
-       - כתיבה סמכותית, קצרה מאוד, של "מתכנת אומנותי".
-       - שפה: עברית פשוטה ומקצועית.
-
-    ### חתימת מערכת (סעיף 6) ###
-    ראמי, הכל מוכן לביצוע. מחכה לפקודה. 🦾
-  `
-}); 
           const result = await model.generateContent(lastUserMsg);
-          const responseText = result.response.text();
-          if (responseText) {
-            aiResponse = responseText;
+          const text = result.response.text();
+          if (text) {
+            aiResponse = text;
             success = true;
           }
         } catch (e) {
