@@ -126,7 +126,7 @@ const response = await model.generateContent({
     ### חתימת מערכת (סעיף 6) ###
     ראמי, הכל מוכן לביצוע. מחכה לפקודה. 🦾
   `
-});
+}); 
           const result = await model.generateContent(lastUserMsg);
           const responseText = result.response.text();
           if (responseText) {
