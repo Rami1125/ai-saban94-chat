@@ -20,41 +20,49 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No query found" }, { status: 400 });
     }
 
-    // --- 1. חיפוש מלאי חכם בטבלת inventory ---
+    // --- 1. חיפוש מלאי חכם (התאמה למבנה הטבלה החדש) ---
     const cleanSearch = lastUserMsg.replace(/[?？!]/g, "").trim();
     
-    // שליפת כל השדות (product_name, price, image_url, video_url, description, sku)
     const { data: product, error: dbError } = await supabase
       .from('inventory')
       .select('*')
-      .or(`product_name.ilike.%${cleanSearch}%,sku.ilike.%${cleanSearch}%`)
+      .or(`product_name.ilike.%${cleanSearch}%,sku.ilike.%${cleanSearch}%,search_text.ilike.%${cleanSearch}%`)
       .order('stock_quantity', { ascending: false })
       .limit(1)
       .maybeSingle();
 
     if (dbError) console.error("Supabase Error:", dbError.message);
 
-    // --- 2. בניית ה-DNA המעודכן (Saban Intelligence DNA V5.2) ---
+    // --- 2. בניית ה-DNA המעודכן (Saban Intelligence DNA V6 - Magic Link Edition) ---
     const finalDNA = `
-      אתה המוח הלוגיסטי של חמ"ל סבן חומרי בניין.
-      המנהל והשותף שלך: ראמי.
-      שם הלקוח הנוכחי: ${userName || 'לקוח'}.
+      אתה המוח הלוגיסטי המבצעי של חמ"ל סבן חומרי בניין. המנהל שלך: ראמי.
+      שם הלקוח: ${userName || 'לקוח'}.
       
-      ### נתוני מוצר מהמערכת (JSON):
-      ${product ? JSON.stringify(product) : "סטטוס: לא נמצא מוצר תואם במלאי כרגע."}
+      ### נתוני מוצר מזהים (מהטבלה):
+      ${product ? JSON.stringify({
+        name: product.product_name,
+        price: product.price,
+        sku: product.sku,
+        link: product.product_magic_link, // לינק הקסם
+        features: product.features,
+        description: product.description,
+        coverage: product.coverage,
+        video: product.video_url || product.youtube_url
+      }) : "סטטוס: מוצר לא נמצא במלאי."}
       
-      ### חוקי הברזל למענה:
-      1. **UI FIRST**: אם נמצא מוצר, פתח בתיאור קצר שלו. הממשק יציג את הכרטיס אוטומטית.
-      2. **דיוק טכני**: שלוף מה-JSON מחיר, כמות ושימושים (אם קיימים).
-      3. **מחשבון**: בלה חול = 700 ק"ג. לוח גבס = 3 מ"ר. דבק = 5 ק"ג למ"ר.
-      4. **סגנון**: עברית מקצועית, פסקאות קצרות (עד 2 שורות), ללא חפירות.
+      ### הנחיות שליפה וביצוע:
+      1. **לינק הקסם (Magic Link)**: אם נמצא מוצר ויש לו 'product_magic_link', חובה להציג אותו בסוף התשובה כפתור או לינק בולט: "לרכישה מהירה ופרטים נוספים לחץ כאן: [לינק]".
+      2. **מפרט טכני**: שלוף את ה-features (מערך) והצג אותם כבולטים עם אימוג'י ✅.
+      3. **כושר כיסוי**: אם קיים 'coverage', ציין אותו במפורש עבור הלקוח.
+      4. **וידאו**: אם יש 'youtube_url' או 'video_url', ציין שיש סרטון הדרכה זמין בכרטיס.
       
-      ### חתימה מחייבת:
-      תודה, ומה תרצה שנבצע היום?
-      ראמי, הכל מוכן לביצוע. מחכה לפקודה. 🦾
+      ### חוקי עיצוב:
+      - עברית סמכותית, קצרה, ללא הקדמות "שלום רב".
+      - רווח כפול בין פסקאות.
+      - חתימה: "תודה, ומה תרצה שנבצע היום? ראמי, הכל מוכן לביצוע. 🦾"
     `.trim();
 
-    // --- 3. סבב מודלים יציב (Gemini 3.1) ---
+    // --- 3. סבב מודלים Gemini 3.1 ---
     const keys = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').map(k => k.trim()).filter(k => k.length > 20);
     const modelPool = ["gemini-3.1-flash-lite-preview", "gemini-3.1-pro-preview"];
     
@@ -68,45 +76,34 @@ export async function POST(req: Request) {
         for (const modelName of modelPool) {
           if (success) break;
           try {
-            const model = genAI.getGenerativeModel({ 
-              model: modelName, 
-              systemInstruction: finalDNA 
-            });
+            const model = genAI.getGenerativeModel({ model: modelName, systemInstruction: finalDNA });
             const result = await model.generateContent(lastUserMsg);
             aiResponse = result.response.text();
             if (aiResponse) success = true;
-          } catch (e) {
-            console.error(`Skipping model ${modelName}`);
-          }
+          } catch (e) { console.error(`Error with ${modelName}`); }
         }
-      } catch (e) {
-        console.error("Key failure, rotating...");
-      }
+      } catch (e) { console.error("Key failure"); }
     }
 
-    // --- 4. עדכון Firebase Pipeline (לצורך WhatsApp/Monitoring) ---
+    // --- 4. עדכון Firebase ---
     if (phone && aiResponse) {
       try {
         const cleanPhone = phone.replace(/\D/g, '');
         await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), {
           text: aiResponse,
-          product: product || null,
-          timestamp: Date.now(),
-          status: "pending"
+          product_link: product?.product_magic_link || null,
+          timestamp: Date.now()
         });
-      } catch (fbError) {
-        console.warn("Firebase update skipped");
-      }
+      } catch (fbError) { console.warn("Firebase skip"); }
     }
 
-    // --- 5. החזרת התשובה לממשק ---
+    // --- 5. תגובה סופית ---
     return NextResponse.json({ 
-      answer: aiResponse || "מצטער ראמי, יש עומס במוח. נסה שוב בעוד רגע.", 
-      product: product || null // חשוב מאוד: זה מה שמציג את כרטיס המוצר ב-chat7
+      answer: aiResponse || "מצטער ראמי, המוח עמוס. נסה שוב.", 
+      product: product || null 
     });
 
   } catch (error) {
-    console.error("Critical System Failure:", error);
-    return NextResponse.json({ error: "Internal System Error" }, { status: 500 });
+    return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }
 }
