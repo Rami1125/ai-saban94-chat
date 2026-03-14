@@ -1,53 +1,77 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Send, Calculator, ShoppingCart, 
   Package, X, Share2, Trash2, Loader2,
   User, Settings, Zap, Phone, Search, Ruler, BadgeCheck
 } from 'lucide-react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from "@/lib/supabase"; 
 import { toast, Toaster } from "sonner";
-import { ChatShell } from "@/components/chat/chat-shell";
-import { MessageList } from "@/components/chat/message-list";
-import { Composer } from "@/components/chat/Composer";
-import { ActionOverlays } from "@/components/chat/ActionOverlays";
-import { ChatActionsProvider } from "@/context/ChatActionsContext";
-import { BusinessConfigProvider } from "@/context/BusinessConfigContext";
 
 /**
- * Saban OS V8.9.4 - Production Fix
- * נתיב מוח: /api/ai/consult
+ * Saban OS V9.5 - Pro Chat Interface (Build Fixed)
+ * נתיב מוח: /api/ai/pro
+ * תכונות: ניהול סשן קבוע, סנכרון היסטוריה מה-DB, תיקון שגיאות בילד.
  */
 
-function WhatsAppCloneContent() {
+export default function WhatsAppCloneContent() {
   const [messages, setMessages] = useState<any[]>([]);
+  const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const phone = "972508860896";
+  const [sessionId, setSessionId] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const phone = "972508860896";
 
+  // 1. ניהול סשן וטעינת היסטוריה בעלייה (Persistent Session)
   useEffect(() => {
-    // טעינת הודעה ראשונית
-    setMessages([{ 
-      id: '1', 
-      role: 'bot', 
-      content: 'אהלן ראמי, המוח הלוגיסטי מחובר לביצוע. מה נבדוק היום? 🦾', 
-      timestamp: Date.now() 
-    }]);
+    let sid = typeof window !== 'undefined' ? localStorage.getItem('saban_session_id') : null;
+    if (!sid) {
+      sid = `sid_${Math.random().toString(36).substring(2, 15)}`;
+      if (typeof window !== 'undefined') localStorage.setItem('saban_session_id', sid);
+    }
+    setSessionId(sid);
+    loadChatHistory(sid);
   }, []);
 
+  const loadChatHistory = async (sid: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('chat_history')
+        .select('*')
+        .eq('session_id', sid)
+        .order('created_at', { ascending: true });
+      
+      if (data && !error) {
+        setMessages(data.map(m => ({
+          id: m.id,
+          content: m.content,
+          role: m.role,
+          timestamp: new Date(m.created_at).getTime()
+        })));
+      }
+    } catch (err) {
+      console.error("History Load Error:", err);
+    }
+  };
+
+  useEffect(() => {
+    scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isLoading]);
+
+  // 2. פונקציית שליחת הודעה - מתוקנת עם async/await תקין
   const handleSendMessage = async (content: string) => {
     if (!content.trim() || isLoading) return;
     
-    const newUserMsg = { 
+    const userMsg = { 
       id: Date.now().toString(), 
       content, 
       role: 'user', 
       timestamp: Date.now() 
     };
     
-    setMessages(prev => [...prev, newUserMsg]);
+    setMessages(prev => [...prev, userMsg]);
     setIsLoading(true);
 
     try {
@@ -55,72 +79,61 @@ function WhatsAppCloneContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          query: content, 
-          history: messages.slice(-6).map(m => ({ role: m.role, content: m.content })),
-          context: { 
-            inventory: messages.find(m => m.product)?.product || null 
-          },
-          phone: phone,
-          userName: "ראמי"
+          sessionId,
+          query: content,
+          userName: "ראמי",
+          productContext: null 
         })
       });
       
-      if (!res.ok) throw new Error("Failed to consult the brain");
+      if (!res.ok) throw new Error("Failed to reach Pro Brain");
       
       const data = await res.json();
       
       if (data.answer) {
-        const botMsg = {
+        setMessages(prev => [...prev, {
           id: (Date.now() + 1).toString(),
           content: data.answer,
           role: 'assistant',
           timestamp: Date.now()
-        };
-        setMessages(prev => [...prev, botMsg]);
+        }]);
       }
-
     } catch (error: any) {
-      console.error("Chat Error:", error);
+      toast.error("שגיאה בחיבור למוח הפרו");
+      console.error("Send Message Error:", error);
     } finally {
       setIsLoading(false);
+      setInput("");
     }
   };
 
-  const openGlobalCalculator = () => {
-    window.dispatchEvent(new CustomEvent('open-action-overlay', { 
-      detail: { type: 'calculator', product: null } 
-    }));
+  const resetSession = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('saban_session_id');
+      window.location.reload();
+    }
   };
 
   return (
     <div className="flex h-screen bg-[#F2F2F2] dark:bg-zinc-950 overflow-hidden font-sans" dir="rtl">
+      <Toaster position="top-center" richColors />
+      
       {/* Sidebar */}
       <aside className="w-[400px] border-l bg-white/80 backdrop-blur-xl hidden lg:flex flex-col shadow-2xl z-20">
         <header className="p-6 flex justify-between items-center border-b border-slate-100">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-blue-600 rounded-[22px] flex items-center justify-center text-white shadow-lg shadow-blue-200">
+            <div className="w-12 h-12 bg-blue-600 rounded-[22px] flex items-center justify-center text-white shadow-lg">
               <Zap size={24} fill="white" />
             </div>
             <div>
-              <h1 className="font-black text-xl tracking-tighter text-slate-900 uppercase italic">SABAN OS</h1>
-              <p className="text-[10px] font-bold text-blue-600 tracking-widest uppercase">Consult API Active</p>
+              <h1 className="font-black text-xl tracking-tighter text-slate-900 uppercase italic">SABAN PRO</h1>
+              <p className="text-[10px] font-bold text-blue-600 tracking-widest uppercase">Sync Active: {sessionId.slice(0, 8)}</p>
             </div>
           </div>
-          <Settings className="text-slate-400 hover:rotate-90 transition-transform cursor-pointer" size={20} />
+          <Settings className="text-slate-400 cursor-pointer hover:rotate-90 transition-transform" size={20} />
         </header>
 
         <div className="flex-1 p-6 space-y-6 overflow-y-auto">
-          <button 
-            onClick={openGlobalCalculator}
-            className="w-full p-5 bg-black text-white rounded-[28px] font-black flex items-center justify-between group hover:bg-blue-600 transition-all shadow-xl active:scale-95"
-          >
-            <div className="flex items-center gap-3">
-              <Ruler size={22} className="group-hover:rotate-12 transition-transform" />
-              <span>מחשבון כמויות מ"ר</span>
-            </div>
-            <BadgeCheck size={18} className="text-blue-400" />
-          </button>
-
           <div className="p-5 bg-slate-50 rounded-[30px] border border-white shadow-sm flex items-center gap-4">
             <div className="w-14 h-14 bg-emerald-500 rounded-[20px] flex items-center justify-center text-white font-black text-2xl shadow-inner">S</div>
             <div className="flex-1 text-right">
@@ -128,6 +141,21 @@ function WhatsAppCloneContent() {
               <p className="text-xs font-bold text-slate-400 mt-1">{phone}</p>
             </div>
           </div>
+          
+          <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
+            <p className="text-[10px] font-black text-blue-600 uppercase mb-2 tracking-widest">סטטוס מוח</p>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+              <span className="text-xs font-bold text-slate-700 italic">Persistent Memory v9.5</span>
+            </div>
+          </div>
+
+          <button 
+            onClick={resetSession}
+            className="w-full p-4 bg-rose-50 text-rose-600 rounded-2xl text-xs font-black hover:bg-rose-100 transition-all flex items-center justify-center gap-2"
+          >
+            <RotateCcw size={14} /> איפוס סשן ושיחה חדשה
+          </button>
         </div>
       </aside>
 
@@ -137,52 +165,62 @@ function WhatsAppCloneContent() {
           <div className="flex items-center gap-4">
             <div className="w-11 h-11 bg-slate-900 rounded-[18px] flex items-center justify-center text-white font-bold text-xs shadow-lg">S</div>
             <div className="text-right">
-              <div className="font-black text-lg text-slate-900 leading-none italic uppercase">Saban Consulting</div>
-              <div className="text-[10px] text-emerald-600 font-black uppercase mt-1 tracking-tighter">AI Assistant Online</div>
+              <div className="font-black text-lg text-slate-900 leading-none italic uppercase">Saban Consulting Pro</div>
+              <div className="text-[10px] text-emerald-600 font-black uppercase mt-1 tracking-tighter italic">Google Gemini 1.5 Flash</div>
             </div>
           </div>
-          <div className="flex gap-8 text-slate-400">
-             <Ruler className="cursor-pointer hover:text-blue-600 transition-colors" size={22} onClick={openGlobalCalculator} />
-             <Phone className="cursor-pointer hover:text-slate-900 transition-colors" size={22} />
-             <Search className="cursor-pointer hover:text-slate-900 transition-colors" size={22} />
+          <div className="flex gap-6 text-slate-400">
+             <Ruler className="cursor-pointer hover:text-blue-600 transition-colors" size={20} />
+             <Search className="cursor-pointer hover:text-slate-900 transition-colors" size={20} />
           </div>
         </header>
 
-        <div className="flex-1 relative overflow-y-auto p-4">
-          <div className="max-w-4xl mx-auto space-y-4 pb-32">
-            {messages.map((m) => (
-              <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
-                <div className={`max-w-[80%] p-4 rounded-2xl shadow-sm border ${
-                  m.role === 'user' ? 'bg-white border-slate-200' : 'bg-blue-600 text-white border-blue-500'
-                }`}>
-                  <p className="text-sm leading-relaxed">{m.content}</p>
-                </div>
+        {/* Chat Stream */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-4 pb-32 scrollbar-hide">
+          {messages.map((m) => (
+            <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
+              <div className={`max-w-[80%] p-4 rounded-[24px] shadow-sm border ${
+                m.role === 'user' 
+                  ? 'bg-white border-slate-200 text-slate-900 rounded-tr-none' 
+                  : 'bg-blue-600 text-white border-blue-500 shadow-blue-200 rounded-tl-none'
+              }`}>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap font-medium">{m.content}</p>
               </div>
-            ))}
-            {isLoading && (
-              <div className="flex justify-end">
-                <div className="bg-blue-50 p-3 rounded-xl flex items-center gap-2">
-                  <Loader2 className="animate-spin text-blue-500" size={14} />
-                  <span className="text-[10px] font-bold text-blue-600 uppercase">מוח מסנכרן...</span>
-                </div>
+            </div>
+          ))}
+          {isLoading && (
+            <div className="flex justify-end animate-pulse">
+              <div className="bg-blue-50 p-3 rounded-xl flex items-center gap-2 border border-blue-100">
+                <Loader2 className="animate-spin text-blue-500" size={14} />
+                <span className="text-[10px] font-black text-blue-600 uppercase tracking-tighter">המוח מעבד היסטוריה...</span>
               </div>
-            )}
-          </div>
+            </div>
+          )}
+          <div ref={scrollRef} />
         </div>
 
+        {/* Input Footer */}
         <footer className="p-6 bg-transparent absolute bottom-0 w-full z-20">
-          <div className="max-w-4xl mx-auto bg-white/80 backdrop-blur-2xl border-2 border-white p-2 rounded-[32px] shadow-2xl flex items-center gap-2">
+          <div className="max-w-4xl mx-auto bg-white border border-slate-200 p-2 rounded-[32px] shadow-2xl flex items-center gap-2 backdrop-blur-md">
              <input 
               type="text" 
-              placeholder="כתוב פקודה לביצוע..." 
-              className="flex-1 bg-transparent px-4 py-3 outline-none font-bold text-sm"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="כתוב פקודה למוח הפרו..." 
+              className="flex-1 bg-transparent px-6 py-3 outline-none font-bold text-sm text-slate-900"
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
-                  handleSendMessage(e.currentTarget.value);
-                  e.currentTarget.value = "";
+                  handleSendMessage(input);
                 }
               }}
             />
+            <button 
+              onClick={() => handleSendMessage(input)} 
+              disabled={isLoading}
+              className="w-12 h-12 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 rounded-full flex items-center justify-center text-white shadow-lg shadow-blue-200 transition-all active:scale-90"
+            >
+              {isLoading ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
+            </button>
           </div>
         </footer>
       </main>
@@ -192,12 +230,11 @@ function WhatsAppCloneContent() {
   );
 }
 
-export default function WhatsAppClonePage() {
+// רכיבי עזר קטנים למניעת ReferenceErrors
+function RotateCcw(props: any) {
   return (
-    <BusinessConfigProvider>
-      <ChatActionsProvider>
-        <WhatsAppCloneContent />
-      </ChatActionsProvider>
-    </BusinessConfigProvider>
+    <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
+    </svg>
   );
 }
