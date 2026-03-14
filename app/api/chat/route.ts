@@ -67,7 +67,11 @@ export async function POST(req: Request) {
 
     // --- 4. ניהול מפתחות וסבב מודלים ---
     const keys = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').map(k => k.trim()).filter(k => k.length > 10);
-    const modelPool = ["gemini-1.5-flash", "gemini-1.5-pro"]; // מודלים יציבים ל-Production
+    const modelPool = [
+    "gemini-1.5-flash-latest", 
+    "gemini-1.5-pro-latest",
+    "gemini-1.5-flash"
+    ];
     
     let aiResponse = "";
     let success = false;
