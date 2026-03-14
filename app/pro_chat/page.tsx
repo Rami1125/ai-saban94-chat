@@ -11,9 +11,9 @@ import { supabase } from "@/lib/supabase";
 import { toast, Toaster } from "sonner";
 
 /**
- * Saban OS V9.5.1 - Build Fixed & Production Ready
+ * Saban OS V9.5.2 - Build Final Fix
  * נתיב מוח: /api/ai/pro
- * תיקון: הוספת async חסר וניקוי תחביר ששבר את Vercel
+ * תיקון: הצהרת async תקינה, ניקוי תחביר וניהול סשן דפדפן
  */
 
 export default function WhatsAppCloneContent() {
@@ -24,7 +24,7 @@ export default function WhatsAppCloneContent() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const phone = "972508860896";
 
-  // 1. ניהול סשן קבוע (Persistent Session)
+  // 1. אתחול סשן וטעינת היסטוריה מה-DB
   useEffect(() => {
     if (typeof window !== 'undefined') {
       let sid = localStorage.getItem('saban_session_id');
@@ -62,13 +62,13 @@ export default function WhatsAppCloneContent() {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
-  // 2. פונקציית שליחת הודעה - מתוקנת עם async/await תקין
+  // 2. פונקציית שליחה - מתוקנת עם async/await
   const handleSendMessage = async (content: string) => {
-    if (!content.trim() || isLoading) return;
+    if (!content || !content.trim() || isLoading) return;
     
     const userMsg = { 
       id: Date.now().toString(), 
-      content, 
+      content: content.trim(), 
       role: 'user', 
       timestamp: Date.now() 
     };
@@ -83,7 +83,7 @@ export default function WhatsAppCloneContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           sessionId,
-          query: content,
+          query: content.trim(),
           userName: "ראמי",
           productContext: null 
         })
@@ -128,8 +128,8 @@ export default function WhatsAppCloneContent() {
               <Zap size={24} fill="white" />
             </div>
             <div>
-              <h1 className="font-black text-xl tracking-tighter text-slate-900 uppercase italic">SABAN PRO</h1>
-              <p className="text-[10px] font-bold text-blue-600 tracking-widest uppercase text-right">Sync Active: {sessionId.slice(0, 8)}</p>
+              <h1 className="font-black text-xl tracking-tighter text-slate-900 uppercase italic leading-none">SABAN PRO</h1>
+              <p className="text-[10px] font-bold text-blue-600 tracking-widest uppercase mt-1">Persistent Memory Active</p>
             </div>
           </div>
           <Settings className="text-slate-400 cursor-pointer hover:rotate-90 transition-transform" size={20} />
@@ -145,9 +145,9 @@ export default function WhatsAppCloneContent() {
           </div>
           
           <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
-            <p className="text-[10px] font-black text-blue-600 uppercase mb-2 tracking-widest text-right">סטטוס מוח</p>
+            <p className="text-[10px] font-black text-blue-600 uppercase mb-2 tracking-widest text-right">סטטוס סנכרון</p>
             <div className="flex items-center gap-2 justify-end">
-              <span className="text-xs font-bold text-slate-700 italic">Persistent Memory v9.5</span>
+              <span className="text-xs font-bold text-slate-700 italic">ID: {sessionId.slice(0, 8)}</span>
               <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
             </div>
           </div>
@@ -167,8 +167,8 @@ export default function WhatsAppCloneContent() {
           <div className="flex items-center gap-4">
             <div className="w-11 h-11 bg-slate-900 rounded-[18px] flex items-center justify-center text-white font-bold text-xs shadow-lg">S</div>
             <div className="text-right">
-              <div className="font-black text-lg text-slate-900 leading-none italic uppercase">Saban Consulting Pro</div>
-              <div className="text-[10px] text-emerald-600 font-black uppercase mt-1 tracking-tighter italic">Persistent History Active</div>
+              <div className="font-black text-lg text-slate-900 leading-none italic uppercase tracking-tighter">Saban Consulting Pro</div>
+              <div className="text-[10px] text-emerald-600 font-black uppercase mt-1 tracking-tighter italic">Google Gemini 1.5 Pro Enabled</div>
             </div>
           </div>
           <div className="flex gap-6 text-slate-400">
@@ -177,7 +177,7 @@ export default function WhatsAppCloneContent() {
           </div>
         </header>
 
-        {/* Chat Stream */}
+        {/* Chat List */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4 pb-32 scrollbar-hide">
           {messages.map((m) => (
             <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
@@ -194,16 +194,16 @@ export default function WhatsAppCloneContent() {
             <div className="flex justify-end animate-pulse">
               <div className="bg-blue-50 p-3 rounded-xl flex items-center gap-2 border border-blue-100">
                 <Loader2 className="animate-spin text-blue-500" size={14} />
-                <span className="text-[10px] font-black text-blue-600 uppercase tracking-tighter italic">המוח מעבד נתונים...</span>
+                <span className="text-[10px] font-black text-blue-600 uppercase tracking-tighter italic">המוח מעבד היסטוריה...</span>
               </div>
             </div>
           )}
           <div ref={scrollRef} />
         </div>
 
-        {/* Input Footer */}
+        {/* Footer */}
         <footer className="p-6 bg-transparent absolute bottom-0 w-full z-20">
-          <div className="max-w-4xl mx-auto bg-white border border-slate-200 p-2 rounded-[32px] shadow-2xl flex items-center gap-2 backdrop-blur-md">
+          <div className="max-w-4xl mx-auto bg-white/90 border border-slate-200 p-2 rounded-[32px] shadow-2xl flex items-center gap-2 backdrop-blur-md">
              <input 
               type="text" 
               value={input}
@@ -219,7 +219,7 @@ export default function WhatsAppCloneContent() {
             <button 
               onClick={() => handleSendMessage(input)} 
               disabled={isLoading}
-              className="w-12 h-12 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 rounded-full flex items-center justify-center text-white shadow-lg transition-all active:scale-90"
+              className="w-12 h-12 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 rounded-full flex items-center justify-center text-white shadow-lg transition-all active:scale-90 shadow-blue-200"
             >
               {isLoading ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
             </button>
