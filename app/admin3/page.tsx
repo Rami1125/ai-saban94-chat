@@ -79,30 +79,41 @@ export default function SabanStudioUI() {
     setInput(tools[type]);
     toast.success("הפקודה נטענה לסרגל");
   };
+// --- תיקון פונקציית askGemini בקובץ admin3/page.tsx ---
 
-  const askGemini = async () => {
-    if (!input.trim()) return;
-    const userMsg = input;
-    setInput("");
-    setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
-    setIsTyping(true);
+const askGemini = async () => {
+  if (!input.trim()) return;
+  const userMsg = input;
+  setInput("");
+  setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+  setIsTyping(true);
 
-    // סימולציית מוח מעצב UI בזמן אמת
-    setTimeout(() => {
-      let aiContent = "";
-      if (userMsg.includes("איפה") || userMsg.includes("סניף")) {
-        aiContent = "### 📍 ניווט לסניפי חמ"ל סבן\n\n* 🏗️ **סניף החרש 10:** למשלוחי מנוף.\n* 🏫 **סניף התלמיד:** לאיסוף ידני.\n\n[לניווט ב-Waze ופרטי התקשרות לחץ כאן 📍](https://ai-saban94-chat.vercel.app/branches)";
-      } else if (userMsg.includes("סיקה") || userMsg.includes("מוצר")) {
-        aiContent = "מצאתי עבורך **סיקה 107** במלאי!\n\nhttps://gilar.co.il/wp-content/uploads/2016/07/GLR_SikaTop-Seal-107-Whitek-400x400.png\n\n[לרכישה מהירה בלינק קסם ⚡](https://saban.co.il/p/sika107)";
-      } else {
-        aiContent = "ראמי אחי, הנה דוגמה לעיצוב UI בזמן אמת:\n\n[כפתור מעוצב עם לינק מוסתר 🦾](https://ai-saban94-chat.vercel.app)";
-      }
-      
-      setMessages(prev => [...prev, { role: 'assistant', content: aiContent }]);
-      setIsTyping(false);
-    }, 1000);
-  };
+  // שימוש ב-Backticks (`) פותר את שגיאת ה-Parsing ב-Build
+  setTimeout(() => {
+    let aiContent = "";
+    if (userMsg.includes("איפה") || userMsg.includes("סניף")) {
+      aiContent = `### 📍 ניווט לסניפי חמ"ל סבן
 
+* 🏗️ **סניף החרש 10, הוד השרון:** למשלוחי מנוף.
+* 🏫 **סניף התלמיד 6,הוד השרון:** לאיסוף ידני.
+
+[לניווט ב-Waze ופרטי התקשרות לחץ כאן 📍](https://ai-saban94-chat.vercel.app/branches)`;
+    } else if (userMsg.includes("סיקה") || userMsg.includes("מוצר")) {
+      aiContent = `מצאתי עבורך **סיקה 107** במלאי!
+
+https://gilar.co.il/wp-content/uploads/2016/07/GLR_SikaTop-Seal-107-Whitek-400x400.png
+
+[לרכישה מהירה בלינק קסם ⚡](https://saban.co.il/p/sika107)`;
+    } else {
+      aiContent = `ראמי אחי, הנה דוגמה לעיצוב UI בזמן אמת:
+
+[כפתור מעוצב עם לינק מוסתר 🦾](https://ai-saban94-chat.vercel.app)`;
+    }
+    
+    setMessages(prev => [...prev, { role: 'assistant', content: aiContent }]);
+    setIsTyping(false);
+  }, 1000);
+};
   return (
     <div className="flex flex-col h-screen bg-slate-50 font-sans" dir="rtl">
       <Toaster position="top-center" />
