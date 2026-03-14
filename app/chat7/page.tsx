@@ -1,21 +1,38 @@
 "use client";
+
 import React, { useState, useEffect, useRef } from "react";
+import dynamic from 'next/dynamic';
 import { rtdb } from "@/lib/firebase";
 import { ref, onValue } from "firebase/database";
-import { ChatShell } from "@/components/chat/chat-shell";
-import { MessageList } from "@/components/chat/message-list";
-import { Composer } from "@/components/chat/Composer";
-import { ActionOverlays } from "@/components/chat/ActionOverlays";
-import { useToast } from "@/hooks/use-toast";
 import { 
   Phone, Video, Search, Settings, BadgeCheck, Ruler, Zap, 
-  Package, PlayCircle, Maximize2, X 
+  Package, PlayCircle, Maximize2, X, Send, User, Building2 
 } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 
-// --- רכיב כרטיס מוצר ויזואלי ---
+// --- רכיבי עזר ויזואליים ---
+
+const TypewriterEffect = ({ text }: { text: string }) => {
+  const [displayedText, setDisplayedText] = useState("");
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    if (!text) return;
+    if (index < text.length) {
+      const timeout = setTimeout(() => {
+        setDisplayedText(prev => prev + text[index]);
+        setIndex(prev => prev + 1);
+      }, 10);
+      return () => clearTimeout(timeout);
+    }
+  }, [index, text]);
+
+  return <div className="whitespace-pre-wrap">{displayedText}</div>;
+};
+
 const ProductMediaCard = ({ product }: { product: any }) => {
   const [showVideo, setShowVideo] = useState(false);
-
   if (!product) return null;
 
   return (
@@ -26,188 +43,167 @@ const ProductMediaCard = ({ product }: { product: any }) => {
           className="w-full h-44 object-cover transition-transform group-hover:scale-105"
           alt={product.product_name}
         />
-        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
+        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
            <button className="p-2 bg-white/20 backdrop-blur-md rounded-full text-white"><Maximize2 size={20} /></button>
         </div>
       </div>
-
-      <div className="p-5">
-        <div className="flex justify-between items-start mb-2">
-          <h4 className="font-black text-slate-900 text-lg leading-tight">{product.product_name}</h4>
-          <span className="bg-blue-50 text-blue-600 text-[10px] font-black px-2 py-1 rounded-lg uppercase italic">In Stock</span>
-        </div>
-        
-        <p className="text-xs text-slate-500 line-clamp-2 mb-4 font-medium">{product.description || 'מוצר איכותי מבית ח. סבן'}</p>
-        
+      <div className="p-5 text-right" dir="rtl">
+        <h4 className="font-black text-slate-900 text-lg leading-tight mb-1">{product.product_name}</h4>
+        <p className="text-xs text-slate-500 mb-4">{product.description || 'מוצר איכותי מבית ח. סבן'}</p>
         <div className="grid grid-cols-2 gap-2">
           {product.video_url && (
-            <button 
-              onClick={() => setShowVideo(true)}
-              className="flex items-center justify-center gap-2 py-2.5 bg-red-50 text-red-600 rounded-xl text-xs font-black hover:bg-red-100 transition-colors"
-            >
-              <PlayCircle size={14} /> סרטון הדרכה
+            <button onClick={() => setShowVideo(true)} className="flex items-center justify-center gap-2 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-black">
+              <PlayCircle size={14} /> וידאו
             </button>
           )}
-          <button className="flex items-center justify-center gap-2 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black shadow-lg shadow-slate-200">
-            <Package size={14} /> פרטים נוספים
+          <button className="flex items-center justify-center gap-2 py-2 bg-slate-900 text-white rounded-xl text-xs font-black">
+            <Package size={14} /> פרטים
           </button>
         </div>
       </div>
 
-      {/* Video Overlay Modal */}
       {showVideo && (
         <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-xl flex items-center justify-center p-4">
-          <button onClick={() => setShowVideo(false)} className="absolute top-8 right-8 text-white hover:rotate-90 transition-transform"><X size={32} /></button>
-          <iframe 
-            src={product.video_url.replace("watch?v=", "embed/")} 
-            className="w-full max-w-4xl aspect-video rounded-3xl shadow-2xl border-4 border-white/10"
-            allowFullScreen
-          />
+          <button onClick={() => setShowVideo(false)} className="absolute top-8 right-8 text-white"><X size={32} /></button>
+          <iframe src={product.video_url.replace("watch?v=", "embed/")} className="w-full max-w-4xl aspect-video rounded-3xl" allowFullScreen />
         </div>
       )}
     </div>
   );
 };
 
+// --- הקומפוננטה הראשית של התוכן ---
+
 function WhatsAppCloneContent() {
   const [messages, setMessages] = useState<any[]>([]);
+  const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { toast } = useToast();
+  const [userName, setUserName] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const phone = "972508860896";
 
   useEffect(() => {
+    const savedName = localStorage.getItem('saban_user_name');
+    if (savedName) setUserName(savedName);
+
     const chatRef = ref(rtdb, `saban94`);
-    const unsubscribe = onValue(chatRef, (snapshot) => {
+    return onValue(chatRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
         const incoming = data.inbound ? Object.entries(data.inbound).map(([id, m]: any) => ({ ...m, id, role: 'user' })) : [];
         const outgoing = data.send ? Object.entries(data.send).map(([id, m]: any) => ({ ...m, id, role: 'assistant' })) : [];
-        
         const combined = [...incoming, ...outgoing]
           .filter(m => m.to === phone || m.from === phone || m.receiver === phone)
           .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-
-        setMessages(combined.map(m => ({
-          id: m.id,
-          content: m.text || m.content,
-          role: m.role,
-          product: m.product || null, 
-          timestamp: m.timestamp || Date.now()
-        })));
+        setMessages(combined);
       }
     });
-    return () => unsubscribe();
-  }, [phone]);
+  }, []);
 
-  const handleSendMessage = async (content: string) => {
-    if (!content.trim()) return;
+  useEffect(() => {
+    scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const handleSendMessage = async () => {
+    if (!input.trim() || isLoading) return;
+    const content = input;
+    setInput('');
     setIsLoading(true);
+
     try {
-      const res = await fetch('/api/chat', {
+      await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          messages: [...messages, { role: 'user', content }], 
-          phone,
-          userName: "לקוח סבן" 
-        })
+        body: JSON.stringify({ messages: [...messages, { role: 'user', content }], phone, userName })
       });
-      if (!res.ok) throw new Error("Failed to send message");
-    } catch (error: any) {
-      toast({ title: "שגיאה", description: error.message, variant: "destructive" });
+    } catch (error) {
+      console.error("Error sending message", error);
     } finally {
       setIsLoading(false);
     }
   };
 
+  if (!userName) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-slate-50" dir="rtl">
+        <Card className="w-full max-w-md p-8 bg-white rounded-[2.5rem] shadow-2xl text-center border-none">
+          <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6"><Building2 className="text-white" size={32} /></div>
+          <h2 className="text-2xl font-black mb-6 italic">ח. סבן לוגיסטיקה</h2>
+          <Input 
+            onChange={(e) => setInput(e.target.value)} 
+            placeholder="איך קוראים לך?" 
+            className="h-14 rounded-2xl bg-slate-50 text-center font-bold mb-4" 
+          />
+          <button 
+            onClick={() => { localStorage.setItem('saban_user_name', input); setUserName(input); setInput(''); }}
+            className="w-full h-14 bg-blue-600 text-white rounded-2xl font-black"
+          >
+            כניסה 🦾
+          </button>
+        </Card>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-screen bg-[#F8F9FA] overflow-hidden font-sans selection:bg-blue-100" dir="rtl">
-      {/* Sidebar - SabanOS Logic */}
-      <aside className="w-[420px] border-l bg-white hidden lg:flex flex-col shadow-xl z-20">
-        <header className="p-8 flex justify-between items-center border-b border-slate-50">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-blue-600 rounded-[24px] flex items-center justify-center text-white shadow-2xl shadow-blue-200 animate-pulse">
-              <Zap size={26} fill="white" />
-            </div>
-            <div>
-              <h1 className="font-black text-2xl tracking-tighter text-slate-900 italic">SABAN OS</h1>
-              <p className="text-[10px] font-black text-blue-600 tracking-[0.2em] uppercase">V4.0 Logistics AI</p>
-            </div>
-          </div>
-          <Settings className="text-slate-300 hover:text-slate-900 transition-colors cursor-pointer" size={22} />
+    <div className="flex h-screen bg-[#F8F9FA] overflow-hidden" dir="rtl">
+      <aside className="w-[400px] border-l bg-white hidden lg:flex flex-col shadow-xl">
+        <header className="p-8 border-b flex items-center gap-4">
+          <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-100"><Zap className="text-white" size={24} fill="white" /></div>
+          <div><h1 className="font-black text-xl italic">SABAN OS</h1><p className="text-[10px] font-black text-blue-600 uppercase">V4.0 AI</p></div>
         </header>
-
-        <div className="flex-1 p-8 space-y-8 overflow-y-auto">
-          {/* Quick Action Button */}
-          <div className="space-y-4">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">כלים לוגיסטיים</label>
-            <button onClick={() => window.dispatchEvent(new CustomEvent('open-action-overlay', { detail: { type: 'calculator' } }))}
-              className="w-full p-6 bg-slate-900 text-white rounded-[32px] font-black flex items-center justify-between group hover:bg-blue-600 transition-all shadow-2xl active:scale-95">
-              <div className="flex items-center gap-4">
-                <Ruler size={24} className="group-hover:rotate-12 transition-transform" />
-                <span className="text-lg">חישוב מ"ר וגבס</span>
-              </div>
-              <BadgeCheck size={20} className="text-blue-400" />
-            </button>
-          </div>
-
-          {/* User Card */}
-          <div className="p-6 bg-slate-50 rounded-[35px] border-2 border-white shadow-inner flex items-center gap-5">
-            <div className="w-16 h-16 bg-gradient-to-tr from-emerald-400 to-emerald-600 rounded-[22px] flex items-center justify-center text-white font-black text-3xl shadow-lg italic">S</div>
-            <div>
-              <span className="font-black text-slate-900 text-xl leading-none">ח. סבן מרכזי</span>
-              <div className="flex items-center gap-1.5 mt-2 text-emerald-600 font-bold text-xs">
-                 <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
-                 <span>מחובר - חמ"ל פעיל</span>
-              </div>
-            </div>
-          </div>
+        <div className="p-6 space-y-4">
+          <button className="w-full p-6 bg-slate-900 text-white rounded-[28px] font-black flex items-center justify-between group">
+            <div className="flex items-center gap-3"><Ruler size={22} /><span>חישוב מ"ר</span></div>
+            <BadgeCheck size={18} className="text-blue-400" />
+          </button>
         </div>
       </aside>
 
-      {/* Main Chat View */}
       <main className="flex-1 flex flex-col relative bg-white">
-        <header className="h-24 bg-white/80 backdrop-blur-xl border-b border-slate-50 flex justify-between items-center px-10 z-10 shadow-sm">
-          <div className="flex items-center gap-5">
-            <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center border border-slate-200"><MapPin className="text-blue-600" size={20} /></div>
-            <div>
-              <h2 className="font-black text-xl text-slate-900 tracking-tight">מרכז הזמנות וייעוץ</h2>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Real-time Inventory Link</p>
-            </div>
-          </div>
-          <div className="flex gap-10 text-slate-400">
-             <Search className="cursor-pointer hover:text-blue-600 transition-all hover:scale-110" size={24} />
-             <Phone className="cursor-pointer hover:text-emerald-500 transition-all hover:scale-110" size={24} />
+        <header className="h-20 bg-white/80 backdrop-blur-md border-b flex justify-between items-center px-8 z-10">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center"><User size={18} /></div>
+            <div><div className="font-black text-slate-900 leading-none">מרכז ייעוץ</div><div className="text-[10px] text-emerald-600 font-bold uppercase mt-1">Online</div></div>
           </div>
         </header>
 
-        {/* Messages List with Product Injection */}
-        <div className="flex-1 overflow-y-auto p-8 space-y-8 pb-32">
-           {messages.map((m, i) => (
-             <div key={m.id || i} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
-                <div className={`max-w-[80%] p-5 rounded-[2.5rem] text-base leading-relaxed shadow-sm ${
-                  m.role === 'user' 
-                  ? 'bg-blue-600 text-white rounded-br-none font-bold' 
-                  : 'bg-slate-50 text-slate-800 border border-slate-100 rounded-bl-none font-medium'
-                }`}>
-                  {m.content}
-                </div>
-                {/* הזרקת כרטיס מוצר אם קיים נתון מוצר בהודעה */}
-                {m.product && <ProductMediaCard product={m.product} />}
-             </div>
-           ))}
-           {isLoading && <div className="text-blue-600 font-black text-xs animate-pulse flex items-center gap-2"><Zap size={14} /> המוח מעבד נתונים...</div>}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 pb-32">
+          {messages.map((m, i) => (
+            <div key={i} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
+              <div className={`max-w-[85%] p-4 rounded-[1.8rem] shadow-sm ${m.role === 'user' ? 'bg-blue-600 text-white rounded-br-none font-bold' : 'bg-slate-50 text-slate-800 rounded-bl-none font-medium'}`}>
+                {m.role === 'assistant' && i === messages.length - 1 ? <TypewriterEffect text={m.text || m.content} /> : m.text || m.content}
+              </div>
+              {m.product && <ProductMediaCard product={m.product} />}
+            </div>
+          ))}
+          {isLoading && <div className="text-blue-600 text-xs animate-pulse">סורק נתונים...</div>}
+          <div ref={scrollRef} />
         </div>
 
-        {/* Composer - Fixed Bottom */}
-        <footer className="p-8 bg-transparent absolute bottom-0 w-full z-20">
-          <div className="max-w-5xl mx-auto bg-white/90 backdrop-blur-3xl border-2 border-white p-3 rounded-[40px] shadow-[0_30px_100px_rgba(0,0,0,0.12)]">
-            <Composer onSend={handleSendMessage} disabled={isLoading} />
+        <footer className="p-6 absolute bottom-0 w-full z-20">
+          <div className="max-w-4xl mx-auto bg-white/90 backdrop-blur-2xl border-2 border-white p-2 rounded-[32px] shadow-2xl flex items-center gap-2">
+            <Input 
+              value={input} 
+              onChange={(e) => setInput(e.target.value)} 
+              onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+              placeholder="מה נבצע היום?"
+              className="flex-1 h-14 border-none bg-transparent font-bold text-lg focus-visible:ring-0"
+            />
+            <button onClick={handleSendMessage} className="bg-blue-600 p-3.5 rounded-2xl text-white"><Send size={20} /></button>
           </div>
         </footer>
       </main>
-
-      <ActionOverlays />
     </div>
   );
+}
+
+// --- 3. הייצוא הראשי והמתוקן ל-Vercel ---
+
+const DynamicChat = dynamic(() => Promise.resolve(WhatsAppCloneContent), {
+  ssr: false,
+});
+
+export default function Chat7Page() {
+  return <DynamicChat />;
 }
