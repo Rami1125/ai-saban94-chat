@@ -51,7 +51,7 @@ function WhatsAppCloneContent() {
     setIsLoading(true);
 
     try {
-      const res = await fetch('api/pro_brain/route', {
+      const res = await fetch('/api/ai/pro', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
