@@ -15,7 +15,7 @@ import { AnimatePresence, motion } from 'framer-motion';
  */
 export default function App() {
   const [messages, setMessages] = useState([
-    { id: 1, role: 'bot', text: 'אהלן ראמי, כיף שהגעת לח. סבן. המוח הלוגיסטי מוכן לביצוע. איך אפשר לעזור היום? 🦾', timestamp: new Date() }
+    { id: 1, role: 'bot', text: 'אהלן , כיף שהגעת לח.סבן. המוח הלוגיסטי מוכן לביצוע. איך אפשר לעזור היום? 🦾', timestamp: new Date() }
   ]);
   const [input, setInput] = useState("");
   const [activeAction, setActiveAction] = useState<string | null>(null);
