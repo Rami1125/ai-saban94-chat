@@ -48,7 +48,7 @@ function WhatsAppCloneContent() {
     if (!content.trim()) return;
     setIsLoading(true);
     try {
-      const res = await fetch('/api/chat', {
+      const res = await fetch('/api/ai/consult', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: [...messages, { role: 'user', content }], phone })
