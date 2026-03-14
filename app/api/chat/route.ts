@@ -47,12 +47,10 @@ export async function POST(req: Request) {
     const keys = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').map(k => k.trim()).filter(k => k.length > 20);
     
     // מודלים של סדרת 3.1 (היחידים שפעילים ב-v1beta עכשיו)
-    const modelPool = [
-      "gemini-3.1-flash-lite-preview", 
-      "gemini-3.1-pro-preview",
-      "gemini-3-flash-preview"
-    ];
-    
+        const modelPool = [
+        "gemini-3.1-flash-lite-preview", 
+        "gemini-3.1-pro-preview"
+        ];
     let aiResponse = "";
     let success = false;
 
