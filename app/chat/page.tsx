@@ -44,14 +44,18 @@ function WhatsAppCloneContent() {
     return () => unsubscribe();
   }, [phone]);
 
-  const handleSendMessage = async (content: string) => {
-    if (!content.trim()) return;
-    setIsLoading(true);
-    try {
       const res = await fetch('/api/ai/consult', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [...messages, { role: 'user', content }], phone })
+        body: JSON.stringify({ 
+          query: content, // השאלה הנוכחית
+          history: messages.slice(-6).map(m => ({ role: m.role, content: m.content })), // היסטוריה לזיכרון המוח
+          context: { 
+            inventory: messages.find(m => m.product)?.product || null // הזרקת מוצר אחרון מהשיחה כקונטקסט
+          },
+          phone: phone,
+          userName: "ראמי" // זיהוי הבוס עבור ה-DNA
+        })
       });
       if (!res.ok) throw new Error("Failed to send message");
     } catch (error: any) {
