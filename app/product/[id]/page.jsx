@@ -1,141 +1,192 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { supabase } from "@/lib/supabase";
 import { 
-  Calculator, 
-  ShoppingCart, 
-  CheckCircle2, 
-  MapPin,
-  RotateCcw,
-  Package,
-  Ruler
+  Calculator, ShoppingCart, CheckCircle2, 
+  MapPin, Package, Ruler, Loader2, AlertTriangle,
+  ChevronRight, ArrowRight, RotateCcw
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 /**
- * Saban OS V8 - רכיב כרטיס מוצר גנרי עם מחשבון לוגיסטי
- * @param {Object} product - אובייקט המוצר שנשלף מה-Supabase
+ * Saban OS V8 - דף מוצר חכם המחובר לטבלה inventory
  */
-const ProductCard = ({ product }) => {
-  // אם לא עבר מוצר, נשתמש בנתוני ברירת מחדל לבדיקה
-  const p = product || {
-    product_name: "מוצר לדוגמה",
-    sku: "00000",
-    image_url: "https://images.unsplash.com/photo-1581094794329-c8112a89af12?q=80&w=400",
-    packaging_size: "שק / משטח",
-    coverage_per_sqm: 0.15,
-    features: ["איכות גבוהה", "עמיד לאורך זמן"],
-    stock_quantity: 0
-  };
+export default function ProductDisplayPage({ params }) {
+  const [product, setProduct] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const [inputs, setInputs] = useState({
-    length: "",
-    height: "",
-    manualArea: "",
-    openings: "0",
-    waste: "5"
-  });
+  // 1. שליפת המוצר מהטבלה לפי ה-ID (SKU)
+  useEffect(() => {
+    async function loadProduct() {
+      try {
+        setLoading(true);
+        const { data, error } = await supabase
+          .from("inventory")
+          .select("*")
+          .eq("sku", params.id)
+          .single();
 
-  const calculations = useMemo(() => {
-    const l = parseFloat(inputs.length) || 0;
-    const h = parseFloat(inputs.height) || 0;
-    const mArea = parseFloat(inputs.manualArea) || 0;
-    const ops = parseFloat(inputs.openings) || 0;
-    const wst = parseFloat(inputs.waste) || 5;
+        if (error) throw error;
+        setProduct(data);
+      } catch (err) {
+        setError("המוצר לא נמצא במערכת");
+      } finally {
+        setLoading(false);
+      }
+    }
+    if (params.id) loadProduct();
+  }, [params.id]);
 
-    const baseArea = mArea > 0 ? mArea : l * h;
-    const netArea = Math.max(0, baseArea - ops);
-    const areaWithWaste = netArea * (1 + wst / 100);
-    
-    // חישוב יחידות לפי כושר כיסוי מהטבלה (ברירת מחדל 0.15 אם אין)
-    const coverage = parseFloat(p.coverage_per_sqm) || 0.15;
-    const unitsRequired = Math.ceil(areaWithWaste / coverage);
+  if (loading) return (
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-4">
+      <Loader2 className="animate-spin text-blue-500" size={48} />
+      <p className="text-blue-400 font-black animate-pulse uppercase tracking-widest text-xs">SABAN OS: שולף נתונים מהמלאי...</p>
+    </div>
+  );
 
-    return {
-      netArea: netArea.toFixed(2),
-      withWaste: areaWithWaste.toFixed(2),
-      units: unitsRequired
-    };
-  }, [inputs, p]);
-
-  const handleInputChange = (e) => {
-    const { id, value } = e.target;
-    setInputs(prev => ({ ...prev, [id]: value }));
-  };
-
-  const resetCalc = () => setInputs({ length: "", height: "", manualArea: "", openings: "0", waste: "5" });
+  if (error || !product) return (
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center">
+      <AlertTriangle className="text-rose-500 mb-4" size={64} />
+      <h2 className="text-2xl font-black text-white mb-2">{error || "מוצר לא קיים"}</h2>
+      <button onClick={() => window.history.back()} className="text-blue-400 font-bold flex items-center gap-2">
+        <ArrowRight size={20} /> חזור לדף הקודם
+      </button>
+    </div>
+  );
 
   return (
-    <div className="w-full max-w-4xl mx-auto bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col lg:flex-row" dir="rtl">
-      
-      {/* אזור מדיה */}
-      <div className="lg:w-1/2 relative bg-slate-800 flex items-center justify-center min-h-[300px]">
-        <img 
-          src={p.image_url} 
-          alt={p.product_name} 
-          className="w-full h-full object-cover"
-        />
-        <div className="absolute top-4 right-4 bg-emerald-500/90 text-slate-950 px-3 py-1 rounded-full text-xs font-black shadow-lg">
-          {p.stock_quantity > 0 ? `במלאי: ${p.stock_quantity}` : 'בדוק זמינות'}
-        </div>
-      </div>
+    <div className="min-h-screen bg-slate-950 p-4 md:p-12 font-sans" dir="rtl">
+      <div className="max-w-6xl mx-auto">
+        {/* כפתור חזרה */}
+        <button onClick={() => window.history.back()} className="mb-8 text-slate-500 hover:text-white transition-colors flex items-center gap-2 font-bold text-sm">
+          <ChevronRight size={18} /> חזרה למלאי
+        </button>
 
-      {/* אזור תוכן */}
-      <div className="lg:w-1/2 p-6 lg:p-8 flex flex-col space-y-5">
-        <header className="space-y-2">
-          <h1 className="text-2xl font-black text-white">{p.product_name}</h1>
-          <div className="bg-slate-800 p-2 rounded-xl text-[10px] font-mono inline-block text-slate-300">
-            🔍 מק"ט: {p.sku} | ⚖️ אריזה: {p.packaging_size || 'N/A'}
-          </div>
-        </header>
-
-        {/* מחשבון משולב */}
-        <div className="bg-slate-950/50 border border-slate-800 rounded-2xl p-4 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-            <h3 className="flex items-center gap-2 text-sm font-black text-emerald-400">
-              <Calculator size={16} /> מחשבון כמויות לביצוע
-            </h3>
-            <button onClick={resetCalc} className="text-slate-500 hover:text-rose-400"><RotateCcw size={14} /></button>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-500">אורך קיר</label>
-              <input id="length" type="number" value={inputs.length} onChange={handleInputChange} className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-sm text-white" placeholder="מטר" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-500">גובה קיר</label>
-              <input id="height" type="number" value={inputs.height} onChange={handleInputChange} className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-sm text-white" placeholder="מטר" />
-            </div>
-          </div>
-
-          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-center">
-            <div className="text-[10px] text-emerald-500 font-bold uppercase">כמות מומלצת</div>
-            <div className="text-2xl font-black text-emerald-400">{calculations.units} יח'</div>
-            <div className="text-[9px] text-slate-500 mt-1">כולל {inputs.waste}% פחת</div>
-          </div>
-        </div>
-
-        <div className="flex gap-2">
-          <button className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black py-3 rounded-xl transition-all flex items-center justify-center gap-2 text-sm">
-            <ShoppingCart size={16} /> הוסף להזמנה
-          </button>
-          <button onClick={() => window.open('/branches', '_blank')} className="px-4 border border-slate-800 rounded-xl hover:bg-slate-800">
-            <MapPin size={18} className="text-slate-400" />
-          </button>
-        </div>
-
-        <footer className="text-[9px] text-slate-600 flex justify-between items-center border-t border-slate-800 pt-3">
-          <span>* מחושב לפי {parseFloat(p.coverage_per_sqm) || 0.15} מ"ר ליחידה</span>
-          <span className="font-black italic">SABAN OS V8</span>
-        </footer>
+        {/* הצגת הרכיב המעוצב עם הנתונים מהטבלה */}
+        <SabanProductCard product={product} />
       </div>
     </div>
   );
-};
+}
 
-// ברירת המחדל לייצוא היא האפליקציה שמציגה את הכרטיס
-export default function App() {
+/**
+ * רכיב כרטיס המוצר המקצועי
+ */
+function SabanProductCard({ product }) {
+  const [inputs, setInputs] = useState({ length: "", height: "", openings: "0", waste: "5" });
+
+  // חישוב לוגיסטי דינמי המבוסס על ערך ה-coverage מהטבלה
+  const calc = useMemo(() => {
+    const l = parseFloat(inputs.length) || 0;
+    const h = parseFloat(inputs.height) || 0;
+    const ops = parseFloat(inputs.openings) || 0;
+    const wst = parseFloat(inputs.waste) || 5;
+    
+    // שליפת כושר כיסוי מהטבלה (ברירת מחדל 0.15)
+    const cov = parseFloat(product.coverage) || 0.15;
+    
+    const baseArea = l * h;
+    const netArea = Math.max(0, baseArea - ops);
+    const withWaste = netArea * (1 + wst / 100);
+    const units = Math.ceil(withWaste / cov);
+
+    return { netArea, withWaste, units, cov };
+  }, [inputs, product]);
+
   return (
-    <div className="min-h-screen bg-slate-950 p-6 flex items-center justify-center">
-      <ProductCard />
+    <div className="bg-slate-900 border border-white/5 rounded-[40px] overflow-hidden shadow-2xl flex flex-col lg:flex-row backdrop-blur-3xl">
+      
+      {/* אזור ויזואלי */}
+      <div className="lg:w-1/2 relative bg-black/40 flex items-center justify-center p-4">
+        {product.image_url ? (
+          <img 
+            src={product.image_url} 
+            alt={product.product_name} 
+            className="w-full h-full object-contain max-h-[500px] drop-shadow-[0_20px_50px_rgba(0,0,0,0.5)]" 
+          />
+        ) : (
+          <div className="h-64 flex flex-col items-center justify-center text-slate-700">
+            <Package size={80} />
+            <p className="text-xs font-bold mt-2 uppercase tracking-widest">אין תמונה במערכת</p>
+          </div>
+        )}
+        <div className="absolute top-8 right-8 bg-blue-600 text-white px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-xl">
+           מק"ט: {product.sku}
+        </div>
+      </div>
+
+      {/* אזור תוכן ומחשבון */}
+      <div className="lg:w-1/2 p-8 lg:p-12 flex flex-col">
+        <header className="mb-6">
+          <h1 className="text-4xl font-black text-white mb-2 tracking-tighter italic uppercase">{product.product_name}</h1>
+          <div className="flex flex-wrap gap-2 mb-4">
+            <div className="px-3 py-1 bg-white/5 rounded-lg text-xs font-bold text-slate-400">⚖️ {product.packaging || "שק/משטח"}</div>
+            <div className="px-3 py-1 bg-emerald-500/10 rounded-lg text-xs font-bold text-emerald-500 border border-emerald-500/20">🟢 זמין במלאי</div>
+          </div>
+          <p className="text-slate-400 text-sm leading-relaxed line-clamp-3 italic">
+            {product.description || "תיאור טכני של המוצר כפי שהוגדר על ידי המומחה..."}
+          </p>
+        </header>
+
+        {/* מחשבון כמויות לביצוע */}
+        <div className="bg-black/20 border border-white/5 rounded-3xl p-6 mb-6">
+          <div className="flex items-center justify-between mb-4 border-b border-white/5 pb-3">
+            <h3 className="flex items-center gap-2 font-black text-blue-400 text-sm">
+              <Calculator size={18} /> מחשבון כמויות לביצוע
+            </h3>
+            <button onClick={() => setInputs({ length: "", height: "", openings: "0", waste: "5" })} className="text-slate-600 hover:text-white transition-colors">
+              <RotateCcw size={16} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">אורך קיר (מטר)</label>
+              <input 
+                type="number" 
+                value={inputs.length} 
+                onChange={(e) => setInputs({...inputs, length: e.target.value})}
+                className="w-full bg-slate-800/50 border border-white/5 rounded-xl px-4 py-3 outline-none focus:border-blue-500 transition-all font-bold"
+                placeholder="0.00"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">גובה קיר (מטר)</label>
+              <input 
+                type="number" 
+                value={inputs.height} 
+                onChange={(e) => setInputs({...inputs, height: e.target.value})}
+                className="w-full bg-slate-800/50 border border-white/5 rounded-xl px-4 py-3 outline-none focus:border-blue-500 transition-all font-bold"
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+
+          {/* תוצאת חישוב */}
+          <div className="bg-blue-600/10 border border-blue-600/20 rounded-2xl p-4 text-center">
+            <div className="text-[10px] text-blue-500 font-bold uppercase mb-1">כמות מומלצת להזמנה</div>
+            <div className="text-3xl font-black text-white italic">{calc.units} <span className="text-sm font-normal text-slate-500">יחידות</span></div>
+            <div className="text-[9px] text-slate-500 mt-2 uppercase tracking-widest">
+              מחושב לפי {calc.cov} מ"ר ליחידה | כולל {inputs.waste}% פחת
+            </div>
+          </div>
+        </div>
+
+        {/* כפתורי פעולה */}
+        <div className="flex gap-3 mt-auto">
+          <button className="flex-1 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-lg flex items-center justify-center gap-3 shadow-lg shadow-blue-600/20 transition-all">
+            <ShoppingCart size={20} /> הוסף להזמנה
+          </button>
+          <button className="w-14 h-14 border border-white/5 rounded-2xl flex items-center justify-center hover:bg-white/5 transition-all">
+            <MapPin size={22} className="text-slate-400" />
+          </button>
+        </div>
+
+        <footer className="mt-6 pt-6 border-t border-white/5 flex justify-between items-center text-[9px] font-bold text-slate-600 uppercase tracking-widest">
+          <span>* המחיר משתנה לפי כמויות. בדוק מול המוקד.</span>
+          <span className="italic">Saban OS V8</span>
+        </footer>
+      </div>
     </div>
   );
 }
