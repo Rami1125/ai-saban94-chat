@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getSupabase } from "@/lib/supabase";
-import { getRTDB } from "@/lib/firebase";
-import { ref, update } from "firebase/database";
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -10,100 +8,137 @@ export const runtime = 'nodejs';
 export async function POST(req: Request) {
   try {
     const supabase = getSupabase();
-    const rtdb = getRTDB();
     
-    const body = await req.json().catch(() => ({}));
-    const { messages, phone, userName } = body;
-    const lastUserMsg = messages?.[messages.length - 1]?.content;
+    // קבלת הנתונים עם הגנה בסיסית
+    const body = await req.json();
+    const { question, messages, userName, travelInfo } = body;
+    
+    // שליפת תוכן השאלה (תמיכה גם בפורמט צ'אט וגם בשאלה בודדת)
+    const userQuery = question || (messages && messages[messages.length - 1]?.content);
 
-    if (!lastUserMsg) {
-      return NextResponse.json({ error: "No query found" }, { status: 400 });
+    if (!userQuery) {
+      return NextResponse.json({ error: "No question provided" }, { status: 400 });
     }
 
-    // --- 1. חיפוש מלאי חכם (התאמה למבנה הטבלה החדש) ---
-    const cleanSearch = lastUserMsg.replace(/[?？!]/g, "").trim();
+    // הגנה על נתוני מפות למניעת קריסת ReferenceError
+    const travelData = travelInfo || { distance: "טרם נקבע", duration: "בחישוב..." };
+
+    // --- 1. שליפת מידע חי + ספר חוקים און-ליין ---
+    const cleanSearch = userQuery.replace(/[?？!]/g, "").trim();
     
-    const { data: product, error: dbError } = await supabase
-      .from('inventory')
-      .select('*')
-      .or(`product_name.ilike.%${cleanSearch}%,sku.ilike.%${cleanSearch}%,search_text.ilike.%${cleanSearch}%`)
-      .order('stock_quantity', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const [scheduleRes, inventoryRes, settingsRes, rulesRes] = await Promise.all([
+      // סידור עבודה עדכני
+      supabase.from('saban_dispatch').select('*').limit(30),
+      // חיפוש מלאי מהיר
+      supabase.from('inventory')
+        .select('*')
+        .ilike('product_name', `%${cleanSearch}%`)
+        .limit(1)
+        .maybeSingle(),
+      // ה-DNA הבסיסי מהגדרות המערכת
+      supabase.from('system_settings').select('content').eq('key', 'saban_ai_dna').maybeSingle(),
+      // ספר החוקים הפעיל מהטבלה
+      supabase.from('ai_rules').select('instruction').eq('is_active', true)
+    ]);
 
-    if (dbError) console.error("Supabase Error:", dbError.message);
+    const currentSchedule = scheduleRes.data || [];
+    const product = inventoryRes.data;
+    const baseDNA = settingsRes.data?.content || "אתה העוזר הלוגיסטי והשותף המבצע של ראמי בחמ\"ל סבן.";
+    const dynamicRules = rulesRes.data?.map(r => r.instruction).join("\n") || "";
 
-    // --- 2. בניית ה-DNA המעודכן (Saban Intelligence DNA V6 - Magic Link Edition) ---
-    const finalDNA = `
-      אתה המוח הלוגיסטי המבצעי של חמ"ל סבן חומרי בניין. המנהל שלך: ראמי.
-      שם הלקוח: ${userName || 'לקוח'}.
+    // --- 2. איחוד ספר החוקים ל-DNA אחד חזק (Saban Executive DNA V4) ---
+    const finalSystemDNA = `
+      ${baseDNA}
       
-      ### נתוני מוצר מזהים (מהטבלה):
-      ${product ? JSON.stringify({
-        name: product.product_name,
-        price: product.price,
-        sku: product.sku,
-        link: product.product_magic_link, // לינק הקסם
-        features: product.features,
-        description: product.description,
-        coverage: product.coverage,
-        video: product.video_url || product.youtube_url
-      }) : "סטטוס: מוצר לא נמצא במלאי."}
+      ### פרטי הלקוח והקשר אישי:
+      - שם הלקוח: ${userName || 'לקוח'}
+      - פנה ללקוח בשמו הפרטי כדי ליצור תחושת שירות חברי ואישי.
+
+      ### נתוני לוגיסטיקה בזמן אמת (Google Maps API):
+      * מרחק מהמחסן (החרש 10): ${travelData.distance}
+      * זמן נסיעה משוער למשאית: ${travelData.duration}
+
+      ### חוקי ברזל וניהול לוגיסטי (DNA מחייב):
+      ${dynamicRules}
+
+      ### הנחיות מענה וביצוע (פקודות ראמי):
+      1. **סמכות**: ראמי הוא המנהל. בצע פקודות 'שתף' או 'עבד' ללא שאלות מיותרות.
+      2. **ניהול נהגים**: חכמת (מנוף - יציאה מהחרש 10 בלבד), עלי (ידני - העברות וסניף התלמיד).
+      3. **מילון ומחשבון לוגיסטי**: 
+         - בלה חול/סומסום: 0.7 טון (700 ק"ג). 
+         - גבס: 3 מ"ר ללוח (+5% פחת, עיגול למעלה).
+      4. **פרוטוקול סגירת הזמנה (מצב אישור)**: 
+         אם הלקוח ענה בחיוב (כן/סגור/תזמין), בצע:
+         - א. סיכום: מוצר, כמות, ומשקל כולל עם אימוג'ים.
+         - ב. תצוגת UI: חובה להציג ProductStoreCard.
+         - ג. ברירת הובלה: הצג זמן הגעה משוער (${travelData.duration}) ושאל 'חכמת (מנוף) או איסוף עצמי?'.
+         - ד. שיתוף: הצג SabanWhatsAppButton לסיכום ההזמנה.
+      5. **אפס עיכובים**: שאל שאלת עומק אחת קצרה ומכוונת אם חסר נתון קריטי.
+      6. **חלופות**: אם מוצר חסר, הצע פתרון דומה מהמלאי הזמין.
+
+      ### מצב סידור עבודה נוכחי:
+      ${JSON.stringify(currentSchedule)}
+
+      ### נתוני מלאי ומוצרים:
+      ${product ? JSON.stringify(product) : "אין מידע זמין על מוצר ספציפי"}
+
+      ### חוקי עיצוב וסגנון (חובה):
+      - איסור מוחלט על פסקאות של יותר מ-2 שורות.
+      - שימוש ברווח כפול בין בלוקים.
+      - כל נתון טכני חייב להתחיל באימוג'י תואם (📦, ⚖️, 🛠️, ⏳, 📍).
+      - אם יש חישוב (מ"ר/טון) - הצג אותו בתיבת קוד (Code Block) או בבולד.
       
-      ### הנחיות שליפה וביצוע:
-      1. **לינק הקסם (Magic Link)**: אם נמצא מוצר ויש לו 'product_magic_link', חובה להציג אותו בסוף התשובה כפתור או לינק בולט: "לרכישה מהירה ופרטים נוספים לחץ כאן: [לינק]".
-      2. **מפרט טכני**: שלוף את ה-features (מערך) והצג אותם כבולטים עם אימוג'י ✅.
-      3. **כושר כיסוי**: אם קיים 'coverage', ציין אותו במפורש עבור הלקוח.
-      4. **וידאו**: אם יש 'youtube_url' או 'video_url', ציין שיש סרטון הדרכה זמין בכרטיס.
+      ### תבנית מבנה מענה מחייבת:
+      ### 🏗️ [כותרת נושא]
+      * [נתון 1]
+      * [נתון 2]
       
-      ### חוקי עיצוב:
-      - עברית סמכותית, קצרה, ללא הקדמות "שלום רב".
-      - רווח כפול בין פסקאות.
-      - חתימה: "תודה, ומה תרצה שנבצע היום? ראמי, הכל מוכן לביצוע. 🦾"
+      [כאן יופיע ה-UI Component]
+      
+      **[שאלת סגירה מודגשת]?**
+
+      ### חתימה מחייבת:
+      תודה על הפניה בשם ראמי. 
+      תודה, ומה תרצה שנבצע היום?
+      ראמי, הכל מוכן לביצוע. מחכה לפקודה. 🦾
     `.trim();
 
-    // --- 3. סבב מודלים Gemini 3.1 ---
-    const keys = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').map(k => k.trim()).filter(k => k.length > 20);
-    const modelPool = ["gemini-3.1-flash-lite-preview", "gemini-3.1-pro-preview"];
+    // --- 3. ניהול מפתחות וסבב מודלים (Gemini 3) ---
+    const keys = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').map(k => k.trim()).filter(k => k.length > 10);
+    const modelPool = ["gemini-3.1-flash-lite-preview", "gemini-3-flash-preview"];
     
     let aiResponse = "";
     let success = false;
 
     for (const key of keys) {
       if (success) break;
-      try {
-        const genAI = new GoogleGenerativeAI(key);
-        for (const modelName of modelPool) {
-          if (success) break;
-          try {
-            const model = genAI.getGenerativeModel({ model: modelName, systemInstruction: finalDNA });
-            const result = await model.generateContent(lastUserMsg);
-            aiResponse = result.response.text();
-            if (aiResponse) success = true;
-          } catch (e) { console.error(`Error with ${modelName}`); }
+      const genAI = new GoogleGenerativeAI(key);
+      
+      for (const modelName of modelPool) {
+        if (success) break;
+        try {
+          const model = genAI.getGenerativeModel({
+            model: modelName,
+            systemInstruction: finalSystemDNA
+          });
+
+          const result = await model.generateContent(userQuery);
+          aiResponse = result.response.text();
+          if (aiResponse) success = true;
+        } catch (e) {
+          console.error(`Attempt failed with ${modelName}:`, e);
         }
-      } catch (e) { console.error("Key failure"); }
+      }
     }
 
-    // --- 4. עדכון Firebase ---
-    if (phone && aiResponse) {
-      try {
-        const cleanPhone = phone.replace(/\D/g, '');
-        await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), {
-          text: aiResponse,
-          product_link: product?.product_magic_link || null,
-          timestamp: Date.now()
-        });
-      } catch (fbError) { console.warn("Firebase skip"); }
-    }
-
-    // --- 5. תגובה סופית ---
+    // --- 4. החזרת תשובה ---
     return NextResponse.json({ 
-      answer: aiResponse || "מצטער ראמי, המוח עמוס. נסה שוב.", 
-      product: product || null 
+      answer: aiResponse || "מצטער ראמי, המוח עמוס. נסה שוב בעוד רגע.",
+      success: success 
     });
 
   } catch (error) {
+    console.error("Critical System Failure:", error);
     return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }
 }
