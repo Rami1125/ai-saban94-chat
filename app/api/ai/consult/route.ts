@@ -8,43 +8,30 @@ export const runtime = 'nodejs';
 export async function POST(req: Request) {
   try {
     const supabase = getSupabase();
-    
-    // קבלת הנתונים עם הגנה בסיסית
     const body = await req.json();
-    const { question, messages, userName, travelInfo } = body;
     
-    // שליפת תוכן השאלה (תמיכה גם בפורמט צ'אט וגם בשאלה בודדת)
-    const userQuery = question || (messages && messages[messages.length - 1]?.content);
-
+    // קבלת נתונים מה-Frontend
+    const { query, question, context, history, userName, travelInfo } = body;
+    const userQuery = query || question;
+    
     if (!userQuery) {
-      return NextResponse.json({ error: "No question provided" }, { status: 400 });
+      return NextResponse.json({ error: "No query provided" }, { status: 400 });
     }
 
-    // הגנה על נתוני מפות למניעת קריסת ReferenceError
+    // הגנה על נתוני ניווט
     const travelData = travelInfo || { distance: "טרם נקבע", duration: "בחישוב..." };
 
-    // --- 1. שליפת מידע חי + ספר חוקים און-ליין ---
-    const cleanSearch = userQuery.replace(/[?？!]/g, "").trim();
-    
-    const [scheduleRes, inventoryRes, settingsRes, rulesRes] = await Promise.all([
-      // סידור עבודה עדכני
-      supabase.from('saban_dispatch').select('*').limit(30),
-      // חיפוש מלאי מהיר
-      supabase.from('inventory')
-        .select('*')
-        .ilike('product_name', `%${cleanSearch}%`)
-        .limit(1)
-        .maybeSingle(),
-      // ה-DNA הבסיסי מהגדרות המערכת
-      supabase.from('system_settings').select('content').eq('key', 'saban_ai_dna').maybeSingle(),
-      // ספר החוקים הפעיל מהטבלה
-      supabase.from('ai_rules').select('instruction').eq('is_active', true)
+    // --- 1. שליפת מידע חי מהמערכת ---
+    const [rulesRes, scheduleRes] = await Promise.all([
+      supabase.from('ai_rules').select('instruction').eq('is_active', true),
+      supabase.from('saban_dispatch').select('*').limit(15)
     ]);
 
-    const currentSchedule = scheduleRes.data || [];
-    const product = inventoryRes.data;
-    const baseDNA = settingsRes.data?.content || "אתה העוזר הלוגיסטי והשותף המבצע של ראמי בחמ\"ל סבן.";
     const dynamicRules = rulesRes.data?.map(r => r.instruction).join("\n") || "";
+    const currentSchedule = scheduleRes.data || [];
+    const inventoryContext = context?.inventory ? JSON.stringify(context.inventory) : "לא נבחר מוצר ספציפי";
+
+    // --- 2. איחוד ספר החוקים ל-DNA אחד חזק (Saban Executive DNA V9) ---
     const finalSystemDNA = `
       אתה המוח הלוגיסטי והמעצב של "ח. סבן חומרי בניין". המנהל והסמכות העליונה שלך הוא ראמי. 
       תפקידך לספק פתרונות טכניים, לבצע חישובים לוגיסטיים ולעצב כל מענה כחלק מממשק משתמש (UI) מתקדם.
@@ -87,42 +74,22 @@ export async function POST(req: Request) {
       ראמי, הכל מוכן לביצוע. מחכה לפקודה. 🦾
     `.trim();
 
-    // --- 3. ניהול מפתחות וסבב מודלים (Gemini 3) ---
-    const keys = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').map(k => k.trim()).filter(k => k.length > 10);
-    const modelPool = ["gemini-3.1-flash-lite-preview", "gemini-3-flash-preview"];
-    
-    let aiResponse = "";
-    let success = false;
-
-    for (const key of keys) {
-      if (success) break;
-      const genAI = new GoogleGenerativeAI(key);
-      
-      for (const modelName of modelPool) {
-        if (success) break;
-        try {
-          const model = genAI.getGenerativeModel({
-            model: modelName,
-            systemInstruction: finalSystemDNA
-          });
-
-          const result = await model.generateContent(userQuery);
-          aiResponse = result.response.text();
-          if (aiResponse) success = true;
-        } catch (e) {
-          console.error(`Attempt failed with ${modelName}:`, e);
-        }
-      }
-    }
-
-    // --- 4. החזרת תשובה ---
-    return NextResponse.json({ 
-      answer: aiResponse || "מצטער ראמי, המוח עמוס. נסה שוב בעוד רגע.",
-      success: success 
+    // --- 3. שליחה ל-Google Gemini ---
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY || "");
+    const modelPool = ["gemini-3.1-flash-lite-preview", "gemini-3-flash-preview"];      model: "gemini-1.5-flash",
+      systemInstruction: finalSystemDNA 
     });
 
-  } catch (error) {
-    console.error("Critical System Failure:", error);
-    return NextResponse.json({ error: "Internal Error" }, { status: 500 });
+    const result = await model.generateContent(userQuery);
+    const aiText = result.response.text();
+
+    return NextResponse.json({ 
+      answer: aiText,
+      success: true 
+    });
+
+  } catch (error: any) {
+    console.error("Brain Error:", error);
+    return NextResponse.json({ error: "Internal Brain Error", details: error.message }, { status: 500 });
   }
 }
