@@ -40,8 +40,12 @@ export async function POST(req: Request) {
 
     // --- 3. סבב מודלים ומפתחות (חיסון 404 ו-400) ---
     const keys = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').map(k => k.trim()).filter(k => k.length > 20);
-    const modelPool = ["gemini-1.5-flash-002", "gemini-1.5-pro-002", "gemini-3.1-flash-lite-preview"];
-    
+// המודלים המעודכנים לפי התיעוד של מרץ 2026
+const modelPool = [
+  "gemini-3.1-flash-lite-preview", // המודל החדש והיציב ביותר כרגע
+  "gemini-3-flash-preview",        // מודל הדור השלישי הרגיל
+  "gemini-3.1-pro-preview"         // מודל הפרו החזק
+];    
     let aiResponse = "";
     let success = false;
 
