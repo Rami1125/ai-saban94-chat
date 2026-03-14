@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Send, Calculator, ShoppingCart, 
   Package, X, Share2, Trash2, Loader2,
-  User, Settings, Zap, Phone, Search, Ruler, BadgeCheck
+  User, Settings, Zap, Phone, Search, Ruler, BadgeCheck, RotateCcw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from "@/lib/supabase"; 
@@ -62,7 +62,7 @@ export default function WhatsAppCloneContent() {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
-  // 2. פונקציית שליחת הודעה - מתוקנת עם async
+  // 2. פונקציית שליחת הודעה - מתוקנת עם async/await תקין
   const handleSendMessage = async (content: string) => {
     if (!content.trim() || isLoading) return;
     
@@ -129,7 +129,7 @@ export default function WhatsAppCloneContent() {
             </div>
             <div>
               <h1 className="font-black text-xl tracking-tighter text-slate-900 uppercase italic">SABAN PRO</h1>
-              <p className="text-[10px] font-bold text-blue-600 tracking-widest uppercase">Sync Active: {sessionId.slice(0, 8)}</p>
+              <p className="text-[10px] font-bold text-blue-600 tracking-widest uppercase text-right">Sync Active: {sessionId.slice(0, 8)}</p>
             </div>
           </div>
           <Settings className="text-slate-400 cursor-pointer hover:rotate-90 transition-transform" size={20} />
@@ -183,8 +183,8 @@ export default function WhatsAppCloneContent() {
             <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
               <div className={`max-w-[80%] p-4 rounded-[24px] shadow-sm border ${
                 m.role === 'user' 
-                  ? 'bg-white border-slate-200 text-slate-900 rounded-tr-none' 
-                  : 'bg-blue-600 text-white border-blue-500 shadow-blue-200 rounded-tl-none'
+                  ? 'bg-white border-slate-200 text-slate-900 rounded-tr-none text-right' 
+                  : 'bg-blue-600 text-white border-blue-500 shadow-blue-200 rounded-tl-none text-right'
               }`}>
                 <p className="text-sm leading-relaxed whitespace-pre-wrap font-medium">{m.content}</p>
               </div>
@@ -194,7 +194,7 @@ export default function WhatsAppCloneContent() {
             <div className="flex justify-end animate-pulse">
               <div className="bg-blue-50 p-3 rounded-xl flex items-center gap-2 border border-blue-100">
                 <Loader2 className="animate-spin text-blue-500" size={14} />
-                <span className="text-[10px] font-black text-blue-600 uppercase tracking-tighter">המוח מעבד נתונים...</span>
+                <span className="text-[10px] font-black text-blue-600 uppercase tracking-tighter italic">המוח מעבד נתונים...</span>
               </div>
             </div>
           )}
@@ -226,17 +226,6 @@ export default function WhatsAppCloneContent() {
           </div>
         </footer>
       </main>
-
-      <ActionOverlays />
     </div>
-  );
-}
-
-// רכיב עזר
-function RotateCcw(props: any) {
-  return (
-    <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
-    </svg>
   );
 }
