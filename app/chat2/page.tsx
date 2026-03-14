@@ -1,230 +1,161 @@
 "use client";
+import React, { useState, useEffect, useRef } from 'react';
+import { User, Send, Search, Building2, Loader2 } from 'lucide-react';
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 
-import React, { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { MessageList } from "@/components/chat/message-list";
-import { 
-  Send, Bot, User, Sun, Moon, 
-  RefreshCw, Trash2, ChevronLeft, Loader2,
-  Package, ShoppingCart, CheckCircle2
-} from "lucide-react";
+// --- 1. רכיבי עזר (חובה להוציא מחוץ לפונקציה הראשית) ---
 
-interface Product {
-  id: string | number;
-  product_name: string;
-  sku: string;
-  price?: number;
-  image_url?: string;
-  in_stock: boolean;
-  description?: string;
-}
-
-interface Message {
-  id: string; // עדיף string (UUID) מ-number ל-React keys
-  role: 'user' | 'assistant';
-  content: string;
-  products?: Product[]; // שים לב: מערך, כי ה-AI יכול למצוא כמה מוצרים
-  isLoading?: boolean; // מעולה להצגת "Skeleton" בזמן שה-AI חושב
-}
-
-export default function SabanChatPage() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(true);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // מספר הטלפון המרכזי לניסויים וחיבור לצינור
-  const TEST_PHONE = "972508860896";
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+const TypewriterEffect = ({ text }: { text: string }) => {
+  const [displayedText, setDisplayedText] = useState("");
+  const [index, setIndex] = useState(0);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, isLoading]);
+    if (!text) return;
+    if (index < text.length) {
+      const timeout = setTimeout(() => {
+        setDisplayedText(prev => prev + text[index]);
+        setIndex(prev => prev + 1);
+      }, 10);
+      return () => clearTimeout(timeout);
+    }
+  }, [index, text]);
 
-  const handleSend = async () => {
+  return <div className="whitespace-pre-wrap">{displayedText}</div>;
+};
+
+// התיקון לשגיאה שלך: וודא שיש תוכן בתוך הסוגריים
+const SabanLoader = () => (
+  <div className="flex flex-col gap-2 p-4 bg-white border border-slate-200 rounded-2xl w-fit shadow-sm">
+    <div className="flex items-center gap-2 text-blue-600 font-bold text-xs">
+      <Search size={14} className="animate-spin" />
+      <span className="animate-pulse">סורק מלאי ולוגיסטיקה...</span>
+    </div>
+    <div className="flex gap-1 justify-center">
+      <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+      <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+      <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce"></span>
+    </div>
+  </div>
+);
+
+// --- 2. הקומפוננטה הראשית ---
+
+export default function SabanChat2() {
+  const [userName, setUserName] = useState<string | null>(null);
+  const [input, setInput] = useState('');
+  const [messages, setMessages] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const savedName = localStorage.getItem('saban_user_name');
+    const savedHistory = localStorage.getItem('saban_chat_history');
+    if (savedName) setUserName(savedName);
+    if (savedHistory) {
+      try {
+        setMessages(JSON.parse(savedHistory));
+      } catch (e) {
+        setMessages([]);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      localStorage.setItem('saban_chat_history', JSON.stringify(messages));
+      scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
+
+  const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
-
-    const userMsg: Message = { id: Date.now(), role: 'user', content: input };
+    
+    const userMsg = { role: 'user', content: input };
     setMessages(prev => [...prev, userMsg]);
-    setInput("");
+    setInput('');
     setIsLoading(true);
 
     try {
-      // שליחה ל-API החכם שלנו (זה שכולל את הדילוג בין מודלים וספר החוקים)
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          messages: [...messages, userMsg],
-          phone: TEST_PHONE, // הזרקת הטלפון כדי שיעבור ל-JONI
-          userId: "web-client"
-        }),
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: [...messages, userMsg], userName }),
       });
-// --- רכיב אפקט הקלדה מוגן מקריסות ---
-const TypewriterEffect = ({ text }: { text: string }) => {
-};
 
-// --- רכיב אפקט חשיבה לוגיסטי ---
-const SabanLoader = () => (
-);
       const data = await response.json();
-      
-      const assistantMsg: Message = { 
-        id: Date.now() + 1, 
-        role: 'assistant', 
-        content: data.text || "סליחה, חלה שגיאה בחיבור.",
-        product: data.product // קבלת נתוני מוצר אם זוהה ב-Supabase
-      };
-      
+      const assistantMsg = { role: 'assistant', content: data.answer || data.text };
       setMessages(prev => [...prev, assistantMsg]);
     } catch (error) {
-      console.error("Chat Error:", error);
+      console.error("Build failure check:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleStart = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const name = new FormData(e.currentTarget).get('name') as string;
+    if (name?.trim()) {
+      localStorage.setItem('saban_user_name', name.trim());
+      setUserName(name.trim());
+    }
+  };
+
+  if (!userName) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-slate-50 p-6" dir="rtl">
+        <Card className="w-full max-w-md p-8 bg-white border-slate-200 rounded-[2.5rem] shadow-xl text-center">
+          <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <Building2 className="text-white" size={32} />
+          </div>
+          <h2 className="text-2xl font-black text-slate-900 mb-2 italic">ח. סבן</h2>
+          <form onSubmit={handleStart} className="space-y-4">
+            <Input name="name" required placeholder="איך קוראים לך?" className="h-14 rounded-2xl bg-slate-50 text-center font-bold" />
+            <button className="w-full h-14 bg-blue-600 text-white rounded-2xl font-black transition-all active:scale-95">כניסה 🦾</button>
+          </form>
+        </Card>
+      </div>
+    );
+  }
+
   return (
-    <div className={`min-h-screen transition-colors duration-500 font-sans ${isDarkMode ? 'bg-[#020617] text-white' : 'bg-slate-50 text-slate-900'}`} dir="rtl">
-      
-      {/* Header מעוצב */}
-      <nav className={`fixed top-0 w-full z-50 backdrop-blur-md border-b ${isDarkMode ? 'bg-slate-900/50 border-white/5' : 'bg-white/70 border-slate-200'}`}>
-        <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-blue-600 p-2 rounded-xl shadow-lg shadow-blue-500/20">
-              <Bot size={20} className="text-white" />
+    <div className="h-screen flex flex-col bg-white text-slate-900" dir="rtl">
+      <div className="p-4 bg-white border-b flex justify-between items-center shadow-sm">
+        <span className="font-black italic text-slate-900 text-lg">ח. סבן | לוגיסטיקה</span>
+        <span className="text-xs font-bold bg-slate-100 px-3 py-1 rounded-full">{userName}</span>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-slate-50/50">
+        {messages.map((m, i) => (
+          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[85%] p-4 rounded-[1.8rem] shadow-sm ${
+                m.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white border border-slate-200 rounded-bl-none'
+            }`}>
+              {m.role === 'assistant' && i === messages.length - 1 ? (
+                <TypewriterEffect text={m.content} />
+              ) : (
+                <div className="whitespace-pre-wrap">{m.content}</div>
+              )}
             </div>
-            <div>
-              <h1 className="font-black italic text-xl tracking-tighter leading-none">SABAN AI</h1>
-              <span className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest">Connected to JONI</span>
-            </div>
           </div>
-          
-          <div className="flex gap-2">
-            <button 
-              onClick={() => setIsDarkMode(!isDarkMode)}
-              className={`p-2 rounded-xl transition-all ${isDarkMode ? 'bg-white/5 hover:bg-white/10' : 'bg-slate-200 hover:bg-slate-300'}`}
-            >
-              {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-            </button>
-            <button 
-              onClick={() => setMessages([])}
-              className={`p-2 rounded-xl transition-all ${isDarkMode ? 'bg-white/5 hover:bg-red-500/20 text-red-400' : 'bg-slate-200 hover:bg-red-100 text-red-600'}`}
-            >
-              <Trash2 size={20} />
-            </button>
-          </div>
-        </div>
-      </nav>
+        ))}
+        {isLoading && <SabanLoader />}
+        <div ref={scrollRef} />
+      </div>
 
-      {/* Main Chat Area */}
-      <main className="max-w-4xl mx-auto pt-24 pb-32 px-4">
-        {messages.length === 0 && (
-          <div className="py-20 text-center flex flex-col items-center">
-             <div className="w-24 h-24 bg-blue-600/20 rounded-full flex items-center justify-center mb-6 animate-pulse">
-                <Bot size={48} className="text-blue-500" />
-             </div>
-            <h2 className="text-3xl font-black mb-4 tracking-tight">איך אפשר לעזור היום?</h2>
-            <p className="opacity-50 text-sm max-w-xs mx-auto">שאל אותי על לוחות גבס, סידור עבודה או מוצרים מהמלאי של ח. סבן</p>
-          </div>
-        )}
-
-        <div className="space-y-8">
-          <AnimatePresence>
-            {messages.map((msg) => (
-              <motion.div
-                key={msg.id}
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`flex flex-col ${msg.role === 'user' ? 'items-start' : 'items-end'}`}
-              >
-                <div className={`max-w-[90%] p-5 rounded-[28px] shadow-sm relative ${
-                  msg.role === 'user' 
-                    ? 'bg-blue-600 text-white rounded-br-none' 
-                    : (isDarkMode ? 'bg-slate-800 text-slate-100 rounded-bl-none border border-white/5' : 'bg-white text-slate-800 rounded-bl-none border border-slate-200 shadow-md')
-                }`}>
-                  <div 
-                    className="leading-relaxed whitespace-pre-wrap text-sm" 
-                    dangerouslySetInnerHTML={{ __html: msg.content.replace(/\n/g, '<br/>') }}
-                  />
-
-                  {/* כרטיס מוצר ויזואלי - אם זוהה מוצר */}
-                  {msg.product && (
-                    <motion.div 
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="mt-4 bg-black/20 p-4 rounded-2xl border border-white/10 space-y-3"
-                    >
-                      <div className="flex justify-between items-center">
-                         <span className="text-[10px] font-bold uppercase text-blue-400 tracking-widest">כרטיס מוצר זמין</span>
-                         <Package size={14} className="text-blue-400" />
-                      </div>
-                      <div className="font-bold text-base">{msg.product.product_name}</div>
-                      <div className="flex justify-between items-end">
-                        <div className="text-xl font-black text-emerald-400">{msg.product.price} ₪</div>
-                        <button className="bg-emerald-600 text-[10px] font-black px-3 py-1.5 rounded-lg flex items-center gap-1">
-                          <ShoppingCart size={12} /> הוסף להזמנה
-                        </button>
-                      </div>
-                    </motion.div>
-                  )}
-                </div>
-                <span className="text-[10px] opacity-30 mt-1 px-2">
-                  {new Date(msg.id).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                </span>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-
-          {/* Thinking Effect */}
-          {isLoading && (
-            <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              className="flex justify-end gap-2"
-            >
-              <div className={`p-4 rounded-[25px] rounded-bl-none flex items-center gap-3 ${isDarkMode ? 'bg-slate-800' : 'bg-white border border-slate-200'}`}>
-                <div className="flex gap-1">
-                  <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                  <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                  <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
-                </div>
-                <span className="text-xs font-bold opacity-50 italic">סבן AI בודק במחסן...</span>
-              </div>
-            </motion.div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-      </main>
-
-      {/* Input Field */}
-      <div className={`fixed bottom-0 w-full p-4 pb-8 backdrop-blur-md ${isDarkMode ? 'bg-[#020617]/80' : 'bg-slate-50/80'}`}>
-        <div className="max-w-4xl mx-auto relative flex items-center gap-2">
-          <div className="relative flex-1">
-            <input
-              type="text"
-              placeholder="כתוב הודעה ל-סבן AI..."
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-              className={`w-full p-5 pl-14 rounded-[30px] outline-none transition-all shadow-xl text-sm ${
-                isDarkMode 
-                  ? 'bg-slate-800 border-white/5 focus:border-blue-500 text-white' 
-                  : 'bg-white border-slate-200 focus:border-blue-500 text-slate-900 border'
-              }`}
-            />
-            <button
-              onClick={handleSend}
-              disabled={isLoading || !input.trim()}
-              className="absolute left-2 top-2 bottom-2 w-11 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-full flex items-center justify-center transition-all active:scale-95 shadow-lg"
-            >
-              <Send size={18} />
-            </button>
-          </div>
+      <div className="p-4 bg-white border-t">
+        <div className="relative max-w-4xl mx-auto flex gap-2">
+          <Input 
+            value={input} 
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+            placeholder="מה נבצע היום?"
+            className="h-14 rounded-2xl bg-slate-50 font-bold"
+          />
+          <button onClick={sendMessage} disabled={isLoading} className="bg-blue-600 p-4 rounded-2xl text-white disabled:opacity-50">
+            <Send size={20} />
+          </button>
         </div>
       </div>
     </div>
