@@ -69,12 +69,11 @@ export async function POST(req: Request) {
     const keys = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').map(k => k.trim()).filter(k => k.length > 10);
     
     // מודלים יציבים (Stable) + מודל הדור הבא 3.1 ב-Preview
-    const modelPool = [
-      "gemini-1.5-flash-latest", // המודל המבצעי המהיר ביותר
-      "gemini-1.5-pro-latest",   // מודל הגיבוי לחשיבה עמוקה
-      "gemini-3.1-flash-lite-preview" // מודל הדור החדש שהושק ב-3 במרץ
-    ];
-    
+const modelPool = [
+  "gemini-1.5-flash-002", // הדגם הכי יציב כרגע
+  "gemini-1.5-pro-002",
+  "gemini-3.1-flash-lite-preview"
+];
     let aiResponse = "";
     let success = false;
 
