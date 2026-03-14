@@ -45,10 +45,10 @@ export async function POST(req: Request) {
     const product = inventoryRes.data;
     const baseDNA = settingsRes.data?.content || "אתה העוזר הלוגיסטי והשותף המבצע של ראמי בחמ\"ל סבן.";
     const dynamicRules = rulesRes.data?.map(r => r.instruction).join("\n") || "";
-// שלב 1: הגדרת נתוני הניווט (יש לוודא ש-travelData מגיע מהלוגיקה של Google Maps לפני כן)
 const travelInfo = typeof travelData !== 'undefined' ? travelData : { distance: "טרם נקבע", duration: "בחישוב..." };
 
 // שלב 2: בניית ה-DNA המאוחד
+// שים לב: הגרש ההפוך נפתח כאן ונסגר רק בסוף כל הכללים
 const finalSystemDNA = `
 ${baseDNA}
 
@@ -58,12 +58,12 @@ ${baseDNA}
 
 ### חוקי ברזל וניהול לוגיסטי (DNA מחייב):
 ${dynamicRules}
-`;
-      ### נתוני לוגיסטיקה בזמן אמת (Google Maps API):
-      * מרחק מהמחסן (החרש 10): ${travelInfo.distance}
-      * זמן נסיעה משוער למשאית: ${travelInfo.duration}
-      * מזג אוויר וסביבת פריקה: וודא שאין גשם אם מדובר בגבס/מלט.
 
+### נתוני לוגיסטיקה בזמן אמת (Google Maps API):
+* מרחק מהמחסן (החרש 10): ${travelInfo.distance}
+* זמן נסיעה משוער למשאית: ${travelInfo.duration}
+* מזג אוויר וסביבת פריקה: וודא שאין גשם אם מדובר בגבס/מלט.
+`; 
       ### הנחיות מענה וביצוע (פקודות ראמי):
       1. **סמכות**: ראמי הוא המנהל. בצע פקודות 'שתף' או 'עבד' ללא שאלות מיותרות.
       2. **ניהול נהגים**: חכמת (מנוף - יציאה מהחרש 10 בלבד), עלי (ידני - העברות וסניף התלמיד).
