@@ -8,37 +8,51 @@ export const runtime = 'nodejs';
 export async function POST(req: Request) {
   try {
     const supabase = getSupabase();
+    
+    // קבלת הנתונים עם הגנה בסיסית
     const body = await req.json();
+    const { question, messages, userName, travelInfo } = body;
     
-    // קבלת נתונים מה-Frontend
-    const { query, question, context, history, userName, travelInfo } = body;
-    const userQuery = query || question;
-    
+    // שליפת תוכן השאלה (תמיכה גם בפורמט צ'אט וגם בשאלה בודדת)
+    const userQuery = question || (messages && messages[messages.length - 1]?.content);
+
     if (!userQuery) {
-      return NextResponse.json({ error: "No query provided" }, { status: 400 });
+      return NextResponse.json({ error: "No question provided" }, { status: 400 });
     }
 
-    // הגנה על נתוני ניווט
+    // הגנה על נתוני מפות למניעת קריסת ReferenceError
     const travelData = travelInfo || { distance: "טרם נקבע", duration: "בחישוב..." };
 
-    // --- 1. שליפת מידע חי מהמערכת ---
-    const [rulesRes, scheduleRes] = await Promise.all([
-      supabase.from('ai_rules').select('instruction').eq('is_active', true),
-      supabase.from('saban_dispatch').select('*').limit(15)
+    // --- 1. שליפת מידע חי + ספר חוקים און-ליין ---
+    const cleanSearch = userQuery.replace(/[?？!]/g, "").trim();
+    
+    const [scheduleRes, inventoryRes, settingsRes, rulesRes] = await Promise.all([
+      // סידור עבודה עדכני
+      supabase.from('saban_dispatch').select('*').limit(30),
+      // חיפוש מלאי מהיר
+      supabase.from('inventory')
+        .select('*')
+        .ilike('product_name', `%${cleanSearch}%`)
+        .limit(1)
+        .maybeSingle(),
+      // ה-DNA הבסיסי מהגדרות המערכת
+      supabase.from('system_settings').select('content').eq('key', 'saban_ai_dna').maybeSingle(),
+      // ספר החוקים הפעיל מהטבלה
+      supabase.from('ai_rules').select('instruction').eq('is_active', true)
     ]);
 
-    const dynamicRules = rulesRes.data?.map(r => r.instruction).join("\n") || "";
     const currentSchedule = scheduleRes.data || [];
-    const inventoryContext = context?.inventory ? JSON.stringify(context.inventory) : "לא נבחר מוצר ספציפי";
+    const product = inventoryRes.data;
+    const baseDNA = settingsRes.data?.content || "אתה העוזר הלוגיסטי והשותף המבצע של ראמי בחמ\"ל סבן.";
+    const dynamicRules = rulesRes.data?.map(r => r.instruction).join("\n") || "";
 
-    // --- 2. איחוד ספר החוקים ל-DNA אחד חזק (Saban Executive DNA V9) ---
+    // --- 2. איחוד ספר החוקים ל-DNA אחד חזק (Saban Executive DNA V4) ---
     const finalSystemDNA = `
-      אתה המוח הלוגיסטי והמעצב של "ח. סבן חומרי בניין". המנהל והסמכות העליונה שלך הוא ראמי. 
-      תפקידך לספק פתרונות טכניים, לבצע חישובים לוגיסטיים ולעצב כל מענה כחלק מממשק משתמש (UI) מתקדם.
-
+      ${baseDNA}
+      
       ### פרטי הלקוח והקשר אישי:
       - שם הלקוח: ${userName || 'לקוח'}
-      - פנה ללקוח בשמו הפרטי ליצירת שירות חברי ואישי.
+      - פנה ללקוח בשמו הפרטי כדי ליצור תחושת שירות חברי ואישי.
 
       ### נתוני לוגיסטיקה בזמן אמת (Google Maps API):
       * מרחק מהמחסן (החרש 10): ${travelData.distance}
@@ -47,49 +61,84 @@ export async function POST(req: Request) {
       ### חוקי ברזל וניהול לוגיסטי (DNA מחייב):
       ${dynamicRules}
 
-      ### פרוטוקול תצוגה ויזואלית (Visual OS V8.9.3):
-      בכל פעם שאתה מזהה מוצר, עליך לעצב את התגובה בדיוק כך:
-      1. **תמונה חיה**: השורה הראשונה חייבת להיות תמונה בפורמט: ![שם המוצר](image_url). אל תוסיף טקסט בשורה זו.
-      2. **כותרת מעוצבת**: השתמש ב-### לפני שם המוצר (למשל: ### סיקה 107).
-      3. **הדגשות נתונים**: כל נתון טכני (מק"ט, משקל) חייב להיות מוקף ב-** (למשל: **מק"ט: SY-107**).
-      4. **רשימת תכונות**: השתמש ב-* עבור בולטים.
-
       ### הנחיות מענה וביצוע (פקודות ראמי):
       1. **סמכות**: ראמי הוא המנהל. בצע פקודות 'שתף' או 'עבד' ללא שאלות מיותרות.
-      2. **מילון לוגיסטי**: בלה = 700 ק"ג | לוח גבס = 3 מ"ר (הוסף 5% פחת ועיגול למעלה).
-      3. **פרוטוקול סגירה**: אם הלקוח אישר (כן/סגור), הצג סיכום עם אימוג'ים ושאל "חכמת (מנוף) או איסוף עצמי?".
-      4. **אפס עיכובים**: אל תשאל שאלות בירוקרטיות. פעל מהר.
+      2. **ניהול נהגים**: חכמת (מנוף - יציאה מהחרש 10 בלבד), עלי (ידני - העברות וסניף התלמיד).
+      3. **מילון ומחשבון לוגיסטי**: 
+         - בלה חול/סומסום: 0.7 טון (700 ק"ג). 
+         - גבס: 3 מ"ר ללוח (+5% פחת, עיגול למעלה).
+      4. **פרוטוקול סגירת הזמנה (מצב אישור)**: 
+         אם הלקוח ענה בחיוב (כן/סגור/תזמין), בצע:
+         - א. סיכום: מוצר, כמות, ומשקל כולל עם אימוג'ים.
+         - ב. תצוגת UI: חובה להציג ProductStoreCard.
+         - ג. ברירת הובלה: הצג זמן הגעה משוער (${travelData.duration}) ושאל 'חכמת (מנוף) או איסוף עצמי?'.
+         - ד. שיתוף: הצג SabanWhatsAppButton לסיכום ההזמנה.
+      5. **אפס עיכובים**: שאל שאלת עומק אחת קצרה ומכוונת אם חסר נתון קריטי.
+      6. **חלופות**: אם מוצר חסר, הצע פתרון דומה מהמלאי הזמין.
 
-      ### מצב סידור עבודה ומלאי נוכחי:
-      - סידור עבודה: ${JSON.stringify(currentSchedule)}
-      - הקשר מוצר (Context): ${inventoryContext}
+      ### מצב סידור עבודה נוכחי:
+      ${JSON.stringify(currentSchedule)}
+
+      ### נתוני מלאי ומוצרים:
+      ${product ? JSON.stringify(product) : "אין מידע זמין על מוצר ספציפי"}
 
       ### חוקי עיצוב וסגנון (חובה):
       - איסור מוחלט על פסקאות של יותר מ-2 שורות.
-      - כל נתון טכני יתחיל באימוג'י (📦, ⚖️, 🛠️, ⏳, 📍).
-      - חישובים יוצגו בתיבת קוד (Code Block).
+      - שימוש ברווח כפול בין בלוקים.
+      - כל נתון טכני חייב להתחיל באימוג'י תואם (📦, ⚖️, 🛠️, ⏳, 📍).
+      - אם יש חישוב (מ"ר/טון) - הצג אותו בתיבת קוד (Code Block) או בבולד.
+      
+      ### תבנית מבנה מענה מחייבת:
+      ### 🏗️ [כותרת נושא]
+      * [נתון 1]
+      * [נתון 2]
+      
+      [כאן יופיע ה-UI Component]
+      
+      **[שאלת סגירה מודגשת]?**
 
       ### חתימה מחייבת:
+      תודה על הפניה בשם ראמי. 
       תודה, ומה תרצה שנבצע היום?
       ראמי, הכל מוכן לביצוע. מחכה לפקודה. 🦾
     `.trim();
 
-    // --- 3. שליחה ל-Google Gemini ---
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY || "");
-    const modelPool = ["gemini-3.1-flash-lite-preview", "gemini-3-flash-preview"];      model: "gemini-1.5-flash",
-      systemInstruction: finalSystemDNA 
-    });
+    // --- 3. ניהול מפתחות וסבב מודלים (Gemini 3) ---
+    const keys = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').map(k => k.trim()).filter(k => k.length > 10);
+    const modelPool = ["gemini-3.1-flash-lite-preview", "gemini-3-flash-preview"];
+    
+    let aiResponse = "";
+    let success = false;
 
-    const result = await model.generateContent(userQuery);
-    const aiText = result.response.text();
+    for (const key of keys) {
+      if (success) break;
+      const genAI = new GoogleGenerativeAI(key);
+      
+      for (const modelName of modelPool) {
+        if (success) break;
+        try {
+          const model = genAI.getGenerativeModel({
+            model: modelName,
+            systemInstruction: finalSystemDNA
+          });
 
+          const result = await model.generateContent(userQuery);
+          aiResponse = result.response.text();
+          if (aiResponse) success = true;
+        } catch (e) {
+          console.error(`Attempt failed with ${modelName}:`, e);
+        }
+      }
+    }
+
+    // --- 4. החזרת תשובה ---
     return NextResponse.json({ 
-      answer: aiText,
-      success: true 
+      answer: aiResponse || "מצטער ראמי, המוח עמוס. נסה שוב בעוד רגע.",
+      success: success 
     });
 
-  } catch (error: any) {
-    console.error("Brain Error:", error);
-    return NextResponse.json({ error: "Internal Brain Error", details: error.message }, { status: 500 });
+  } catch (error) {
+    console.error("Critical System Failure:", error);
+    return NextResponse.json({ error: "Internal Error" }, { status: 500 });
   }
 }
