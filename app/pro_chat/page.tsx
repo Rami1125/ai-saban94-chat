@@ -4,19 +4,18 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Send, Calculator, ShoppingCart, 
   Package, X, Share2, Trash2, Loader2,
-  User, Settings, Zap, Phone, Search, Ruler, BadgeCheck, RotateCcw
+  User, Settings, Zap, Phone, Search, Ruler, BadgeCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from "@/lib/supabase"; 
 import { toast, Toaster } from "sonner";
 
 /**
- * Saban OS V9.5.2 - Build Final Fix
- * נתיב מוח: /api/ai/pro
- * תיקון: הצהרת async תקינה, ניקוי תחביר וניהול סשן דפדפן
+ * Saban OS V9.5.3 - Final Build Fix
+ * פתרון: הצהרת async תקינה וניקוי שאריות קוד מחוץ לטווח הקומפוננטה
  */
 
-export default function WhatsAppCloneContent() {
+export default function WhatsAppClonePage() {
   const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -24,7 +23,7 @@ export default function WhatsAppCloneContent() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const phone = "972508860896";
 
-  // 1. אתחול סשן וטעינת היסטוריה מה-DB
+  // 1. ניהול סשן וטעינת היסטוריה
   useEffect(() => {
     if (typeof window !== 'undefined') {
       let sid = localStorage.getItem('saban_session_id');
@@ -33,38 +32,34 @@ export default function WhatsAppCloneContent() {
         localStorage.setItem('saban_session_id', sid);
       }
       setSessionId(sid);
-      loadChatHistory(sid);
+      
+      const loadHistory = async () => {
+        const { data } = await supabase
+          .from('chat_history')
+          .select('*')
+          .eq('session_id', sid)
+          .order('created_at', { ascending: true });
+        
+        if (data) {
+          setMessages(data.map(m => ({
+            id: m.id,
+            content: m.content,
+            role: m.role,
+            timestamp: new Date(m.created_at).getTime()
+          })));
+        }
+      };
+      loadHistory();
     }
   }, []);
-
-  const loadChatHistory = async (sid: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('chat_history')
-        .select('*')
-        .eq('session_id', sid)
-        .order('created_at', { ascending: true });
-      
-      if (data && !error) {
-        setMessages(data.map(m => ({
-          id: m.id,
-          content: m.content,
-          role: m.role,
-          timestamp: new Date(m.created_at).getTime()
-        })));
-      }
-    } catch (err) {
-      console.error("History Load Error:", err);
-    }
-  };
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
-  // 2. פונקציית שליחה - מתוקנת עם async/await
+  // 2. פונקציית שליחה - מוגדרת כ-async בצורה מפורשת
   const handleSendMessage = async (content: string) => {
-    if (!content || !content.trim() || isLoading) return;
+    if (!content.trim() || isLoading) return;
     
     const userMsg = { 
       id: Date.now().toString(), 
@@ -84,8 +79,7 @@ export default function WhatsAppCloneContent() {
         body: JSON.stringify({ 
           sessionId,
           query: content.trim(),
-          userName: "ראמי",
-          productContext: null 
+          userName: "ראמי"
         })
       });
       
@@ -102,18 +96,16 @@ export default function WhatsAppCloneContent() {
         }]);
       }
     } catch (error: any) {
-      toast.error("שגיאה בתקשורת עם המוח");
-      console.error("Send Message Error:", error);
+      toast.error("שגיאה בחיבור למוח הפרו");
+      console.error("Chat Error:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
   const resetSession = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('saban_session_id');
-      window.location.reload();
-    }
+    localStorage.removeItem('saban_session_id');
+    window.location.reload();
   };
 
   return (
@@ -123,13 +115,13 @@ export default function WhatsAppCloneContent() {
       {/* Sidebar */}
       <aside className="w-[400px] border-l bg-white/80 backdrop-blur-xl hidden lg:flex flex-col shadow-2xl z-20">
         <header className="p-6 flex justify-between items-center border-b border-slate-100">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-blue-600 rounded-[22px] flex items-center justify-center text-white shadow-lg">
+          <div className="flex items-center gap-4 text-right">
+            <div className="w-12 h-12 bg-blue-600 rounded-[22px] flex items-center justify-center text-white shadow-lg shadow-blue-200">
               <Zap size={24} fill="white" />
             </div>
             <div>
               <h1 className="font-black text-xl tracking-tighter text-slate-900 uppercase italic leading-none">SABAN PRO</h1>
-              <p className="text-[10px] font-bold text-blue-600 tracking-widest uppercase mt-1">Persistent Memory Active</p>
+              <p className="text-[10px] font-bold text-blue-600 tracking-widest uppercase mt-1">Memory Active</p>
             </div>
           </div>
           <Settings className="text-slate-400 cursor-pointer hover:rotate-90 transition-transform" size={20} />
@@ -144,49 +136,34 @@ export default function WhatsAppCloneContent() {
             </div>
           </div>
           
-          <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
-            <p className="text-[10px] font-black text-blue-600 uppercase mb-2 tracking-widest text-right">סטטוס סנכרון</p>
-            <div className="flex items-center gap-2 justify-end">
-              <span className="text-xs font-bold text-slate-700 italic">ID: {sessionId.slice(0, 8)}</span>
-              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-            </div>
-          </div>
-
           <button 
             onClick={resetSession}
-            className="w-full p-4 bg-rose-50 text-rose-600 rounded-2xl text-xs font-black hover:bg-rose-100 transition-all flex items-center justify-center gap-2"
+            className="w-full p-4 bg-rose-50 text-rose-600 rounded-2xl text-xs font-black hover:bg-rose-100 transition-all"
           >
-            <RotateCcw size={14} /> איפוס סשן ושיחה חדשה
+            איפוס סשן ושיחה חדשה
           </button>
         </div>
       </aside>
 
-      {/* Main Chat Area */}
+      {/* Main Area */}
       <main className="flex-1 flex flex-col relative bg-[#F8F9FA]">
         <header className="h-20 bg-white/90 backdrop-blur-md border-b flex justify-between items-center px-8 z-10 shadow-sm">
           <div className="flex items-center gap-4">
             <div className="w-11 h-11 bg-slate-900 rounded-[18px] flex items-center justify-center text-white font-bold text-xs shadow-lg">S</div>
             <div className="text-right">
-              <div className="font-black text-lg text-slate-900 leading-none italic uppercase tracking-tighter">Saban Consulting Pro</div>
-              <div className="text-[10px] text-emerald-600 font-black uppercase mt-1 tracking-tighter italic">Google Gemini 1.5 Pro Enabled</div>
+              <div className="font-black text-lg text-slate-900 leading-none italic uppercase">Saban Consulting Pro</div>
+              <div className="text-[10px] text-emerald-600 font-black uppercase mt-1 tracking-tighter italic">AI Assistant Live</div>
             </div>
-          </div>
-          <div className="flex gap-6 text-slate-400">
-             <Ruler className="cursor-pointer hover:text-blue-600 transition-colors" size={20} />
-             <Search className="cursor-pointer hover:text-slate-900 transition-colors" size={20} />
           </div>
         </header>
 
-        {/* Chat List */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4 pb-32 scrollbar-hide">
+        <div className="flex-1 overflow-y-auto p-6 space-y-4 pb-32">
           {messages.map((m) => (
             <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
               <div className={`max-w-[80%] p-4 rounded-[24px] shadow-sm border ${
-                m.role === 'user' 
-                  ? 'bg-white border-slate-200 text-slate-900 rounded-tr-none text-right' 
-                  : 'bg-blue-600 text-white border-blue-500 shadow-blue-200 rounded-tl-none text-right'
+                m.role === 'user' ? 'bg-white border-slate-200 text-slate-900 text-right' : 'bg-blue-600 text-white border-blue-500 text-right'
               }`}>
-                <p className="text-sm leading-relaxed whitespace-pre-wrap font-medium">{m.content}</p>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.content}</p>
               </div>
             </div>
           ))}
@@ -194,32 +171,29 @@ export default function WhatsAppCloneContent() {
             <div className="flex justify-end animate-pulse">
               <div className="bg-blue-50 p-3 rounded-xl flex items-center gap-2 border border-blue-100">
                 <Loader2 className="animate-spin text-blue-500" size={14} />
-                <span className="text-[10px] font-black text-blue-600 uppercase tracking-tighter italic">המוח מעבד היסטוריה...</span>
+                <span className="text-[10px] font-black text-blue-600 uppercase">מעבד...</span>
               </div>
             </div>
           )}
           <div ref={scrollRef} />
         </div>
 
-        {/* Footer */}
-        <footer className="p-6 bg-transparent absolute bottom-0 w-full z-20">
-          <div className="max-w-4xl mx-auto bg-white/90 border border-slate-200 p-2 rounded-[32px] shadow-2xl flex items-center gap-2 backdrop-blur-md">
+        <footer className="p-6 absolute bottom-0 w-full z-20">
+          <div className="max-w-4xl mx-auto bg-white border p-2 rounded-[32px] shadow-2xl flex items-center gap-2">
              <input 
               type="text" 
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="כתוב פקודה למוח הפרו..." 
-              className="flex-1 bg-transparent px-6 py-3 outline-none font-bold text-sm text-slate-900 text-right"
+              className="flex-1 bg-transparent px-6 py-3 outline-none font-bold text-sm text-right"
               onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  handleSendMessage(input);
-                }
+                if (e.key === 'Enter') handleSendMessage(input);
               }}
             />
             <button 
               onClick={() => handleSendMessage(input)} 
               disabled={isLoading}
-              className="w-12 h-12 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 rounded-full flex items-center justify-center text-white shadow-lg transition-all active:scale-90 shadow-blue-200"
+              className="w-12 h-12 bg-blue-600 hover:bg-blue-700 rounded-full flex items-center justify-center text-white transition-all active:scale-90"
             >
               {isLoading ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
             </button>
