@@ -42,10 +42,11 @@ export default function SabanAI() {
       // 2. קריאה ל-API (כאן אנחנו שולחים את השאלה + הנתונים מהטבלה)
       const response = await fetch('/api/ai/consult', {
         method: 'POST',
-        body: JSON.stringify({
-          question: userMsg,
-          context: schedule, // המוח מקבל את כל הטבלה און-ליין
-          history: messages.slice(-5) // זוכר 5 הודעות אחרונות
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          query: currentInput,
+          context: productFound ? { type: 'inventory', data: productFound } : null,
+          history: messages.slice(-5) // שולח רק את 5 ההודעות האחרונות לשמירה על מהירות
         })
       });
 
