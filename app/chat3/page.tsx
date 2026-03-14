@@ -144,27 +144,56 @@ export default function App() {
   const handleSend = async () => {
     if (!input.trim() || loading) return;
 
+    // 1. הוספת הודעת המשתמש למסך
     const userMsg = { id: Date.now(), role: 'user', text: input, timestamp: new Date() };
     setMessages(prev => [...prev, userMsg]);
+    
     const currentInput = input;
     setInput("");
     setLoading(true);
 
-    const product = await fetchInventory(currentInput);
+    try {
+      // 2. שליפה מהירה מהמלאי (כדי שהמוח ידע על מה מדובר)
+      const productFound = await fetchInventory(currentInput);
 
-    setTimeout(() => {
-      let botText = "הבנתי הבוס. בודק במלאי...";
-      
-      if (product) {
-        botText = `מצאתי את ${product.product_name} במלאי. הזרקתי לך את המחשבון כדי שנדייק את הכמות לביצוע. 🏗️`;
-        setActiveProduct(product);
-      } else {
-        botText = "לא מצאתי מק''ט תואם בדיוק, אבל אני בודק חלופות במחסן החרש 10. מה תרצה שנבצע? 🦾";
+      // 3. פנייה למוח בנתיב app/api/ai/consult
+      const response = await fetch('/api/ai/consult', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          query: currentInput,
+          context: productFound ? { type: 'inventory', data: productFound } : null,
+          history: messages.slice(-5) // שולח רק את 5 ההודעות האחרונות לשמירה על מהירות
+        })
+      });
+
+      const result = await response.json();
+
+      // 4. אם המוח מצא מוצר, נפעיל את המחשבון הלוגיסטי
+      if (productFound) {
+        setActiveProduct(productFound);
       }
 
-      setMessages(prev => [...prev, { id: Date.now() + 1, role: 'bot', text: botText, timestamp: new Date() }]);
+      // 5. הצגת תשובת המוח (AI) בצ'אט
+      const botMsg = { 
+        id: Date.now() + 1, 
+        role: 'bot', 
+        text: result.text || result.answer || "קיבלתי, בודק איך להתקדם...", 
+        timestamp: new Date() 
+      };
+      setMessages(prev => [...prev, botMsg]);
+
+    } catch (error) {
+      console.error("Brain Connection Error:", error);
+      setMessages(prev => [...prev, { 
+        id: Date.now(), 
+        role: 'bot', 
+        text: "משהו השתבש בחיבור למוח, אני זמין כאן לביצוע ידני. 🛠️", 
+        timestamp: new Date() 
+      }]);
+    } finally {
       setLoading(false);
-    }, 800);
+    }
   };
 
   const addToCart = (product, units) => {
