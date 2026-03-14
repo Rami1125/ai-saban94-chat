@@ -11,9 +11,9 @@ import { supabase } from "@/lib/supabase";
 import { toast, Toaster } from "sonner";
 
 /**
- * Saban OS V9.5 - Pro Chat Interface (Build Fixed)
+ * Saban OS V9.5.1 - Build Fixed & Production Ready
  * נתיב מוח: /api/ai/pro
- * תכונות: ניהול סשן קבוע, סנכרון היסטוריה מה-DB, תיקון שגיאות בילד.
+ * תיקון: הוספת async חסר וניקוי תחביר ששבר את Vercel
  */
 
 export default function WhatsAppCloneContent() {
@@ -24,15 +24,17 @@ export default function WhatsAppCloneContent() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const phone = "972508860896";
 
-  // 1. ניהול סשן וטעינת היסטוריה בעלייה (Persistent Session)
+  // 1. ניהול סשן קבוע (Persistent Session)
   useEffect(() => {
-    let sid = typeof window !== 'undefined' ? localStorage.getItem('saban_session_id') : null;
-    if (!sid) {
-      sid = `sid_${Math.random().toString(36).substring(2, 15)}`;
-      if (typeof window !== 'undefined') localStorage.setItem('saban_session_id', sid);
+    if (typeof window !== 'undefined') {
+      let sid = localStorage.getItem('saban_session_id');
+      if (!sid) {
+        sid = `sid_${Math.random().toString(36).substring(2, 15)}`;
+        localStorage.setItem('saban_session_id', sid);
+      }
+      setSessionId(sid);
+      loadChatHistory(sid);
     }
-    setSessionId(sid);
-    loadChatHistory(sid);
   }, []);
 
   const loadChatHistory = async (sid: string) => {
@@ -60,7 +62,7 @@ export default function WhatsAppCloneContent() {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
-  // 2. פונקציית שליחת הודעה - מתוקנת עם async/await תקין
+  // 2. פונקציית שליחת הודעה - מתוקנת עם async
   const handleSendMessage = async (content: string) => {
     if (!content.trim() || isLoading) return;
     
@@ -72,6 +74,7 @@ export default function WhatsAppCloneContent() {
     };
     
     setMessages(prev => [...prev, userMsg]);
+    setInput("");
     setIsLoading(true);
 
     try {
@@ -99,11 +102,10 @@ export default function WhatsAppCloneContent() {
         }]);
       }
     } catch (error: any) {
-      toast.error("שגיאה בחיבור למוח הפרו");
+      toast.error("שגיאה בתקשורת עם המוח");
       console.error("Send Message Error:", error);
     } finally {
       setIsLoading(false);
-      setInput("");
     }
   };
 
@@ -143,10 +145,10 @@ export default function WhatsAppCloneContent() {
           </div>
           
           <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
-            <p className="text-[10px] font-black text-blue-600 uppercase mb-2 tracking-widest">סטטוס מוח</p>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+            <p className="text-[10px] font-black text-blue-600 uppercase mb-2 tracking-widest text-right">סטטוס מוח</p>
+            <div className="flex items-center gap-2 justify-end">
               <span className="text-xs font-bold text-slate-700 italic">Persistent Memory v9.5</span>
+              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
             </div>
           </div>
 
@@ -166,7 +168,7 @@ export default function WhatsAppCloneContent() {
             <div className="w-11 h-11 bg-slate-900 rounded-[18px] flex items-center justify-center text-white font-bold text-xs shadow-lg">S</div>
             <div className="text-right">
               <div className="font-black text-lg text-slate-900 leading-none italic uppercase">Saban Consulting Pro</div>
-              <div className="text-[10px] text-emerald-600 font-black uppercase mt-1 tracking-tighter italic">Google Gemini 1.5 Flash</div>
+              <div className="text-[10px] text-emerald-600 font-black uppercase mt-1 tracking-tighter italic">Persistent History Active</div>
             </div>
           </div>
           <div className="flex gap-6 text-slate-400">
@@ -192,7 +194,7 @@ export default function WhatsAppCloneContent() {
             <div className="flex justify-end animate-pulse">
               <div className="bg-blue-50 p-3 rounded-xl flex items-center gap-2 border border-blue-100">
                 <Loader2 className="animate-spin text-blue-500" size={14} />
-                <span className="text-[10px] font-black text-blue-600 uppercase tracking-tighter">המוח מעבד היסטוריה...</span>
+                <span className="text-[10px] font-black text-blue-600 uppercase tracking-tighter">המוח מעבד נתונים...</span>
               </div>
             </div>
           )}
@@ -207,7 +209,7 @@ export default function WhatsAppCloneContent() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="כתוב פקודה למוח הפרו..." 
-              className="flex-1 bg-transparent px-6 py-3 outline-none font-bold text-sm text-slate-900"
+              className="flex-1 bg-transparent px-6 py-3 outline-none font-bold text-sm text-slate-900 text-right"
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   handleSendMessage(input);
@@ -217,7 +219,7 @@ export default function WhatsAppCloneContent() {
             <button 
               onClick={() => handleSendMessage(input)} 
               disabled={isLoading}
-              className="w-12 h-12 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 rounded-full flex items-center justify-center text-white shadow-lg shadow-blue-200 transition-all active:scale-90"
+              className="w-12 h-12 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 rounded-full flex items-center justify-center text-white shadow-lg transition-all active:scale-90"
             >
               {isLoading ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
             </button>
@@ -230,7 +232,7 @@ export default function WhatsAppCloneContent() {
   );
 }
 
-// רכיבי עזר קטנים למניעת ReferenceErrors
+// רכיב עזר
 function RotateCcw(props: any) {
   return (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
