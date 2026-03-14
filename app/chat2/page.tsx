@@ -64,7 +64,13 @@ export default function SabanChatPage() {
           userId: "web-client"
         }),
       });
+// --- רכיב אפקט הקלדה מוגן מקריסות ---
+const TypewriterEffect = ({ text }: { text: string }) => {
+};
 
+// --- רכיב אפקט חשיבה לוגיסטי ---
+const SabanLoader = () => (
+);
       const data = await response.json();
       
       const assistantMsg: Message = { 
