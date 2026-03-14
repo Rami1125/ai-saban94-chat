@@ -7,13 +7,15 @@ import {
   CheckCircle2, MapPin, Info, User
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { supabase } from "@/lib/supabase"; // ייבוא הקליינט המחובר ל-DB
+import { toast, Toaster } from "sonner";
 
 /**
- * Saban OS V8.9 - Build Fixed
+ * Saban OS V8.9.1 - Build Fixed & Brain Connected
  * נתיב מוח: /api/ai/consult
  */
 
-// --- Product Calculator Component ---
+// --- רכיב המחשבון הלוגיסטי (Action Card) ---
 const ProductActionCard = ({ product, onClose, onAdd }) => {
   const [inputs, setInputs] = useState({ length: "", height: "", waste: "5" });
   
@@ -123,24 +125,37 @@ export default function App() {
     }
   };
 
+  /**
+   * פונקציית המוח המעודכנת (משלבת את askGemini לבקשתך)
+   */
   const handleSend = async () => {
     if (!input.trim() || loading) return;
 
-    const userMsg = { id: Date.now(), role: 'user', text: input, timestamp: new Date() };
+    const userMsgText = input;
+    const userMsg = { id: Date.now(), role: 'user', text: userMsgText, timestamp: new Date() };
+    
+    // עדכון הממשק מיידית
     setMessages(prev => [...prev, userMsg]);
-    const currentInput = input;
     setInput("");
     setLoading(true);
 
     try {
-      const productFound = await fetchInventory(currentInput);
+      // 1. שליפת נתונים משולבת ל-Context (מלאי + סידור עבודה)
+      const [productFound, { data: schedule }] = await Promise.all([
+        fetchInventory(userMsgText),
+        supabase.from('saban_dispatch').select('*').limit(10)
+      ]);
 
+      // 2. פנייה למוח בנתיב /api/ai/consult
       const response = await fetch('/api/ai/consult', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          query: currentInput,
-          context: productFound ? { type: 'inventory', data: productFound } : null,
+          query: userMsgText,
+          context: {
+            inventory: productFound ? productFound : null,
+            schedule: schedule || []
+          },
           history: messages.slice(-5).map(m => ({ role: m.role, content: m.text }))
         })
       });
@@ -150,18 +165,26 @@ export default function App() {
       const result = await response.json();
       const botAnswer = result.answer || result.text || result.content || "קיבלתי, בודק איך להתקדם... 🦾";
 
+      // 3. הפעלת UI בהתאם לתוצאה
       if (productFound) {
         setActiveProduct(productFound);
       }
 
       setMessages(prev => [...prev, { 
-        id: Date.now() + 1, role: 'bot', text: botAnswer, timestamp: new Date() 
+        id: Date.now() + 1, 
+        role: 'bot', 
+        text: botAnswer, 
+        timestamp: new Date() 
       }]);
 
     } catch (err) {
       console.error("Chat Error:", err);
+      toast.error("שגיאה בתקשורת עם המוח הלוגיסטי");
       setMessages(prev => [...prev, { 
-        id: Date.now(), role: 'bot', text: "יש תקלה בתקשורת למוח הלוגיסטי. בוא נבצע ידנית. 🛠️", timestamp: new Date() 
+        id: Date.now(), 
+        role: 'bot', 
+        text: "יש תקלה בתקשורת למוח הלוגיסטי. בוא נבצע ידנית. 🛠️", 
+        timestamp: new Date() 
       }]);
     } finally {
       setLoading(false);
@@ -184,6 +207,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-slate-950 text-slate-200 font-sans overflow-hidden" dir="rtl">
+      <Toaster position="top-center" richColors />
       
       {/* Sidebar (Desktop) */}
       <aside className="hidden lg:flex w-20 flex-col items-center py-8 border-l border-white/5 bg-slate-900/50 gap-6">
