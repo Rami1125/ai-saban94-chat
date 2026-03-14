@@ -12,7 +12,6 @@ export async function POST(req: Request) {
     const supabase = getSupabase();
     const rtdb = getRTDB();
     
-    // קריאת ה-Body עם הגנה מקריסה
     const body = await req.json().catch(() => ({}));
     const { messages, phone, userName } = body;
     const lastUserMsg = messages?.[messages.length - 1]?.content;
@@ -21,36 +20,44 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No query found" }, { status: 400 });
     }
 
-    // --- 1. חיפוש מלאי חכם (Saban Smart Search) ---
+    // --- 1. חיפוש מלאי חכם בטבלת inventory ---
     const cleanSearch = lastUserMsg.replace(/[?？!]/g, "").trim();
-    const { data: product } = await supabase
+    
+    // שליפת כל השדות (product_name, price, image_url, video_url, description, sku)
+    const { data: product, error: dbError } = await supabase
       .from('inventory')
       .select('*')
       .or(`product_name.ilike.%${cleanSearch}%,sku.ilike.%${cleanSearch}%`)
+      .order('stock_quantity', { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    // --- 2. בניית ה-DNA המעודכן (Saban Intelligence V5.1) ---
+    if (dbError) console.error("Supabase Error:", dbError.message);
+
+    // --- 2. בניית ה-DNA המעודכן (Saban Intelligence DNA V5.2) ---
     const finalDNA = `
-      אתה המוח הלוגיסטי של חמ"ל סבן.
-      המנהל: ראמי.
+      אתה המוח הלוגיסטי של חמ"ל סבן חומרי בניין.
+      המנהל והשותף שלך: ראמי.
       שם הלקוח הנוכחי: ${userName || 'לקוח'}.
-      נתוני מוצר מהמערכת: ${product ? JSON.stringify(product) : "לא נמצא מוצר תואם במלאי"}.
       
-      חוקי ברזל:
-      - אם יש מוצר, שלוף נתונים טכניים (משקל, שימוש).
-      - ענה בעברית מקצועית, קצרה וקולעת.
-      - חתימה: "תודה, ומה תרצה שנבצע היום? ראמי, הכל מוכן לביצוע. 🦾"
+      ### נתוני מוצר מהמערכת (JSON):
+      ${product ? JSON.stringify(product) : "סטטוס: לא נמצא מוצר תואם במלאי כרגע."}
+      
+      ### חוקי הברזל למענה:
+      1. **UI FIRST**: אם נמצא מוצר, פתח בתיאור קצר שלו. הממשק יציג את הכרטיס אוטומטית.
+      2. **דיוק טכני**: שלוף מה-JSON מחיר, כמות ושימושים (אם קיימים).
+      3. **מחשבון**: בלה חול = 700 ק"ג. לוח גבס = 3 מ"ר. דבק = 5 ק"ג למ"ר.
+      4. **סגנון**: עברית מקצועית, פסקאות קצרות (עד 2 שורות), ללא חפירות.
+      
+      ### חתימה מחייבת:
+      תודה, ומה תרצה שנבצע היום?
+      ראמי, הכל מוכן לביצוע. מחכה לפקודה. 🦾
     `.trim();
 
-    // --- 3. סבב מודלים יציב (Gemini 3.1 - תיקון ה-404) ---
+    // --- 3. סבב מודלים יציב (Gemini 3.1) ---
     const keys = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').map(k => k.trim()).filter(k => k.length > 20);
+    const modelPool = ["gemini-3.1-flash-lite-preview", "gemini-3.1-pro-preview"];
     
-    // מודלים של סדרת 3.1 (היחידים שפעילים ב-v1beta עכשיו)
-        const modelPool = [
-        "gemini-3.1-flash-lite-preview", 
-        "gemini-3.1-pro-preview"
-        ];
     let aiResponse = "";
     let success = false;
 
@@ -69,7 +76,7 @@ export async function POST(req: Request) {
             aiResponse = result.response.text();
             if (aiResponse) success = true;
           } catch (e) {
-            console.error(`Skipping model ${modelName} due to error`);
+            console.error(`Skipping model ${modelName}`);
           }
         }
       } catch (e) {
@@ -77,23 +84,25 @@ export async function POST(req: Request) {
       }
     }
 
-    // --- 4. סנכרון Firebase (WhatsApp Pipeline) ---
+    // --- 4. עדכון Firebase Pipeline (לצורך WhatsApp/Monitoring) ---
     if (phone && aiResponse) {
       try {
         const cleanPhone = phone.replace(/\D/g, '');
         await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), {
           text: aiResponse,
+          product: product || null,
           timestamp: Date.now(),
           status: "pending"
         });
       } catch (fbError) {
-        console.warn("Firebase update skipped (check rules)");
+        console.warn("Firebase update skipped");
       }
     }
 
+    // --- 5. החזרת התשובה לממשק ---
     return NextResponse.json({ 
-      answer: aiResponse || "מצטער, יש עומס במוח. נסה שוב בעוד רגע.", 
-      product: product || null 
+      answer: aiResponse || "מצטער ראמי, יש עומס במוח. נסה שוב בעוד רגע.", 
+      product: product || null // חשוב מאוד: זה מה שמציג את כרטיס המוצר ב-chat7
     });
 
   } catch (error) {
