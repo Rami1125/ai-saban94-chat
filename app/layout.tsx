@@ -1,37 +1,36 @@
-"use client";
-
-import { useEffect } from "react";
+import type { Metadata, Viewport } from "next";
 import { Heebo } from "next/font/google";
 import "./globals.css";
 import { ChatActionsProvider } from "@/context/ChatActionsContext";
 import { BusinessConfigProvider } from "@/context/BusinessConfigContext";
 import { Toaster } from "@/components/ui/toaster";
+import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
 
 const heebo = Heebo({ subsets: ["hebrew"], variable: "--font-heebo" });
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  
-  // רישום ה-Service Worker לחסינות אינטרנט חלש (Offline)
-  useEffect(() => {
-    if ("serviceWorker" in navigator && window.location.hostname !== "localhost") {
-      window.addEventListener("load", () => {
-        navigator.serviceWorker.register("/sw.js").then(
-          (registration) => console.log("Saban SW Active:", registration.scope),
-          (err) => console.log("SW Registration failed:", err)
-        );
-      });
-    }
-  }, []);
+export const metadata: Metadata = {
+  title: "Saban OS - ח. סבן לוגיסטיקה",
+  description: "מערכת ייעוץ חכמה למוצרי בניין",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Saban OS",
+  },
+  manifest: "/manifest.json",
+};
 
+export const viewport: Viewport = {
+  themeColor: "#0B2C63",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="he" dir="rtl">
       <head>
-        {/* הגדרות PWA למובייל */}
-        <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#0B2C63" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Saban OS" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body className={`${heebo.variable} font-sans antialiased`}>
@@ -39,6 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <ChatActionsProvider>
             {children}
             <Toaster />
+            <ServiceWorkerRegistrar />
           </ChatActionsProvider>
         </BusinessConfigProvider>
 
