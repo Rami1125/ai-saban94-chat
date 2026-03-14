@@ -11,11 +11,15 @@ export async function POST(req: Request) {
   try {
     const supabase = getSupabase();
     const rtdb = getRTDB();
-    const body = await req.json();
+    
+    // קריאת ה-Body עם הגנה מקריסה
+    const body = await req.json().catch(() => ({}));
     const { messages, phone, userName } = body;
-    const lastUserMsg = messages[messages.length - 1]?.content;
+    const lastUserMsg = messages?.[messages.length - 1]?.content;
 
-    if (!lastUserMsg) return NextResponse.json({ error: "No query" }, { status: 400 });
+    if (!lastUserMsg) {
+      return NextResponse.json({ error: "No query found" }, { status: 400 });
+    }
 
     // --- 1. חיפוש מלאי חכם (Saban Smart Search) ---
     const cleanSearch = lastUserMsg.replace(/[?？!]/g, "").trim();
@@ -26,26 +30,29 @@ export async function POST(req: Request) {
       .limit(1)
       .maybeSingle();
 
-    // --- 2. בניית ה-DNA (Saban DNA V5) ---
+    // --- 2. בניית ה-DNA המעודכן (Saban Intelligence V5.1) ---
     const finalDNA = `
-      אתה העוזר הלוגיסטי של ראמי בחמ"ל סבן. 
-      שם הלקוח: ${userName || 'לקוח'}.
-      נתוני מלאי: ${product ? JSON.stringify(product) : "לא נמצא מוצר"}.
+      אתה המוח הלוגיסטי של חמ"ל סבן.
+      המנהל: ראמי.
+      שם הלקוח הנוכחי: ${userName || 'לקוח'}.
+      נתוני מוצר מהמערכת: ${product ? JSON.stringify(product) : "לא נמצא מוצר תואם במלאי"}.
       
       חוקי ברזל:
-      - אם נמצא מוצר, פתח בתשובה חיובית וציין מפרט טכני.
-      - פסקאות קצרות (מקס' 2 שורות).
-      - חתימה מחייבת: "תודה, ומה תרצה שנבצע היום? ראמי, הכל מוכן לביצוע. 🦾"
+      - אם יש מוצר, שלוף נתונים טכניים (משקל, שימוש).
+      - ענה בעברית מקצועית, קצרה וקולעת.
+      - חתימה: "תודה, ומה תרצה שנבצע היום? ראמי, הכל מוכן לביצוע. 🦾"
     `.trim();
 
-    // --- 3. סבב מודלים ומפתחות (חיסון 404 ו-400) ---
+    // --- 3. סבב מודלים יציב (Gemini 3.1 - תיקון ה-404) ---
     const keys = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').map(k => k.trim()).filter(k => k.length > 20);
-// המודלים המעודכנים לפי התיעוד של מרץ 2026
-const modelPool = [
-  "gemini-3.1-flash-lite-preview", // המודל החדש והיציב ביותר כרגע
-  "gemini-3-flash-preview",        // מודל הדור השלישי הרגיל
-  "gemini-3.1-pro-preview"         // מודל הפרו החזק
-];    
+    
+    // מודלים של סדרת 3.1 (היחידים שפעילים ב-v1beta עכשיו)
+    const modelPool = [
+      "gemini-3.1-flash-lite-preview", 
+      "gemini-3.1-pro-preview",
+      "gemini-3-flash-preview"
+    ];
+    
     let aiResponse = "";
     let success = false;
 
@@ -56,16 +63,23 @@ const modelPool = [
         for (const modelName of modelPool) {
           if (success) break;
           try {
-            const model = genAI.getGenerativeModel({ model: modelName, systemInstruction: finalDNA });
+            const model = genAI.getGenerativeModel({ 
+              model: modelName, 
+              systemInstruction: finalDNA 
+            });
             const result = await model.generateContent(lastUserMsg);
             aiResponse = result.response.text();
             if (aiResponse) success = true;
-          } catch (e) { console.error(`Failed ${modelName}`, e); }
+          } catch (e) {
+            console.error(`Skipping model ${modelName} due to error`);
+          }
         }
-      } catch (e) { console.error("Key error", e); }
+      } catch (e) {
+        console.error("Key failure, rotating...");
+      }
     }
 
-    // --- 4. עדכון Firebase (עם הגנה מחסימת הרשאות) ---
+    // --- 4. סנכרון Firebase (WhatsApp Pipeline) ---
     if (phone && aiResponse) {
       try {
         const cleanPhone = phone.replace(/\D/g, '');
@@ -74,11 +88,18 @@ const modelPool = [
           timestamp: Date.now(),
           status: "pending"
         });
-      } catch (fbError) { console.warn("Firebase rules blocked update"); }
+      } catch (fbError) {
+        console.warn("Firebase update skipped (check rules)");
+      }
     }
 
-    return NextResponse.json({ answer: aiResponse, product });
+    return NextResponse.json({ 
+      answer: aiResponse || "מצטער, יש עומס במוח. נסה שוב בעוד רגע.", 
+      product: product || null 
+    });
+
   } catch (error) {
-    return NextResponse.json({ error: "Internal Error" }, { status: 500 });
+    console.error("Critical System Failure:", error);
+    return NextResponse.json({ error: "Internal System Error" }, { status: 500 });
   }
 }
