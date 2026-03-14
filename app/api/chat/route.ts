@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     const { messages, phone } = await req.json();
     const lastUserMsg = messages[messages.length - 1].content;
 
-    // --- 1. אופטימיזציה של שאילתת החיפוש ---
+    // --- 1. אופטימיזציה של שאילתת החיפוש (Saban Search Engine) ---
     const cleanSearch = lastUserMsg.replace(/[?？!]/g, "").trim();
     const searchWords = cleanSearch.split(/\s+/).filter((word: string) => word.length > 2);
     
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
 
     let product = inventoryRes.data;
 
-    // --- 2. מנגנון Fallback ---
+    // --- 2. מנגנון Fallback למלאי ---
     if (!product && searchWords.length > 0) {
       const { data: fallback } = await supabase.from('inventory')
         .select('*')
@@ -46,7 +46,7 @@ export async function POST(req: Request) {
       if (fallback) product = fallback;
     }
 
-    // --- 3. איחוד מוחות (DNA) ---
+    // --- 3. איחוד מוחות (Saban DNA V4.1) ---
     const rulesDNA = configRes.data
       ?.filter(r => r.agent_type === 'executor' && r.is_active)
       .map(r => r.instruction)
@@ -65,41 +65,46 @@ export async function POST(req: Request) {
       - SEARCH_QUERY: ${cleanSearch}
     `.trim();
 
-    // --- 4. ניהול מפתחות וסבב מודלים ---
+    // --- 4. ניהול מפתחות וסבב מודלים יציב (עדכון מרץ 2026) ---
     const keys = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').map(k => k.trim()).filter(k => k.length > 10);
+    
+    // מודלים יציבים (Stable) + מודל הדור הבא 3.1 ב-Preview
     const modelPool = [
-    "gemini-1.5-flash-latest", 
-    "gemini-1.5-pro-latest",
-    "gemini-1.5-flash"
+      "gemini-1.5-flash-latest", // המודל המבצעי המהיר ביותר
+      "gemini-1.5-pro-latest",   // מודל הגיבוי לחשיבה עמוקה
+      "gemini-3.1-flash-lite-preview" // מודל הדור החדש שהושק ב-3 במרץ
     ];
     
     let aiResponse = "";
     let success = false;
 
+    // רוטציה בין מפתחות (API Key Rotation)
     for (const key of keys) {
       if (success) break;
       const genAI = new GoogleGenerativeAI(key);
       
+      // רוטציה בין מודלים (Model Fallback)
       for (const modelName of modelPool) {
         if (success) break;
         try {
           const model = genAI.getGenerativeModel({
             model: modelName,
             systemInstruction: `
-              ### DNA מחייב (חוקי הברזל) ###
+              ### DNA מחייב (חוקי הברזל של ח. סבן) ###
               ${finalDNA}
               
               ### נתוני מלאי בזמן אמת (JSON) ###
               ${product ? JSON.stringify(product) : "סטטוס: מוצר לא נמצא במערכת"}
 
               ### פרוטוקול מענה - סדר פעולות מחייב: ###
-              1. **תצוגה ויזואלית (UI First)**: אם נמצא מוצר, התשובה תיפתח בהפעלת ProductStoreCard.
-              2. **מפרט טכני**: שלוף drying_time, application_method ו-features.
-              3. **מחשבון חכם**: גבס (שטח/3 + 5% פחת), דבק (שטח*5 ק"ג).
-              4. **בקרת לינקים**: השתמש רק ב-MAGIC_URL מה-JSON.
-              5. **סגנון**: תמציתי, סמכותי, ללא הקדמות.
+              1. **תצוגה ויזואלית (UI First)**: אם נמצא מוצר, פתח בתיאור ויזואלי והפעל כרטיס מוצר.
+              2. **מפרט טכני**: הצג drying_time, application_method ו-features בבולטים.
+              3. **מחשבון חכם**: בצע חישובי גבס/דבק לפי שטח לקוח.
+              4. **בקרת לינקים**: השתמש ב-MAGIC_URL מה-JSON.
+              5. **סגנון**: תמציתי, מקצועי, ללא הקדמות מיותרות.
               
-              ### חתימה ###
+              ### חתימה מחייבת ###
+              תודה ובשאלה מה תרצה שנבצע היום?
               ראמי, הכל מוכן לביצוע. מחכה לפקודה. 🦾
             `
           });
@@ -111,7 +116,8 @@ export async function POST(req: Request) {
             success = true;
           }
         } catch (e) {
-          console.error(`Error with ${modelName}:`, e);
+          console.error(`Attempt failed with ${modelName} using key ...${key.slice(-4)}:`, e);
+          // אם המודל הושבת (404), הלולאה תמשיך למודל הבא ברשימה
         }
       }
     }
@@ -122,7 +128,7 @@ export async function POST(req: Request) {
       aiResponse = aiResponse.replace(/MAGIC_URL/gi, finalLink);
     }
 
-    // --- 6. עדכון לוג ה-Pipeline ---
+    // --- 6. עדכון Pipeline ל-Firebase (WhatsApp Pipeline) ---
     if (phone && aiResponse) {
       const cleanPhone = phone.replace(/\D/g, '');
       await update(ref(rtdb, `saban94/pipeline/${cleanPhone}`), {
