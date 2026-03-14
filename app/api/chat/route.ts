@@ -45,20 +45,20 @@ export async function POST(req: Request) {
     const product = inventoryRes.data;
     const baseDNA = settingsRes.data?.content || "אתה העוזר הלוגיסטי והשותף המבצע של ראמי בחמ\"ל סבן.";
     const dynamicRules = rulesRes.data?.map(r => r.instruction).join("\n") || "";
+// שלב 1: הגדרת נתוני הניווט (יש לוודא ש-travelData מגיע מהלוגיקה של Google Maps לפני כן)
+const travelInfo = typeof travelData !== 'undefined' ? travelData : { distance: "טרם נקבע", duration: "בחישוב..." };
 
-    // --- 2. איחוד ספר החוקים ל-DNA אחד חזק (Saban Executive DNA V4) ---
-    const finalSystemDNA = `
-      ${baseDNA}
-// שלב 1: שליפת נתוני מפות (במידה ויש יעד מהלקוח)
-    // הערה: יש להגדיר travelData לפני ה-finalSystemDNA
-    const travelInfo = travelData || { distance: "טרם נקבע", duration: "בחישוב..." };
+// שלב 2: בניית ה-DNA המאוחד
+const finalSystemDNA = `
+${baseDNA}
 
-    const finalSystemDNA = `
-      ${baseDNA}
-      
-      ### חוקי ברזל וניהול לוגיסטי (DNA מחייב):
-      ${dynamicRules}
+### נתוני לוגיסטיקה וניווט (זמן אמת):
+- מרחק ליעד: ${travelInfo.distance}
+- זמן הגעה מוערך: ${travelInfo.duration}
 
+### חוקי ברזל וניהול לוגיסטי (DNA מחייב):
+${dynamicRules}
+`;
       ### נתוני לוגיסטיקה בזמן אמת (Google Maps API):
       * מרחק מהמחסן (החרש 10): ${travelInfo.distance}
       * זמן נסיעה משוער למשאית: ${travelInfo.duration}
