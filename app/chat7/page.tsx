@@ -1,192 +1,213 @@
 "use client";
-import React, { useState, useEffect, useRef } from 'react';
-import { User, Send, Search, Building2, MapPin, Loader2 } from 'lucide-react';
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import React, { useState, useEffect, useRef } from "react";
+import { rtdb } from "@/lib/firebase";
+import { ref, onValue } from "firebase/database";
+import { ChatShell } from "@/components/chat/chat-shell";
+import { MessageList } from "@/components/chat/message-list";
+import { Composer } from "@/components/chat/Composer";
+import { ActionOverlays } from "@/components/chat/ActionOverlays";
+import { useToast } from "@/hooks/use-toast";
+import { 
+  Phone, Video, Search, Settings, BadgeCheck, Ruler, Zap, 
+  Package, PlayCircle, Maximize2, X 
+} from "lucide-react";
 
-// --- רכיב אפקט הקלדה מוגן מקריסות ---
-const TypewriterEffect = ({ text }: { text: string }) => {
-  const [displayedText, setDisplayedText] = useState("");
-  const [index, setIndex] = useState(0);
+// --- רכיב כרטיס מוצר ויזואלי ---
+const ProductMediaCard = ({ product }: { product: any }) => {
+  const [showVideo, setShowVideo] = useState(false);
 
-  useEffect(() => {
-    if (!text) return;
-    if (index < text.length) {
-      const timeout = setTimeout(() => {
-        setDisplayedText(prev => prev + text[index]);
-        setIndex(prev => prev + 1);
-      }, 10);
-      return () => clearTimeout(timeout);
-    }
-  }, [index, text]);
+  if (!product) return null;
 
-  return <div className="whitespace-pre-wrap">{displayedText}</div>;
+  return (
+    <div className="my-4 bg-white rounded-[24px] overflow-hidden shadow-2xl border border-slate-100 max-w-[300px] animate-in zoom-in-95 duration-300">
+      <div className="relative group">
+        <img 
+          src={product.image_url || 'https://via.placeholder.com/300x200?text=Saban+Logistics'} 
+          className="w-full h-44 object-cover transition-transform group-hover:scale-105"
+          alt={product.product_name}
+        />
+        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
+           <button className="p-2 bg-white/20 backdrop-blur-md rounded-full text-white"><Maximize2 size={20} /></button>
+        </div>
+      </div>
+
+      <div className="p-5">
+        <div className="flex justify-between items-start mb-2">
+          <h4 className="font-black text-slate-900 text-lg leading-tight">{product.product_name}</h4>
+          <span className="bg-blue-50 text-blue-600 text-[10px] font-black px-2 py-1 rounded-lg uppercase italic">In Stock</span>
+        </div>
+        
+        <p className="text-xs text-slate-500 line-clamp-2 mb-4 font-medium">{product.description || 'מוצר איכותי מבית ח. סבן'}</p>
+        
+        <div className="grid grid-cols-2 gap-2">
+          {product.video_url && (
+            <button 
+              onClick={() => setShowVideo(true)}
+              className="flex items-center justify-center gap-2 py-2.5 bg-red-50 text-red-600 rounded-xl text-xs font-black hover:bg-red-100 transition-colors"
+            >
+              <PlayCircle size={14} /> סרטון הדרכה
+            </button>
+          )}
+          <button className="flex items-center justify-center gap-2 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black shadow-lg shadow-slate-200">
+            <Package size={14} /> פרטים נוספים
+          </button>
+        </div>
+      </div>
+
+      {/* Video Overlay Modal */}
+      {showVideo && (
+        <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-xl flex items-center justify-center p-4">
+          <button onClick={() => setShowVideo(false)} className="absolute top-8 right-8 text-white hover:rotate-90 transition-transform"><X size={32} /></button>
+          <iframe 
+            src={product.video_url.replace("watch?v=", "embed/")} 
+            className="w-full max-w-4xl aspect-video rounded-3xl shadow-2xl border-4 border-white/10"
+            allowFullScreen
+          />
+        </div>
+      )}
+    </div>
+  );
 };
 
-// --- רכיב אפקט חשיבה לוגיסטי ---
-const SabanLoader = () => (
-  <div className="flex flex-col gap-2 p-4 bg-white border border-slate-200 rounded-2xl w-fit shadow-sm animate-in fade-in slide-in-from-bottom-2">
-    <div className="flex items-center gap-2 text-blue-600 font-bold text-xs">
-      <Search size={14} className="animate-spin" />
-      <span className="animate-pulse">סורק מלאי ומחשב מרחקי הובלה...</span>
-    </div>
-    <div className="flex gap-1 justify-center">
-      <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-      <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-      <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce"></span>
-    </div>
-  </div>
-);
-
-export default function SabanChat() {
-  const [userName, setUserName] = useState<string | null>(null);
-  const [input, setInput] = useState('');
-  const [messages, setMessages] = useState<any[]>([]); // מאותחל כמערך ריק למניעת שגיאת length
+function WhatsAppCloneContent() {
+  const [messages, setMessages] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
+  const phone = "972508860896";
 
-  // טעינת נתונים בטוחה
   useEffect(() => {
-    const savedName = localStorage.getItem('saban_user_name');
-    const savedHistory = localStorage.getItem('saban_chat_history');
-    
-    if (savedName) setUserName(savedName);
-    
-    if (savedHistory) {
-      try {
-        const parsed = JSON.parse(savedHistory);
-        if (Array.isArray(parsed)) setMessages(parsed);
-      } catch (e) {
-        console.error("History parse error", e);
-        setMessages([]);
+    const chatRef = ref(rtdb, `saban94`);
+    const unsubscribe = onValue(chatRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const incoming = data.inbound ? Object.entries(data.inbound).map(([id, m]: any) => ({ ...m, id, role: 'user' })) : [];
+        const outgoing = data.send ? Object.entries(data.send).map(([id, m]: any) => ({ ...m, id, role: 'assistant' })) : [];
+        
+        const combined = [...incoming, ...outgoing]
+          .filter(m => m.to === phone || m.from === phone || m.receiver === phone)
+          .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+        setMessages(combined.map(m => ({
+          id: m.id,
+          content: m.text || m.content,
+          role: m.role,
+          product: m.product || null, 
+          timestamp: m.timestamp || Date.now()
+        })));
       }
-    }
-  }, []);
+    });
+    return () => unsubscribe();
+  }, [phone]);
 
-  // גלילה אוטומטית ושמירה
-  useEffect(() => {
-    localStorage.setItem('saban_chat_history', JSON.stringify(messages));
-    scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  const handleStart = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const name = new FormData(e.currentTarget).get('name') as string;
-    if (name?.trim()) {
-      localStorage.setItem('saban_user_name', name.trim());
-      setUserName(name.trim());
-    }
-  };
-
-  const sendMessage = async () => {
-    if (!input.trim() || isLoading) return;
-    
-    const userMsg = { role: 'user', content: input };
-    setMessages(prev => [...prev, userMsg]);
-    setInput('');
+  const handleSendMessage = async (content: string) => {
+    if (!content.trim()) return;
     setIsLoading(true);
-
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          messages: [...messages, userMsg], 
-          userName,
-          // כאן אפשר להוסיף travelInfo אם שלפת אותו מה-Client
-        }),
+          messages: [...messages, { role: 'user', content }], 
+          phone,
+          userName: "לקוח סבן" 
+        })
       });
-      
-      const data = await res.json();
-      const aiText = data.answer || data.text || "סליחה, יש תקלה בתקשורת.";
-      setMessages(prev => [...prev, { role: 'assistant', content: aiText }]);
-    } catch (error) {
-      console.error("Chat Error:", error);
+      if (!res.ok) throw new Error("Failed to send message");
+    } catch (error: any) {
+      toast({ title: "שגיאה", description: error.message, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (!userName) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-slate-50 p-6" dir="rtl">
-        <Card className="w-full max-w-md p-8 bg-white border-slate-200 rounded-[2.5rem] shadow-2xl text-center">
-          <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-100">
-            <Building2 className="text-white" size={32} />
-          </div>
-          <h2 className="text-2xl font-black text-slate-900 mb-2 italic underline decoration-blue-500 decoration-4">ח. סבן לוגיסטיקה</h2>
-          <p className="text-slate-500 mb-8 font-bold">אהלן! איך קוראים לך?</p>
-          <form onSubmit={handleStart} className="space-y-4">
-            <Input name="name" required placeholder="השם שלך..." className="h-14 rounded-2xl bg-slate-50 border-slate-200 text-center font-bold text-lg" />
-            <button className="w-full h-14 bg-blue-600 text-white rounded-2xl font-black shadow-lg hover:bg-blue-700 transition-all active:scale-95">כניסה למערכת 🦾</button>
-          </form>
-        </Card>
-      </div>
-    );
-  }
-
   return (
-    <div className="h-screen flex flex-col bg-white text-slate-900 font-sans" dir="rtl">
-      {/* Header */}
-      <div className="p-4 bg-white border-b border-slate-100 flex justify-between items-center shadow-sm z-10">
-        <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-md shadow-blue-100">
-                <Building2 size={20} className="text-white" />
+    <div className="flex h-screen bg-[#F8F9FA] overflow-hidden font-sans selection:bg-blue-100" dir="rtl">
+      {/* Sidebar - SabanOS Logic */}
+      <aside className="w-[420px] border-l bg-white hidden lg:flex flex-col shadow-xl z-20">
+        <header className="p-8 flex justify-between items-center border-b border-slate-50">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 bg-blue-600 rounded-[24px] flex items-center justify-center text-white shadow-2xl shadow-blue-200 animate-pulse">
+              <Zap size={26} fill="white" />
             </div>
             <div>
-                <h1 className="font-black italic text-slate-900 text-lg leading-none">ח. סבן</h1>
-                <span className="text-[10px] font-bold text-blue-600 uppercase tracking-tighter">Smart Logistics AI</span>
-            </div>
-        </div>
-        <div className="bg-slate-100 px-4 py-2 rounded-2xl border border-slate-200 flex items-center gap-2">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-            <span className="text-xs font-black text-slate-700">{userName}</span>
-        </div>
-      </div>
-
-      {/* Chat Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-slate-50/50">
-        {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[90%] p-4 rounded-[2rem] shadow-sm ${
-                m.role === 'user' 
-                ? 'bg-blue-600 text-white rounded-br-none shadow-blue-100 font-bold' 
-                : 'bg-white text-slate-800 border border-slate-200 rounded-bl-none font-medium'
-            }`}>
-              {m.role === 'assistant' && i === messages.length - 1 ? (
-                <TypewriterEffect text={m.content} />
-              ) : (
-                <div className="whitespace-pre-wrap leading-relaxed">{m.content}</div>
-              )}
+              <h1 className="font-black text-2xl tracking-tighter text-slate-900 italic">SABAN OS</h1>
+              <p className="text-[10px] font-black text-blue-600 tracking-[0.2em] uppercase">V4.0 Logistics AI</p>
             </div>
           </div>
-        ))}
-        {isLoading && <SabanLoader />}
-        <div ref={scrollRef} />
-      </div>
+          <Settings className="text-slate-300 hover:text-slate-900 transition-colors cursor-pointer" size={22} />
+        </header>
 
-      {/* Footer Input */}
-      <div className="p-4 bg-white border-t border-slate-100">
-        <div className="relative max-w-4xl mx-auto">
-          <Input 
-            value={input} 
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-            placeholder={`מה נבצע היום, ${userName}?`}
-            className="h-16 pr-6 pl-16 rounded-[1.5rem] bg-slate-50 border-slate-200 text-slate-900 font-bold focus:ring-4 focus:ring-blue-500/10 transition-all shadow-inner"
-          />
-          <button 
-            onClick={sendMessage} 
-            disabled={isLoading}
-            className="absolute left-2 top-2 bg-blue-600 p-3.5 rounded-2xl text-white shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-90 transition-all disabled:opacity-50"
-          >
-            <Send size={20} />
-          </button>
+        <div className="flex-1 p-8 space-y-8 overflow-y-auto">
+          {/* Quick Action Button */}
+          <div className="space-y-4">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">כלים לוגיסטיים</label>
+            <button onClick={() => window.dispatchEvent(new CustomEvent('open-action-overlay', { detail: { type: 'calculator' } }))}
+              className="w-full p-6 bg-slate-900 text-white rounded-[32px] font-black flex items-center justify-between group hover:bg-blue-600 transition-all shadow-2xl active:scale-95">
+              <div className="flex items-center gap-4">
+                <Ruler size={24} className="group-hover:rotate-12 transition-transform" />
+                <span className="text-lg">חישוב מ"ר וגבס</span>
+              </div>
+              <BadgeCheck size={20} className="text-blue-400" />
+            </button>
+          </div>
+
+          {/* User Card */}
+          <div className="p-6 bg-slate-50 rounded-[35px] border-2 border-white shadow-inner flex items-center gap-5">
+            <div className="w-16 h-16 bg-gradient-to-tr from-emerald-400 to-emerald-600 rounded-[22px] flex items-center justify-center text-white font-black text-3xl shadow-lg italic">S</div>
+            <div>
+              <span className="font-black text-slate-900 text-xl leading-none">ח. סבן מרכזי</span>
+              <div className="flex items-center gap-1.5 mt-2 text-emerald-600 font-bold text-xs">
+                 <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
+                 <span>מחובר - חמ"ל פעיל</span>
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="text-[9px] text-center mt-3 text-slate-400 font-black italic">
-            Saban Logistics Management System v4.0 • Real-time AI Assistant
+      </aside>
+
+      {/* Main Chat View */}
+      <main className="flex-1 flex flex-col relative bg-white">
+        <header className="h-24 bg-white/80 backdrop-blur-xl border-b border-slate-50 flex justify-between items-center px-10 z-10 shadow-sm">
+          <div className="flex items-center gap-5">
+            <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center border border-slate-200"><MapPin className="text-blue-600" size={20} /></div>
+            <div>
+              <h2 className="font-black text-xl text-slate-900 tracking-tight">מרכז הזמנות וייעוץ</h2>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Real-time Inventory Link</p>
+            </div>
+          </div>
+          <div className="flex gap-10 text-slate-400">
+             <Search className="cursor-pointer hover:text-blue-600 transition-all hover:scale-110" size={24} />
+             <Phone className="cursor-pointer hover:text-emerald-500 transition-all hover:scale-110" size={24} />
+          </div>
+        </header>
+
+        {/* Messages List with Product Injection */}
+        <div className="flex-1 overflow-y-auto p-8 space-y-8 pb-32">
+           {messages.map((m, i) => (
+             <div key={m.id || i} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
+                <div className={`max-w-[80%] p-5 rounded-[2.5rem] text-base leading-relaxed shadow-sm ${
+                  m.role === 'user' 
+                  ? 'bg-blue-600 text-white rounded-br-none font-bold' 
+                  : 'bg-slate-50 text-slate-800 border border-slate-100 rounded-bl-none font-medium'
+                }`}>
+                  {m.content}
+                </div>
+                {/* הזרקת כרטיס מוצר אם קיים נתון מוצר בהודעה */}
+                {m.product && <ProductMediaCard product={m.product} />}
+             </div>
+           ))}
+           {isLoading && <div className="text-blue-600 font-black text-xs animate-pulse flex items-center gap-2"><Zap size={14} /> המוח מעבד נתונים...</div>}
         </div>
-      </div>
+
+        {/* Composer - Fixed Bottom */}
+        <footer className="p-8 bg-transparent absolute bottom-0 w-full z-20">
+          <div className="max-w-5xl mx-auto bg-white/90 backdrop-blur-3xl border-2 border-white p-3 rounded-[40px] shadow-[0_30px_100px_rgba(0,0,0,0.12)]">
+            <Composer onSend={handleSendMessage} disabled={isLoading} />
+          </div>
+        </footer>
+      </main>
+
+      <ActionOverlays />
     </div>
   );
 }
