@@ -122,7 +122,7 @@ export default function SabanOS() {
       (async () => {
         const { data } = await supabase.from('chat_history').select('*').eq('session_id', sid).order('created_at', { ascending: true });
         if (data && data.length > 0) setMessages(data);
-        else setMessages([{ id: 'init', role: 'assistant', content: '### אהלן ראמי הבוס\nהסל מסונכרן לביצוע. **איזה חומרים נוסיף היום?** 🦾' }]);
+        else setMessages([{ id: 'init', role: 'assistant', content: '### תרצה לשאול על מוצר או לבצע הזמנה? Ai-היי!👋 אני היועץ ח.סבן🤖** ' }]);
       })();
     }
   }, []);
