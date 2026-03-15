@@ -4,10 +4,8 @@ import { getSupabase } from "@/lib/supabase";
 
 export const dynamic = 'force-dynamic';
 
-// מאגר מפתחות ורוטציה (הכנס את המפתחות שלך מופרדים בפסיק ב-ENV)
 const API_KEYS = (process.env.GOOGLE_AI_KEY_POOL || process.env.GOOGLE_AI_KEY || "").split(',').map(k => k.trim());
-// רשימת מודלים יציבים לפי עדכון מרץ 2026
-const STABLE_MODELS = ["gemini-3.1-flash-lite-preview", "gemini-1.5-flash", "gemini-3.1-pro-preview"];
+const STABLE_MODELS = ["gemini-1.5-flash", "gemini-3.1-flash-lite-preview", "gemini-3.1-pro-preview"];
 
 export async function POST(req: Request) {
   try {
@@ -16,24 +14,36 @@ export async function POST(req: Request) {
 
     if (!query) return NextResponse.json({ error: "Missing query" }, { status: 400 });
 
-    // שמירת הודעת משתמש ב-DB
+    // 1. שליפת חוקים מה"מחנך" (ai_rules)
+    const { data: rules } = await supabase.from('ai_rules').select('instruction').eq('is_active', true);
+    const educatorDNA = rules?.map(r => r.instruction).join("\n\n") || "";
+
+    // 2. שמירת הודעת משתמש למוניטור
     await supabase.from('chat_history').insert([{ session_id: sessionId, role: 'user', content: query }]);
 
     const historyContext = history?.map((m: any) => `${m.role === 'user' ? 'לקוח' : 'עוזר'}: ${m.content}`).join("\n") || "";
 
     const systemDNA = `
-      שם המותג: ח. סבן חומרי בניין. מנהל: ראמי.
-      הנחיה: אתה מנהל מכירות מקצועי. ענה קצר, ממוקד, עם אימוג'ים לוגיסטיים.
-      היסטוריה: ${historyContext}
-      חתימה: תודה, ומה תרצה שנבצע היום? , הכל מוכן לביצוע. 🦾
+      זהות: המוח הלוגיסטי של ח. סבן חומרי בניין. מנהל: ראמי הבוס.
+      
+      ### חוקי המחנך (Educator DNA):
+      ${educatorDNA}
+
+      ### היסטוריה:
+      ${historyContext}
+
+      ### הנחיות עיצוב (UI/UX):
+      - תמונה: ![שם המוצר](URL) - תמיד בשורה הראשונה אם יש מוצר.
+      - כותרת: ### [שם נושא]
+      - הדגשה: **[טקסט חשוב]**
+      - בסיום הזמנה: כתוב תמיד את המילה "סיכום הזמנה" כדי להפעיל את כפתור ה-WhatsApp.
+      
+      חתימה: תודה, ומה תרצה שנבצע היום?, הכל מוכן לביצוע. 🦾
     `;
 
     let lastError = null;
-
-    // לוגיקת רוטציה: מנסים כל מפתח על המודל הכי יציב
     for (const key of API_KEYS) {
       if (!key) continue;
-      
       for (const modelName of STABLE_MODELS) {
         try {
           const genAI = new GoogleGenerativeAI(key);
@@ -41,22 +51,16 @@ export async function POST(req: Request) {
           const result = await model.generateContent(query);
           const aiText = result.response.text();
 
-          // שמירת תשובת ה-AI ב-DB
           await supabase.from('chat_history').insert([{ session_id: sessionId, role: 'assistant', content: aiText }]);
-
           return NextResponse.json({ answer: aiText, model: modelName });
         } catch (e: any) {
           lastError = e;
-          console.warn(`Failed with model ${modelName} on current key. Trying next...`);
-          continue; // עובר למודל הבא או למפתח הבא
+          continue;
         }
       }
     }
-
-    throw new Error(`כל המפתחות והמודלים נכשלו. שגיאה אחרונה: ${lastError?.message}`);
-
+    throw new Error(`Rotation failed: ${lastError?.message}`);
   } catch (error: any) {
-    console.error("Critical Brain Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
