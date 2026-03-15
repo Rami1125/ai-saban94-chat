@@ -57,6 +57,22 @@ const CartItem = ({ item, onRemove, onUpdateQty, isFuture = false }: any) => {
     </motion.div>
   );
 };
+// --- 1. כפתור WhatsApp ---
+const WhatsAppOrderButton = ({ summary }: { summary: string }) => {
+  const send = () => {
+    const text = encodeURIComponent(`🏗️ *סיכום הזמנה לביצוע - ח. סבן*\n\n${summary}\n\n*נשלח מהמוח הלוגיסטי*`);
+    window.open(`https://wa.me/972508860896?text=${text}`, '_blank');
+  };
+  return (
+    <motion.button 
+      whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+      onClick={send}
+      className="w-full mt-4 bg-[#25D366]/90 backdrop-blur-sm hover:bg-[#20ba5a] text-white py-4 rounded-[24px] font-black flex items-center justify-center gap-3 shadow-xl border-b-4 border-green-700 transition-all"
+    >
+      שלח סיכום ל-WhatsApp מחלקת הזמנות
+    </motion.button>
+  );
+};
 
 // --- 2. מפענח הודעות חכם ---
 const SmartMessageRenderer = ({ text, onAddToCart, onSetQty, onAddToFuture }: any) => {
@@ -242,7 +258,7 @@ export default function SabanOS() {
         <header className="h-20 border-b border-slate-100 px-10 flex items-center justify-between bg-white/90 backdrop-blur-md z-10 shadow-sm">
           <div className="flex items-center gap-3">
             <ShieldCheck className="text-emerald-600" size={24} />
-            <h2 className="text-base font-black uppercase italic text-slate-950">Saban Executive Brain</h2>
+            <h2 className="text-base font-black uppercase italic text-slate-950">צ'אט עם ח.סבן-Ai</h2>
           </div>
           <div className="flex gap-4">
              <div className="p-2 bg-slate-50 rounded-xl text-slate-400"><Search size={18}/></div>
