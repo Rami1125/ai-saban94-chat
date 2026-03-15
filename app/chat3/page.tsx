@@ -34,7 +34,7 @@ const DesignedProductCard = ({ product }: { product: any }) => {
           className="h-full w-auto object-contain drop-shadow-2xl group-hover:scale-110 transition-transform duration-500" 
           alt={product.product_name} 
         />
-        <div className="absolute top-5 left-5 bg-blue-700 text-white text-[10px] font-black px-4 py-2 rounded-full shadow-xl">
+        <div className="absolute top-5 left-5 bg-blue-700 text-white text-[40px] font-black px-4 py-2 rounded-full shadow-xl">
           {product.packaging || 'יחידה'}
         </div>
       </div>
