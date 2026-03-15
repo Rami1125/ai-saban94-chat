@@ -13,23 +13,29 @@ import { toast, Toaster } from "sonner";
 import { motion, AnimatePresence } from 'framer-motion';
 
 /**
- * Ai-Saban OS V17.5 - VIP Dynamic Portal
+ * Ai-Saban OS V17.6 - VIP Executive Portal
  * -------------------------------------------
- * Path: app/vip/[id]/page.tsx
- * Logic: Dynamic ID detection for personalized magic links.
+ * - Persona: Personal Logistics Agent (The "Brother" experience).
+ * - Logic: Predictive Supply (Studs/Tracks), Container Rental Tracking.
+ * - Branding: High-Contrast, Logo-Driven, WhatsApp Avatars.
  */
 
 const LOGO_PATH = "/ai.png";
 const SUCCESS_SOUND = "https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3";
 
-// מאגר פרופילי לקוחות (בשלב הבא יימשך מה-DB)
-const CLIENT_PROFILES: any = {
+// מאגר נתונים מוזרק מ"צילום הרנטגן" של הלקוחות
+const VIP_PROFILES: any = {
   "601992": {
+    id: "601992",
     name: "בר אורניל (אורניל/אבי לוי)",
     project: "סטרומה 4, הרצליה",
     phone: "054-5998111",
-    lastContainerChange: "2026-03-08",
-    specialNotes: "רגישות לניצבים בגבס, מעקב מכולות 8 קוב"
+    status: "Priority VIP",
+    insights: {
+      containerDay: 8,
+      lastOrder: "מכולה 8 קוב (82001)",
+      missingItems: ["ניצבים", "ברגי פח-פח"]
+    }
   }
 };
 
@@ -44,7 +50,7 @@ const SabanLogo = ({ size = "lg" }: { size?: "sm" | "lg" }) => (
     {size === "lg" && (
       <div className="text-right">
         <h1 className="font-black text-lg md:text-2xl text-slate-900 leading-none italic tracking-tighter">Ai-ח.סבן</h1>
-        <p className="text-[8px] md:text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-1 text-right">VIP Agent OS</p>
+        <p className="text-[8px] md:text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-1">VIP Personal Agent</p>
       </div>
     )}
   </div>
@@ -52,7 +58,7 @@ const SabanLogo = ({ size = "lg" }: { size?: "sm" | "lg" }) => (
 
 const BotAvatar = () => (
   <div className="w-9 h-9 rounded-full overflow-hidden border-2 border-blue-100 shadow-md shrink-0 mt-1 ring-2 ring-white bg-white">
-    <img src={LOGO_PATH} alt="Saban AI" className="w-full h-full object-cover" />
+    <img src={LOGO_PATH} alt="Bot" className="w-full h-full object-cover" />
   </div>
 );
 
@@ -79,8 +85,8 @@ const OrderSummaryModal = ({ cart, client, onClose }: { cart: any[], client: any
       <motion.div initial={{ scale: 0.9, y: 30 }} className="bg-white rounded-[40px] w-full max-w-xl overflow-hidden shadow-2xl">
         <div className="bg-slate-900 p-8 text-white flex justify-between items-center">
           <div className="text-right">
-            <h2 className="text-2xl font-black italic uppercase leading-none">סיכום הזמנה</h2>
-            <p className="text-blue-400 text-[10px] font-bold mt-1 uppercase tracking-widest">Executive Delivery Draft</p>
+            <h2 className="text-2xl font-black italic uppercase leading-none tracking-tighter">סידור עבודה מוכן</h2>
+            <p className="text-blue-400 text-[10px] font-bold mt-1 uppercase tracking-widest">Executive Supply Order</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-xl transition-colors"><X size={28}/></button>
         </div>
@@ -94,7 +100,7 @@ const OrderSummaryModal = ({ cart, client, onClose }: { cart: any[], client: any
             ))}
           </div>
           <button onClick={handleShare} className="w-full bg-[#25D366] text-white py-6 rounded-[30px] font-black text-xl flex items-center justify-center gap-4 shadow-xl border-b-8 border-green-700 active:scale-95 transition-all">
-            <Share2 size={28} /> אשר ושלח לביצוע
+            <Share2 size={28} /> אשר ושלח לקבוצת הזמנות
           </button>
         </div>
       </motion.div>
@@ -143,7 +149,7 @@ const SmartMessageRenderer = ({ text, onAdd }: any) => {
   );
 };
 
-export default function VipClientPortal() {
+export default function VipPortal() {
   const { id } = useParams();
   const [client, setClient] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
@@ -155,15 +161,15 @@ export default function VipClientPortal() {
   const [showSummary, setShowSummary] = useState(false);
 
   useEffect(() => {
-    if (id && CLIENT_PROFILES[id as string]) {
-      const profile = CLIENT_PROFILES[id as string];
+    if (id && VIP_PROFILES[id as string]) {
+      const profile = VIP_PROFILES[id as string];
       setClient(profile);
       setMessages([{ 
         role: 'assistant', 
         content: `### אהלן בר אחי 🦾\nהמוח של ח. סבן מחובר לפרויקט ב**${profile.project}**. המכולה שלך שם כבר 8 ימים, להכין פינוי? **מה נבצע היום?**` 
       }]);
     } else {
-      setMessages([{ role: 'assistant', content: "### שגיאת זיהוי\nלינק הקסם לא תקין או פג תוקף. נא לפנות לראמי." }]);
+      setMessages([{ role: 'assistant', content: "### שגיאת זיהוי\nלינק הקסם לא תקין. נא לפנות לראמי להנפקת גישה חדשה." }]);
     }
   }, [id]);
 
@@ -171,6 +177,10 @@ export default function VipClientPortal() {
 
   const handleAction = async (sku: string, qty = 1) => {
     let { data: p } = await supabase.from('inventory').select('*').eq('sku', sku).maybeSingle();
+    if (!p) {
+        const { data: altP } = await supabase.from('inventory').select('*').ilike('sku', `%${sku}%`).limit(1).maybeSingle();
+        p = altP;
+    }
     if (p) {
       setCart(prev => {
         const ex = prev.find(i => i.sku === p?.sku);
@@ -194,15 +204,18 @@ export default function VipClientPortal() {
         body: JSON.stringify({ sessionId: `vip_${id}`, query: q, history: messages.slice(-5) })
       });
       const data = await res.json();
+      
       const qMatch = data.answer.match(/\[SET_QTY:(.*?):(.*?)\]/);
       if (qMatch) handleAction(qMatch[1], parseInt(qMatch[2]));
+      
       const aMatch = data.answer.match(/\[QUICK_ADD:(.*?)\]/);
       if (aMatch) handleAction(aMatch[1]);
+
       setMessages(prev => [...prev, { role: 'assistant', content: data.answer }]);
-    } catch (e) { toast.error("ניתוק מהמוח"); } finally { setLoading(false); }
+    } catch (e) { toast.error("ניתוק מהמוח הלוגיסטי"); } finally { setLoading(false); }
   };
 
-  if (!client && id) return <div className="h-screen flex items-center justify-center font-black italic text-slate-400">מזהה לינק קסם...</div>;
+  if (!client && id) return <div className="h-screen flex items-center justify-center font-black italic text-slate-400 animate-pulse">מזהה לקוח VIP...</div>;
 
   return (
     <div className="flex h-screen bg-[#FDFDFD] text-slate-950 font-sans overflow-hidden" dir="rtl">
@@ -211,9 +224,9 @@ export default function VipClientPortal() {
       
       <aside className={`fixed inset-y-0 right-0 z-50 w-full md:w-[420px] bg-white border-l border-slate-200 transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}`}>
         <div className="p-10 md:p-14 border-b border-slate-100 flex flex-col items-center gap-6 bg-slate-50/50 relative shadow-sm text-center">
-          <button onClick={() => setIsSidebarOpen(false)} className="md:hidden absolute top-6 left-6 p-2 bg-slate-200 rounded-full active:scale-90"><X size={24}/></button>
+          <button onClick={() => setIsSidebarOpen(false)} className="md:hidden absolute top-6 left-6 p-2 bg-slate-200 rounded-full active:scale-90 shadow-sm"><X size={24}/></button>
           <SabanLogo />
-          <div className="bg-blue-50 px-5 py-2.5 rounded-2xl border border-blue-100 shadow-sm">
+          <div className="bg-blue-50 px-5 py-2.5 rounded-2xl border border-blue-100 shadow-sm w-full">
             <p className="text-[12px] font-black text-blue-700 uppercase tracking-tighter italic">פרויקט פעיל: {client.project}</p>
           </div>
         </div>
@@ -221,18 +234,19 @@ export default function VipClientPortal() {
            <h4 className="text-[13px] md:text-[15px] font-black text-blue-700 uppercase mb-8 flex items-center justify-end gap-3 px-2 tracking-widest">סל ביצוע ({cart.length}) <ShoppingCart size={22}/></h4>
            <AnimatePresence mode="popLayout">
              {cart.map((item) => (
-               <motion.div layout initial={{ x: 20, opacity: 0 }} key={item.sku} className="p-6 md:p-8 bg-white rounded-[30px] md:rounded-[40px] border border-slate-100 mb-5 shadow-sm flex justify-between items-center group hover:ring-2 ring-blue-100 transition-all">
+               <motion.div layout initial={{ x: 20, opacity: 0 }} key={item.sku} className="p-6 md:p-8 bg-white rounded-[30px] md:rounded-[40px] border border-slate-100 mb-5 shadow-sm flex justify-between items-center group ring-2 ring-black/5 hover:ring-2 ring-blue-100 transition-all">
                   <button onClick={() => setCart(cart.filter(i => i.sku !== item.sku))} className="text-slate-200 group-hover:text-red-500 transition-colors p-2"><Trash2 size={24}/></button>
                   <div className="text-right flex-1 ml-5">
                     <p className="text-[16px] md:text-[18px] font-black text-slate-900 leading-tight">{item.product_name}</p>
-                    <p className="text-[13px] md:text-[15px] font-extrabold mt-2 italic text-blue-600">כמות: {item.qty}</p>
+                    <motion.p key={item.qty} initial={{ scale: 1.5 }} animate={{ scale: 1 }} className="text-[13px] md:text-[15px] font-extrabold mt-2 italic text-blue-600">כמות: {item.qty}</motion.p>
                   </div>
                </motion.div>
              ))}
            </AnimatePresence>
+           {cart.length === 0 && <p className="text-center text-[13px] text-slate-300 font-black uppercase opacity-50 py-16 tracking-widest italic">הסל ריק - ממתין לפקודה</p>}
         </div>
         <div className="p-10 border-t border-slate-100 bg-white">
-           <button disabled={cart.length === 0} onClick={() => {setShowSummary(true); setIsSidebarOpen(false);}} className="w-full bg-slate-950 disabled:bg-slate-300 text-white py-6 md:py-8 rounded-[30px] md:rounded-[40px] font-black shadow-2xl hover:bg-blue-700 transition-all flex items-center justify-center gap-5 text-xl md:text-2xl italic active:scale-95 uppercase">סגור הזמנה לביצוע 🦾</button>
+           <button disabled={cart.length === 0} onClick={() => {setShowSummary(true); setIsSidebarOpen(false);}} className="w-full bg-slate-950 disabled:bg-slate-300 text-white py-6 md:py-8 rounded-[30px] md:rounded-[40px] font-black shadow-2xl hover:bg-blue-700 transition-all flex items-center justify-center gap-5 text-xl md:text-2xl italic active:scale-95 uppercase tracking-tighter">סגור הזמנה לביצוע 🦾</button>
         </div>
       </aside>
 
@@ -245,9 +259,9 @@ export default function VipClientPortal() {
             </button>
             <ShieldCheck className="text-emerald-600 hidden md:block" size={48} />
             <div className="text-right">
-              <h2 className="text-xl md:text-3xl font-black uppercase italic text-slate-950 leading-none">VIP Executive Arena</h2>
+              <h2 className="text-xl md:text-3xl font-black uppercase italic text-slate-950 leading-none">VIP Execution Arena</h2>
               <div className="text-[10px] md:text-[13px] text-emerald-500 font-black uppercase mt-2.5 tracking-widest flex items-center gap-2 justify-end">
-                <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse" /> Live Secured Sync
+                <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]" /> Live Secured Sync
               </div>
             </div>
           </div>
@@ -269,13 +283,13 @@ export default function VipClientPortal() {
               </motion.div>
             ))}
           </AnimatePresence>
-          {loading && <div className="flex justify-end animate-pulse"><div className="bg-white p-10 md:p-12 rounded-[50px] border border-blue-100 shadow-2xl flex items-center gap-8 ring-4 ring-blue-50"><Loader2 className="animate-spin text-blue-600" size={44}/><span className="text-xl md:text-2xl font-black text-blue-800 uppercase italic tracking-widest">המוח מעבד...</span></div></div>}
+          {loading && <div className="flex justify-end animate-pulse"><div className="bg-white p-10 md:p-12 rounded-[50px] border border-blue-100 shadow-2xl flex items-center gap-8 ring-4 ring-blue-50"><Loader2 className="animate-spin text-blue-600" size={44}/><span className="text-xl md:text-2xl font-black text-blue-800 uppercase italic tracking-widest">מחשב פקודה...</span></div></div>}
           <div ref={scrollRef} />
         </div>
 
         <footer className="p-6 md:p-16 absolute bottom-0 w-full z-20 bg-gradient-to-t from-white via-white/95 pt-36 text-right pointer-events-none">
           <div className="max-w-7xl mx-auto bg-white border-2 border-slate-200 p-4 md:p-6 rounded-[65px] md:rounded-[95px] shadow-[0_50px_100px_-25px_rgba(0,0,0,0.35)] flex items-center gap-4 md:gap-10 ring-[15px] md:ring-[30px] ring-slate-50/50 backdrop-blur-3xl pointer-events-auto transition-all focus-within:ring-blue-100/50">
-             <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} placeholder="בר אחי, מה בונים היום בסטרומה?" className="flex-1 bg-transparent px-6 md:px-14 py-6 md:py-12 outline-none font-black text-[20px] md:text-[32px] text-right text-black placeholder-slate-400" />
+             <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} placeholder="בר אחי, מה בונים היום בסטרומה?" className="flex-1 bg-transparent px-6 md:px-14 py-6 md:py-12 outline-none font-black text-[20px] md:text-[32px] text-right text-black placeholder-slate-400 italic" />
              <button onClick={handleSend} disabled={loading} className="w-20 h-20 md:w-32 md:h-32 aspect-square bg-blue-700 hover:bg-blue-800 rounded-full flex items-center justify-center text-white active:scale-90 shadow-2xl transition-all ring-8 md:ring-[15px] ring-blue-100/50"><Send size={38} className="md:size-[64px]" /></button>
           </div>
         </footer>
