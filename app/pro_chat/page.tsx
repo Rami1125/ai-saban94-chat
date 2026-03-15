@@ -2,15 +2,17 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Send, Settings, Zap, Phone, Search, Ruler, RotateCcw, Loader2 
+  Send, Settings, Zap, Phone, Search, Ruler, 
+  User, CheckCircle2, Loader2, Sparkles, LayoutGrid
 } from 'lucide-react';
 import { supabase } from "@/lib/supabase"; 
 import { toast, Toaster } from "sonner";
+import { motion, AnimatePresence } from 'framer-motion';
 
 /**
- * Saban OS V9.6.0 - Pro Brain Edition
- * נתיב מוח מחובר: /api/pro_brain
- * סטטוס: מוכן לייצור (Production Ready)
+ * Saban OS V9.7.0 - Premium Pro Edition
+ * עיצוב בהיר מקצועי | אפקט הקלדה | ללא כפתור איפוס
+ * נתיב מוח: /api/pro_brain
  */
 
 export default function ChatPage() {
@@ -21,7 +23,7 @@ export default function ChatPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const phone = "972508860896";
 
-  // 1. אתחול סשן וטעינת היסטוריה מה-DB (Persistent)
+  // 1. אתחול סשן וטעינת היסטוריה
   useEffect(() => {
     if (typeof window !== 'undefined') {
       let sid = localStorage.getItem('saban_session_id');
@@ -47,33 +49,30 @@ export default function ChatPage() {
               timestamp: new Date(m.created_at).getTime()
             })));
           } else {
-            // הודעת פתיחה דיפולטיבית
             setMessages([{ 
               id: 'init', 
               role: 'bot', 
-              content: 'אהלן ראמי, המוח המקצועי מחובר ומחכה לפקודה. מה נבצע היום? 🦾', 
+              content: 'אהלן ראמי הבוס, המוח המקצועי מסונכרן לביצוע. איך נתקדם היום? 🦾', 
               timestamp: Date.now() 
             }]);
           }
         } catch (e) {
-          console.error("שגיאה בטעינת היסטוריה:", e);
+          console.error("History load error", e);
         }
       };
       loadHistory();
     }
   }, []);
 
-  // גלילה אוטומטית להודעה האחרונה
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
-  // 2. פונקציית שליחה - מחוברת לנתיב /api/pro_brain
+  // 2. פונקציית שליחה עם אפקטים
   const handleSendMessage = async (text: string) => {
     const cleanText = text?.trim();
     if (!cleanText || isLoading) return;
     
-    // עדכון UI מיידי (Optimistic)
     const userMsg = { 
       id: Date.now().toString(), 
       content: cleanText, 
@@ -86,7 +85,6 @@ export default function ChatPage() {
     setIsLoading(true);
 
     try {
-      // קריאה למוח הפרו בנתיב החדש
       const res = await fetch('/api/pro_brain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -94,15 +92,17 @@ export default function ChatPage() {
           sessionId: sessionId,
           query: cleanText,
           userName: "ראמי",
-          history: messages.slice(-6).map(m => ({ role: m.role, content: m.content }))
+          history: messages.slice(-5).map(m => ({ role: m.role, content: m.content }))
         })
       });
       
-      if (!res.ok) throw new Error("חיבור למוח נכשל");
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Brain Internal Error");
+      }
       
       const data = await res.json();
       
-      // הזרקת התשובה לצ'אט
       if (data.answer) {
         setMessages(prev => [...prev, {
           id: (Date.now() + 1).toString(),
@@ -112,111 +112,136 @@ export default function ChatPage() {
         }]);
       }
     } catch (error: any) {
-      toast.error("שגיאה בתקשורת עם המוח");
+      toast.error("תקלה בחיבור למוח: " + error.message);
       console.error("API Error:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const resetSession = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('saban_session_id');
-      window.location.reload();
-    }
-  };
-
   return (
-    <div className="flex h-screen bg-[#050505] text-slate-200 font-sans overflow-hidden" dir="rtl">
+    <div className="flex h-screen bg-[#F8FAFC] text-slate-900 font-sans overflow-hidden selection:bg-blue-100" dir="rtl">
       <Toaster position="top-center" richColors />
       
-      {/* Sidebar */}
-      <aside className="w-[320px] border-l border-white/5 bg-zinc-950/50 hidden lg:flex flex-col shadow-2xl z-20">
-        <header className="p-6 flex justify-between items-center border-b border-white/5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white font-black italic shadow-lg shadow-blue-500/20">S</div>
-            <div>
-              <h1 className="font-black text-lg tracking-tighter uppercase italic leading-none">SABAN PRO</h1>
-              <p className="text-[9px] font-bold text-blue-500 uppercase mt-1">Brain V9.6 Active</p>
-            </div>
+      {/* Sidebar - Premium Light */}
+      <aside className="w-[320px] border-l border-slate-200 bg-white hidden lg:flex flex-col shadow-sm z-20">
+        <header className="p-8 border-b border-slate-50 flex items-center gap-4">
+          <div className="w-12 h-12 bg-blue-600 rounded-[20px] flex items-center justify-center text-white shadow-xl shadow-blue-200 ring-4 ring-blue-50">
+            <Zap size={24} fill="white" />
           </div>
-          <Settings className="text-slate-500 cursor-pointer hover:rotate-90 transition-transform" size={18} />
+          <div className="text-right">
+            <h1 className="font-black text-xl tracking-tight text-slate-800 uppercase italic leading-none">Saban Pro</h1>
+            <p className="text-[10px] font-bold text-blue-600 tracking-widest uppercase mt-1">V9.7 Active</p>
+          </div>
         </header>
 
-        <div className="flex-1 p-6 space-y-6 overflow-y-auto scrollbar-hide">
-          <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
-            <span className="text-[10px] text-slate-500 font-bold uppercase block mb-1">סניף מרכזי</span>
-            <p className="text-sm font-black text-white">{phone}</p>
-          </div>
-          
-          <div className="p-4 bg-blue-500/5 rounded-2xl border border-blue-500/10">
-            <p className="text-[10px] text-blue-500 font-bold uppercase mb-2 tracking-widest text-right">סנכרון DB פעיל</p>
-            <p className="text-[10px] font-mono opacity-40 truncate">{sessionId}</p>
+        <div className="flex-1 p-6 space-y-6">
+          <div className="p-5 bg-slate-50 rounded-[28px] border border-white shadow-sm transition-all hover:shadow-md">
+            <span className="text-[10px] text-slate-400 font-black uppercase block mb-1 tracking-tighter">מרלו"ג מרכזי</span>
+            <p className="text-sm font-black text-slate-700 italic">החרש 10, רמלה</p>
           </div>
 
-          <button 
-            onClick={resetSession}
-            className="w-full p-4 bg-rose-500/10 text-rose-500 rounded-2xl text-xs font-black hover:bg-rose-500/20 transition-all flex items-center justify-center gap-2"
-          >
-            <RotateCcw size={14} /> איפוס שיחה
-          </button>
+          <div className="p-5 bg-blue-50/50 rounded-[28px] border border-blue-100/50">
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles size={14} className="text-blue-500" />
+              <span className="text-[10px] font-black text-blue-600 uppercase">סטטוס מוח</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+              <p className="text-xs font-bold text-slate-600 italic truncate">סנכרון DB מלא</p>
+            </div>
+          </div>
         </div>
+
+        <footer className="p-6 border-t border-slate-50">
+           <div className="flex justify-between items-center px-2">
+              <div className="flex gap-3">
+                 <Settings size={18} className="text-slate-300 hover:text-blue-600 cursor-pointer transition-colors" />
+                 <LayoutGrid size={18} className="text-slate-300 hover:text-blue-600 cursor-pointer transition-colors" />
+              </div>
+              <p className="text-[10px] font-black text-slate-300 uppercase italic">By Saban Dev</p>
+           </div>
+        </footer>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col relative bg-zinc-950">
-        <header className="h-20 border-b border-white/5 px-8 flex items-center justify-between bg-zinc-900/20 backdrop-blur-xl z-10">
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col relative bg-white lg:rounded-r-[40px] shadow-2xl overflow-hidden">
+        {/* Header */}
+        <header className="h-20 border-b border-slate-50 px-10 flex items-center justify-between bg-white/80 backdrop-blur-md z-10">
           <div className="flex items-center gap-4 text-right">
-            <div className="lg:hidden w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center font-black italic shadow-lg">S</div>
+            <div className="lg:hidden w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center font-black italic text-white shadow-lg">S</div>
             <div>
-              <h2 className="text-lg font-black italic uppercase tracking-tighter">Saban Consulting Pro</h2>
+              <h2 className="text-lg font-black text-slate-800 tracking-tighter uppercase italic">Saban Consulting Pro</h2>
               <div className="flex items-center gap-2 text-[10px] text-emerald-500 font-bold uppercase tracking-widest">
-                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> המוח מחובר לביצוע
+                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> 
+                מחובר כראמי הבוס
               </div>
             </div>
           </div>
-          <div className="flex gap-6 text-slate-500">
-             <Ruler className="cursor-pointer hover:text-blue-500 transition-colors" size={20} />
-             <Search className="cursor-pointer hover:text-white transition-colors" size={20} />
+          <div className="flex gap-4">
+             <div className="p-3 bg-slate-50 rounded-2xl text-slate-400 hover:text-blue-600 cursor-pointer transition-all hover:scale-110 active:scale-95">
+                <Search size={20} />
+             </div>
+             <div className="p-3 bg-slate-50 rounded-2xl text-slate-400 hover:text-blue-600 cursor-pointer transition-all hover:scale-110 active:scale-95">
+                <Phone size={20} />
+             </div>
           </div>
         </header>
 
-        {/* Message Stream */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 pb-32 scrollbar-hide">
-          {messages.map((m) => (
-            <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
-              <div className={`max-w-[85%] md:max-w-[70%] p-5 rounded-[24px] shadow-2xl border ${
-                m.role === 'user' 
-                  ? 'bg-zinc-900 border-white/5 text-slate-100 rounded-tr-none text-right shadow-black' 
-                  : 'bg-blue-600/10 border border-blue-500/20 text-slate-200 rounded-tl-none text-right shadow-blue-900/20'
-              }`}>
-                <p className="text-sm leading-relaxed whitespace-pre-wrap font-medium">{m.content}</p>
-                <span className="text-[8px] font-bold text-slate-600 mt-3 block uppercase opacity-40">
-                  {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              </div>
-            </div>
-          ))}
+        {/* Chat Stream */}
+        <div className="flex-1 overflow-y-auto p-8 space-y-8 pb-32 scrollbar-hide bg-[#FDFDFD]">
+          <AnimatePresence>
+            {messages.map((m) => (
+              <motion.div 
+                initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                key={m.id} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}
+              >
+                <div className={`max-w-[85%] md:max-w-[75%] p-6 rounded-[32px] shadow-sm border ${
+                  m.role === 'user' 
+                    ? 'bg-white border-slate-100 text-slate-800 rounded-tr-none shadow-slate-100/50' 
+                    : 'bg-blue-600 text-white border-blue-500 rounded-tl-none shadow-blue-200'
+                }`}>
+                  <div className="flex items-center gap-2 mb-2 opacity-50">
+                    {m.role === 'user' ? <User size={12} /> : <Zap size={12} fill="currentColor" />}
+                    <span className="text-[9px] font-black uppercase tracking-widest">
+                       {m.role === 'user' ? 'ראמי' : 'המוח'}
+                    </span>
+                  </div>
+                  <p className="text-[15px] leading-[1.6] whitespace-pre-wrap font-medium">{m.content}</p>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+
+          {/* Typing Effect */}
           {isLoading && (
-            <div className="flex justify-end animate-pulse">
-              <div className="bg-white/5 p-3 rounded-xl flex items-center gap-2 border border-white/10 shadow-lg">
-                <Loader2 className="animate-spin text-blue-500" size={14} />
-                <span className="text-[10px] font-black text-slate-500 uppercase tracking-tighter italic">המוח מעבד פקודה...</span>
+            <motion.div 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              className="flex justify-end"
+            >
+              <div className="bg-blue-50 p-5 rounded-[24px] flex items-center gap-3 border border-blue-100 shadow-sm">
+                <div className="flex gap-1">
+                   <motion.div animate={{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 0.6 }} className="w-1.5 h-1.5 bg-blue-400 rounded-full" />
+                   <motion.div animate={{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0.2 }} className="w-1.5 h-1.5 bg-blue-400 rounded-full" />
+                   <motion.div animate={{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0.4 }} className="w-1.5 h-1.5 bg-blue-400 rounded-full" />
+                </div>
+                <span className="text-[10px] font-black text-blue-500 uppercase tracking-tighter italic">המוח מחשב ביצוע...</span>
               </div>
-            </div>
+            </motion.div>
           )}
           <div ref={scrollRef} />
         </div>
 
-        {/* Input Composer */}
-        <footer className="p-6 absolute bottom-0 w-full z-20 bg-gradient-to-t from-black via-zinc-950/90 to-transparent pt-10">
-          <div className="max-w-4xl mx-auto bg-zinc-900 border border-white/10 p-2 rounded-[32px] shadow-[0_-20px_50px_rgba(0,0,0,0.5)] flex items-center gap-2 backdrop-blur-md">
+        {/* Input Composer - Premium Floating */}
+        <footer className="p-8 absolute bottom-0 w-full z-20 bg-gradient-to-t from-white via-white/95 to-transparent pt-12">
+          <div className="max-w-4xl mx-auto bg-white border border-slate-200 p-2 rounded-[35px] shadow-[0_20px_50px_rgba(0,0,0,0.08)] flex items-center gap-3 ring-8 ring-slate-50/50 backdrop-blur-md">
              <input 
               type="text" 
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="כתוב פקודה למוח הפרו..." 
-              className="flex-1 bg-transparent px-6 py-3 outline-none font-bold text-sm text-right text-white placeholder-zinc-700"
+              placeholder="כתוב פקודה לביצוע ראמי..." 
+              className="flex-1 bg-transparent px-8 py-4 outline-none font-bold text-sm text-slate-800 placeholder-slate-300 text-right"
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleSendMessage(input);
               }}
@@ -224,9 +249,9 @@ export default function ChatPage() {
             <button 
               onClick={() => handleSendMessage(input)} 
               disabled={isLoading}
-              className="w-12 h-12 bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-800 rounded-full flex items-center justify-center text-white transition-all active:scale-90 shadow-lg shadow-blue-600/20"
+              className="w-14 h-14 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-100 disabled:text-slate-300 rounded-[25px] flex items-center justify-center text-white transition-all active:scale-90 shadow-lg shadow-blue-200"
             >
-              {isLoading ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
+              {isLoading ? <Loader2 className="animate-spin" size={24} /> : <Send size={24} />}
             </button>
           </div>
         </footer>
