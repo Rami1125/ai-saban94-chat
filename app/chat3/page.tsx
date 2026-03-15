@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Send, Zap, Phone, Search, Loader2, User, ShieldCheck, 
-  MessageSquare, LayoutDashboard, ExternalLink, Clock, Users, 
   ShoppingCart, Image as ImageIcon, ChevronRight,
   Plus, Minus, Tag, Trash2, CheckCircle, Calendar, Map, Navigation, MousePointerClick, Save, PlayCircle
 } from 'lucide-react';
@@ -12,11 +11,11 @@ import { toast, Toaster } from "sonner";
 import { motion, AnimatePresence } from 'framer-motion';
 
 /**
- * Saban OS V12.0 - Final Production Version
+ * Saban OS V12.2 - Final Production Fix
  * -------------------------------------------
- * - Branding: Ai-ח.סבן Premium
- * - UI: Glassmorphism + High Contrast Text
- * - Features: Live Cart, Future Orders, Waze Integration, Gallery, Custom Buttons
+ * - Fix: All buttons (Cart/Summary/Waze) fully clickable.
+ * - Sync: Dynamic quantity updates from chat commands.
+ * - UI: Premium Saban Branding + High Contrast Text.
  */
 
 const BRANCH_DATA: any = {
@@ -36,7 +35,6 @@ const BRANCH_DATA: any = {
   }
 };
 
-// --- רכיב לוגו ממותג ---
 const SabanLogo = () => (
   <div className="flex items-center gap-3">
     <div className="relative">
@@ -46,13 +44,12 @@ const SabanLogo = () => (
       <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 border-2 border-white rounded-full" />
     </div>
     <div className="text-right">
-      <h1 className="font-black text-xl text-slate-900 leading-none italic tracking-tighter">Ai-ח.סבן</h1>
+      <h1 className="font-black text-xl text-slate-900 leading-none italic tracking-tighter text-right">Ai-ח.סבן</h1>
       <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-1">LTD Logistics</p>
     </div>
   </div>
 );
 
-// --- רכיב גלריית מוצרים ---
 const ProductGallery = ({ urls }: { urls: string[] }) => {
   const [main, setMain] = useState(urls[0]);
   return (
@@ -71,7 +68,6 @@ const ProductGallery = ({ urls }: { urls: string[] }) => {
   );
 };
 
-// --- כרטיס ניווט WAZE ---
 const WazeCard = ({ bKey }: { bKey: string }) => {
   const b = BRANCH_DATA[bKey];
   if (!b) return null;
@@ -83,18 +79,18 @@ const WazeCard = ({ bKey }: { bKey: string }) => {
       </div>
       <div className="p-6 space-y-4 text-right">
         <p className="text-black font-black text-lg leading-tight">{b.address}</p>
-        <p className="text-slate-500 text-xs font-bold leading-relaxed">{b.hours}</p>
+        <p className="text-slate-500 text-xs font-bold leading-relaxed whitespace-pre-line">{b.hours}</p>
         <div className="flex gap-2 pt-2">
-          <button onClick={() => window.open(b.wazeUrl)} className="flex-1 bg-[#33CCFF] text-white py-4 rounded-2xl font-black shadow-lg">סע ב-Waze</button>
-          <button onClick={() => window.open(`tel:${b.phone}`)} className="w-16 bg-slate-900 text-white rounded-2xl flex items-center justify-center shadow-lg"><Phone size={20}/></button>
+          <button onClick={() => window.open(b.wazeUrl, '_blank')} className="flex-1 bg-[#33CCFF] text-white py-4 rounded-2xl font-black shadow-lg hover:brightness-110 active:scale-95 transition-all">סע ב-Waze</button>
+          <button onClick={() => window.open(`tel:${b.phone}`)} className="w-16 bg-slate-900 text-white rounded-2xl flex items-center justify-center shadow-lg active:scale-95 transition-all"><Phone size={20}/></button>
         </div>
       </div>
     </motion.div>
   );
 };
 
-// --- מפענח טקסט חכם ---
-const SmartMessageRenderer = ({ text, onAdd }: any) => {
+// --- מפענח טקסט חכם (מתוקן) ---
+const SmartMessageRenderer = ({ text, onAdd, onAddToFuture }: any) => {
   if (!text) return null;
 
   const galleryRegex = /\[GALLERY:\s*(.*?)\]/i;
@@ -109,8 +105,17 @@ const SmartMessageRenderer = ({ text, onAdd }: any) => {
   const buttons: any[] = [];
   let bM; while ((bM = buttonRegex.exec(text))) buttons.push({ l: bM[1], a: bM[2] });
 
-  const clean = text.replace(galleryRegex, '').replace(wazeRegex, '').replace(buttonRegex, '').replace(/\[QUICK_ADD:.*?\]/g, '').replace(/\[FUTURE_SAVE:.*?\]/g, '').replace(/\[SET_QTY:.*?\]/g, '').trim();
+  const clean = text
+    .replace(galleryRegex, '')
+    .replace(/[\(\[]WAZE_BRANCH:.*?[\)\]]/gi, '')
+    .replace(buttonRegex, '')
+    .replace(/\[QUICK_ADD:.*?\]/g, '')
+    .replace(/\[FUTURE_SAVE:.*?\]/g, '')
+    .replace(/\[SET_QTY:.*?\]/g, '')
+    .trim();
+  
   const lines = clean.split('\n');
+  const isOrderSummary = text.includes("סיכום הזמנה") || text.includes("### 📋 סיכום");
 
   return (
     <div className="space-y-4">
@@ -122,28 +127,52 @@ const SmartMessageRenderer = ({ text, onAdd }: any) => {
         if (line.trim().startsWith('###')) return <h3 key={i} className="text-blue-700 font-black text-xl pt-2 border-r-4 border-blue-600 pr-3">{line.replace('###', '').trim()}</h3>;
         const parts = line.split(/(\*\*.*?\*\*)/g);
         return (
-          <p key={i} className="text-[17px] leading-relaxed text-black font-semibold">
+          <p key={i} className="text-[17px] leading-relaxed text-black font-semibold text-right">
             {parts.map((p, j) => p.startsWith('**') ? <strong key={j} className="text-blue-900 font-black underline decoration-blue-200 decoration-2 underline-offset-4">{p.slice(2, -2)}</strong> : p)}
           </p>
         );
       })}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 justify-end">
         {buttons.map((b, i) => (
-          <button key={i} onClick={() => window.open(b.a.startsWith('tel') ? b.a : b.a, '_blank')} className="bg-white border-2 border-blue-600 text-blue-700 px-6 py-3 rounded-2xl font-black shadow-md hover:bg-blue-50 transition-all">
+          <button key={i} onClick={() => window.open(b.a.startsWith('tel') ? b.a : b.a, '_blank')} className="bg-white border-2 border-blue-600 text-blue-700 px-6 py-3 rounded-2xl font-black shadow-md hover:bg-blue-50 transition-all active:scale-95">
              {b.l}
           </button>
         ))}
       </div>
 
       {text.includes("[QUICK_ADD:") && (
-        <button onClick={() => onAdd(text.match(/\[QUICK_ADD:(.*?)\]/)![1])} className="flex items-center gap-3 bg-blue-600 text-white px-8 py-4 rounded-3xl font-black shadow-xl active:scale-95 transition-all">
+        <button 
+          onClick={() => {
+            const sku = text.match(/\[QUICK_ADD:(.*?)\]/)?.[1];
+            if (sku) onAdd(sku);
+          }} 
+          className="flex items-center gap-3 bg-blue-600 text-white px-8 py-4 rounded-3xl font-black shadow-xl hover:bg-blue-700 transition-all active:scale-95 w-full justify-center"
+        >
           <ShoppingCart size={20} /> הוסף לסל לביצוע
         </button>
       )}
 
-      {text.includes("### 📋 סיכום") && (
-        <button onClick={() => window.open(`https://wa.me/972508860896?text=${encodeURIComponent(clean)}`)} className="w-full bg-[#25D366] text-white py-5 rounded-[35px] font-black shadow-2xl border-b-8 border-green-700 active:scale-95 transition-all mt-6 text-lg italic uppercase">
+      {text.includes("[FUTURE_SAVE:") && (
+        <button 
+          onClick={() => {
+            const sku = text.match(/\[FUTURE_SAVE:(.*?)\]/)?.[1];
+            if (sku) onAddToFuture(sku);
+          }} 
+          className="flex items-center gap-3 bg-orange-500 text-white px-8 py-4 rounded-3xl font-black shadow-xl hover:bg-orange-600 transition-all active:scale-95 w-full justify-center border-b-4 border-orange-700"
+        >
+          <Calendar size={20} /> שמור להזמנה עתידית
+        </button>
+      )}
+
+      {isOrderSummary && (
+        <button 
+          onClick={() => {
+            const waText = encodeURIComponent(`🏗️ *סיכום הזמנה - ח. סבן*\n\n${clean}\n\n*נשלח מהמוח הלוגיסטי*`);
+            window.open(`https://wa.me/972508860896?text=${waText}`, '_blank');
+          }} 
+          className="w-full bg-[#25D366] text-white py-5 rounded-[35px] font-black shadow-2xl border-b-8 border-green-700 active:scale-95 transition-all mt-6 text-lg italic uppercase"
+        >
            שלח הזמנה סופית לראמי 🦾
         </button>
       )}
@@ -173,18 +202,28 @@ export default function SabanOSFinal() {
     }
   }, []);
 
-  useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading, cart]);
+  useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading, cart, future]);
 
   const handleAction = async (sku: string, qty = 1, isFuture = false) => {
     const { data: p } = await supabase.from('inventory').select('*').eq('sku', sku).maybeSingle();
     if (p) {
-      const target = isFuture ? setFuture : setCart;
-      target(prev => {
-        const ex = prev.find(i => i.sku === sku);
-        if (ex) return prev.map(i => i.sku === sku ? {...i, qty} : i);
-        return [...prev, {...p, qty}];
-      });
-      toast.success(isFuture ? "נשמר להזמנה עתידית" : "התווסף לסל הביצוע");
+      if (isFuture) {
+        setFuture(prev => {
+          const ex = prev.find(i => i.sku === sku);
+          if (ex) return prev.map(i => i.sku === sku ? {...i, qty} : i);
+          return [...prev, {...p, qty}];
+        });
+        toast.warning(`נשמר לעתיד: ${p.product_name}`);
+      } else {
+        setCart(prev => {
+          const ex = prev.find(i => i.sku === sku);
+          if (ex) return prev.map(i => i.sku === sku ? {...i, qty} : i);
+          return [...prev, {...p, qty}];
+        });
+        toast.success(`התווסף לסל: ${p.product_name} (${qty} יח')`);
+      }
+    } else {
+      toast.error(`מוצר ${sku} לא נמצא במלאי`);
     }
   };
 
@@ -202,6 +241,7 @@ export default function SabanOSFinal() {
       });
       const data = await res.json();
       
+      // סריקת פקודות מהמענה של המוח
       const qMatch = data.answer.match(/\[SET_QTY:(.*?):(.*?)\]/);
       if (qMatch) handleAction(qMatch[1], parseInt(qMatch[2]));
 
@@ -212,55 +252,62 @@ export default function SabanOSFinal() {
       if (fMatch) handleAction(fMatch[1], 1, true);
 
       setMessages(prev => [...prev, { role: 'assistant', content: data.answer }]);
-    } catch (e) { toast.error("תקלה במוח"); } finally { setLoading(false); }
+    } catch (e) { 
+      toast.error("תקלה בחיבור למוח"); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   return (
     <div className="flex h-screen bg-[#FDFDFD] text-slate-950 font-sans overflow-hidden" dir="rtl">
       <Toaster position="top-center" richColors />
       
-      {/* Sidebar - Management */}
       <aside className="w-[340px] border-l border-slate-200 bg-white hidden lg:flex flex-col shadow-sm z-30">
         <div className="p-10 border-b border-slate-50 flex flex-col items-center gap-6 bg-slate-50/50">
           <SabanLogo />
         </div>
 
-        <div className="flex-1 p-8 overflow-y-auto space-y-10 scrollbar-hide">
+        <div className="flex-1 p-8 overflow-y-auto space-y-10 scrollbar-hide bg-slate-50/20">
            <section>
              <h4 className="text-[11px] font-black text-blue-600 uppercase mb-6 flex items-center gap-3 tracking-widest">סל הזמנה פעיל ({cart.length})</h4>
-             {cart.map((item, idx) => (
-               <motion.div key={idx} layout className="p-5 bg-white rounded-[28px] border border-slate-100 mb-3 shadow-sm flex justify-between items-center group">
-                  <div className="text-right">
-                    <p className="text-[13px] font-black text-slate-900">{item.product_name}</p>
-                    <p className="text-[11px] text-blue-600 font-bold mt-1 italic">כמות: {item.qty || 1}</p>
-                  </div>
-                  <button onClick={() => setCart(cart.filter(i => i.sku !== item.sku))} className="text-slate-300 group-hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
-               </motion.div>
-             ))}
+             <AnimatePresence mode="popLayout">
+               {cart.map((item) => (
+                 <motion.div layout initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }} key={item.sku} className="p-5 bg-white rounded-[28px] border border-slate-100 mb-3 shadow-sm flex justify-between items-center group">
+                    <div className="text-right">
+                      <p className="text-[13px] font-black text-slate-900">{item.product_name}</p>
+                      <motion.p key={item.qty} initial={{ scale: 1.5, color: '#2563eb' }} animate={{ scale: 1, color: '#475569' }} className="text-[11px] font-bold mt-1 italic">כמות: {item.qty}</motion.p>
+                    </div>
+                    <button onClick={() => setCart(cart.filter(i => i.sku !== item.sku))} className="text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
+                 </motion.div>
+               ))}
+             </AnimatePresence>
+             {cart.length === 0 && <p className="text-center text-[10px] text-slate-300 italic py-6">הסל ריק</p>}
            </section>
 
            <section>
              <h4 className="text-[11px] font-black text-orange-500 uppercase mb-6 flex items-center gap-3 tracking-widest">הזמנות עתידיות ({future.length})</h4>
-             {future.map((item, idx) => (
-               <motion.div key={idx} layout className="p-5 bg-orange-50/50 rounded-[28px] border border-orange-100 mb-3 shadow-sm flex justify-between items-center group">
-                  <div className="text-right">
-                    <p className="text-[13px] font-black text-orange-950">{item.product_name}</p>
-                    <p className="text-[11px] text-orange-600 font-bold">שמור לעתיד</p>
-                  </div>
-                  <button onClick={() => setFuture(future.filter(i => i.sku !== item.sku))} className="text-orange-200 group-hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
-               </motion.div>
-             ))}
+             <AnimatePresence mode="popLayout">
+               {future.map((item) => (
+                 <motion.div layout initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} key={item.sku} className="p-5 bg-orange-50/50 rounded-[28px] border border-orange-100 mb-3 shadow-sm flex justify-between items-center group">
+                    <div className="text-right">
+                      <p className="text-[13px] font-black text-orange-950">{item.product_name}</p>
+                      <p className="text-[11px] text-orange-600 font-bold">שמור לעתיד</p>
+                    </div>
+                    <button onClick={() => setFuture(future.filter(i => i.sku !== item.sku))} className="text-orange-200 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
+                 </motion.div>
+               ))}
+             </AnimatePresence>
            </section>
         </div>
 
         <div className="p-8 border-t border-slate-100 bg-white">
-           <button onClick={() => toast.success("מכין סיכום עבודה...")} className="w-full bg-slate-950 text-white py-5 rounded-[30px] font-black shadow-xl hover:bg-blue-700 transition-all flex items-center justify-center gap-3 italic">
+           <button onClick={() => toast.success("סידור עבודה מוכן")} className="w-full bg-slate-950 text-white py-5 rounded-[30px] font-black shadow-xl hover:bg-blue-700 transition-all flex items-center justify-center gap-3 italic active:scale-95">
               סגור הזמנה לביצוע 🦾
            </button>
         </div>
       </aside>
 
-      {/* Main Chat Content */}
       <main className="flex-1 flex flex-col relative bg-white overflow-hidden shadow-2xl lg:rounded-r-[50px]">
         <header className="h-20 border-b border-slate-100 px-12 flex items-center justify-between bg-white/95 backdrop-blur-md z-10 shadow-sm">
           <div className="flex items-center gap-4">
@@ -283,23 +330,22 @@ export default function SabanOSFinal() {
             {messages.map((m, i) => (
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} key={i} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
                 <div className={`max-w-[85%] md:max-w-[75%] p-10 rounded-[45px] shadow-sm border ${
-                  m.role === 'user' ? 'bg-white border-slate-200 text-black shadow-md' : 'bg-blue-700/90 backdrop-blur-md text-white border-blue-800 shadow-blue-200/40 shadow-2xl'
+                  m.role === 'user' ? 'bg-white border-slate-200 text-black shadow-md' : 'bg-blue-700/85 backdrop-blur-md text-white border-blue-800 shadow-blue-200/40 shadow-2xl'
                 }`}>
                   <div className={`flex items-center gap-2 mb-5 ${m.role === 'user' ? 'text-slate-400' : 'text-blue-100/60'}`}>
                      {m.role === 'user' ? <User size={14} /> : <Zap size={14} fill="currentColor" />}
                      <span className="text-[11px] font-black uppercase tracking-[0.2em]">{m.role === 'user' ? 'ראמי הבוס' : 'Ai-ח.סבן'}</span>
                   </div>
-                  <SmartMessageRenderer text={m.content} onAdd={handleAction} />
+                  <SmartMessageRenderer text={m.content} onAdd={handleAction} onAddToFuture={(sku: string) => handleAction(sku, 1, true)} />
                 </div>
               </motion.div>
             ))}
           </AnimatePresence>
-          {loading && <div className="flex justify-end animate-pulse"><div className="bg-white p-6 rounded-[35px] border border-blue-100 flex items-center gap-4 shadow-xl"><Loader2 className="animate-spin text-blue-600" size={24}/><span className="text-xs font-black text-blue-700 uppercase italic">המוח בונה הצעה לביצוע...</span></div></div>}
+          {loading && <div className="flex justify-end animate-pulse"><div className="bg-white p-6 rounded-[35px] border border-blue-100 flex items-center gap-4 shadow-xl"><Loader2 className="animate-spin text-blue-600" size={24}/><span className="text-xs font-black text-blue-700 uppercase italic">המוח מעבד פקודה...</span></div></div>}
           <div ref={scrollRef} />
         </div>
 
-        {/* Input Composer */}
-        <footer className="p-10 absolute bottom-0 w-full z-20 bg-gradient-to-t from-white via-white pt-24">
+        <footer className="p-10 absolute bottom-0 w-full z-20 bg-gradient-to-t from-white via-white pt-24 text-right">
           <div className="max-w-5xl mx-auto bg-white border-2 border-slate-200 p-3 rounded-[55px] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.25)] flex items-center gap-4 ring-12 ring-slate-50/30 backdrop-blur-xl">
              <input 
               type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} 
