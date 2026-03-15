@@ -223,8 +223,8 @@ export default function App() {
             <Zap size={24} fill="white" />
           </div>
           <div className="text-right">
-            <h1 className="font-black text-xl leading-none italic uppercase text-slate-900">SABAN OS</h1>
-            <p className="text-[10px] font-bold text-blue-700 uppercase tracking-widest mt-1.5">V10.4 Glass UI</p>
+            <h1 className="font-black text-xl leading-none italic uppercase text-slate-900">Ai-ח.סבן</h1>
+            <p className="text-[10px] font-bold text-blue-700 uppercase tracking-widest mt-1.5">ברוכים הבאים</p>
           </div>
         </div>
 
@@ -245,9 +245,9 @@ export default function App() {
               <div className="flex items-center gap-3">
                 <ShieldCheck className="text-emerald-600" size={24} />
                 <div>
-                  <h2 className="text-base font-black uppercase italic tracking-tighter text-slate-950 leading-none">Saban Executive Brain</h2>
+                  <h2 className="text-base font-black uppercase italic tracking-tighter text-slate-950 leading-none">צאט ח.סבן</h2>
                   <div className="text-[10px] text-emerald-600 font-black uppercase mt-1.5 tracking-widest flex items-center gap-1.5">
-                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> Live & Protected
+                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />מחובר ...
                   </div>
                 </div>
               </div>
