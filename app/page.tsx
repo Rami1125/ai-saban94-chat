@@ -193,8 +193,8 @@ export default function SabanOSV10() {
             <Zap size={24} fill="white" />
           </div>
           <div className="text-right">
-            <h1 className="font-black text-xl tracking-tighter leading-none italic uppercase">Saban OS</h1>
-            <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-1">V10.0 Pro</p>
+            <h1 className="font-black text-xl tracking-tighter leading-none italic uppercase">Ai-ח.סבן</h1>
+            <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-1"> ברוכים הבאים </p>
           </div>
         </div>
 
