@@ -13,12 +13,12 @@ import { toast, Toaster } from "sonner";
 import { motion, AnimatePresence } from 'framer-motion';
 
 /**
- * Ai-Saban OS V19.0 - Mobile App Simulator Edition
+ * Ai-Saban OS V20.0 - VIP Mobile App Elite
  * -------------------------------------------
- * - Splash Screen: Central logo opening simulation.
- * - Dynamic Greetings: Time-based personalized welcome.
- * - Mobile UI: Perfectly scaled text and components.
- * - Persistent DNA: Syncs with Saban logic/inventory.
+ * - Splash Screen: Real app start simulation.
+ * - Device Detection: Fixed typography for mobile.
+ * - Dynamic Logic: Time-based greetings & DNA sync.
+ * - Events: Enter for Desktop, Touch for Mobile.
  */
 
 const LOGO_PATH = "/ai.png";
@@ -30,97 +30,94 @@ const VIP_PROFILES: any = {
     name: "בר אורניל",
     fullName: "בר אורניל (אורניל/אבי לוי)",
     project: "סטרומה 4, הרצליה",
-    phone: "054-5998111",
-    status: "Priority VIP"
+    phone: "054-5998111"
   }
 };
 
-// --- רכיב Splash Screen ---
-const SplashScreen = ({ finishLoading }: { finishLoading: () => void }) => {
-  return (
-    <motion.div 
-      initial={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.8, ease: "easeInOut" }}
-      className="fixed inset-0 z-[200] bg-slate-950 flex items-center justify-center overflow-hidden"
+// --- רכיב Splash Screen - פתיחה ויזואלית ---
+const AppSplash = ({ onComplete }: { onComplete: () => void }) => (
+  <motion.div 
+    initial={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
+    className="fixed inset-0 z-[1000] bg-slate-950 flex flex-col items-center justify-center overflow-hidden"
+  >
+    <motion.div
+      initial={{ scale: 0.1, opacity: 0, rotate: -20 }}
+      animate={{ scale: 1, opacity: 1, rotate: 0 }}
+      transition={{ type: "spring", damping: 15, stiffness: 100 }}
+      className="w-48 h-48 bg-white rounded-[50px] shadow-[0_0_80px_rgba(255,255,255,0.15)] flex items-center justify-center p-6 relative"
     >
-      <div className="relative">
-        <motion.div
-          initial={{ scale: 0.5, opacity: 0, filter: "blur(10px)" }}
-          animate={{ scale: 1, opacity: 1, filter: "blur(0px)" }}
-          transition={{ duration: 1, ease: "backOut" }}
-          onAnimationComplete={() => setTimeout(finishLoading, 1500)}
-          className="w-40 h-40 md:w-56 md:h-56 bg-white rounded-[40px] shadow-[0_0_100px_rgba(255,255,255,0.2)] flex items-center justify-center p-6 ring-4 ring-blue-500/30"
-        >
-          <img src={LOGO_PATH} alt="Saban" className="w-full h-full object-contain" />
-        </motion.div>
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="absolute -bottom-16 left-0 right-0 text-center"
-        >
-          <h2 className="text-white font-black tracking-[0.4em] uppercase text-sm">Ai-ח.סבן</h2>
-          <div className="mt-4 flex justify-center gap-1">
-            <motion.div animate={{ opacity: [0, 1, 0] }} transition={{ repeat: Infinity, duration: 1 }} className="w-1.5 h-1.5 bg-blue-500 rounded-full" />
-            <motion.div animate={{ opacity: [0, 1, 0] }} transition={{ repeat: Infinity, duration: 1, delay: 0.2 }} className="w-1.5 h-1.5 bg-blue-500 rounded-full" />
-            <motion.div animate={{ opacity: [0, 1, 0] }} transition={{ repeat: Infinity, duration: 1, delay: 0.4 }} className="w-1.5 h-1.5 bg-blue-500 rounded-full" />
-          </div>
-        </motion.div>
+      <img src={LOGO_PATH} alt="Saban" className="w-full h-full object-contain" />
+      <motion.div 
+        animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }}
+        transition={{ repeat: Infinity, duration: 2 }}
+        className="absolute inset-0 bg-blue-500/10 rounded-[50px]"
+      />
+    </motion.div>
+    <motion.div 
+      initial={{ y: 20, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ delay: 0.6 }}
+      className="mt-12 flex flex-col items-center"
+    >
+      <h1 className="text-white font-black text-2xl tracking-[0.3em] italic">Ai-ח.סבן</h1>
+      <div className="mt-4 flex gap-1.5">
+        {[0, 0.2, 0.4].map((d, i) => (
+          <motion.div 
+            key={i}
+            animate={{ y: [0, -6, 0] }}
+            transition={{ repeat: Infinity, duration: 0.8, delay: d }}
+            className="w-2 h-2 bg-blue-500 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.5)]" 
+          />
+        ))}
       </div>
     </motion.div>
-  );
-};
+  </motion.div>
+);
 
-export default function VipAppPortal() {
+export default function VipMobileApp() {
   const { id } = useParams();
-  const [showSplash, setShowSplash] = useState(true);
-  const [isMobile, setIsMobile] = useState(false);
-  const [client, setClient] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState<any[]>([]);
   const [cart, setCart] = useState<any[]>([]);
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [isBotTyping, setIsBotTyping] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // --- גילוי מכשיר ---
+  const client = useMemo(() => VIP_PROFILES[id as string], [id]);
+
+  // זיהוי מכשיר ומימדים
   useEffect(() => {
-    const checkDevice = () => setIsMobile(window.innerWidth < 1024);
+    const checkDevice = () => {
+      setIsMobile(window.innerWidth < 1024);
+    };
     checkDevice();
     window.addEventListener('resize', checkDevice);
+    setTimeout(() => setLoading(false), 2800); // משך ה-Splash
     return () => window.removeEventListener('resize', checkDevice);
   }, []);
 
-  // --- לוגיקת ברכה אישית לפי זמן ---
-  const getGreeting = useMemo(() => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "בוקר טוב";
-    if (hour < 17) return "צהריים טובים";
-    if (hour < 21) return "ערב טוב";
-    return "לילה טוב";
+  // ברכה אישית לפי זמן
+  const greeting = useMemo(() => {
+    const h = new Date().getHours();
+    if (h < 12) return "בוקר טוב";
+    if (h < 17) return "צהריים טובים";
+    return "ערב טוב";
   }, []);
 
   useEffect(() => {
-    if (id && VIP_PROFILES[id as string]) {
-      const profile = VIP_PROFILES[id as string];
-      setClient(profile);
-    }
-  }, [id]);
-
-  // אתחול צ'אט לאחר הספלאש
-  const handleAppStart = () => {
-    setShowSplash(false);
-    if (client) {
+    if (!loading && client) {
       setMessages([{ 
         role: 'assistant', 
-        content: `### ${getGreeting}, ${client.name} אחי 🦾\nהמוח של ח. סבן מחובר לביצוע ב**${client.project}**. המשאית מוכנה להעמסה. **מה נבצע היום?**` 
+        content: `### ${greeting}, ${client.name} אחי 🦾\nהמערכת מזהה אותך ב**${client.project}**. הכל מוכן להעמסה לביצוע. **מה נשלח היום?**` 
       }]);
     }
-  };
+  }, [loading, client]);
 
-  useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
+  useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, isBotTyping]);
 
   const handleAction = async (sku: string, qty = 1) => {
     let { data: p } = await supabase.from('inventory').select('*').eq('sku', sku).maybeSingle();
@@ -130,21 +127,21 @@ export default function VipAppPortal() {
         if (ex) return prev.map(i => i.sku === p?.sku ? {...i, qty} : i);
         return [...prev, {...p, qty}];
       });
-      toast.success(`${p.product_name} נוסף לסל`, { position: "top-center" });
+      toast.success(`${p.product_name} בסל`, { position: "top-center" });
     }
   };
 
   const handleSend = async () => {
-    if (!input.trim() || loading) return;
+    if (!input.trim() || isBotTyping) return;
     const q = input; setInput("");
     setMessages(prev => [...prev, { role: 'user', content: q }]);
-    setLoading(true);
+    setIsBotTyping(true);
 
     try {
       const res = await fetch('/api/pro_brain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: `vip_${id}`, query: q, history: messages.slice(-5) })
+        body: JSON.stringify({ sessionId: `app_vip_${id}`, query: q, history: messages.slice(-4) })
       });
       const data = await res.json();
       
@@ -155,125 +152,121 @@ export default function VipAppPortal() {
       if (aMatch) handleAction(aMatch[1]);
 
       setMessages(prev => [...prev, { role: 'assistant', content: data.answer }]);
-    } catch (e) { toast.error("ניתוק מהשרת"); } finally { setLoading(false); }
+    } catch (e) { toast.error("תקלה במוח"); } finally { setIsBotTyping(false); }
   };
 
-  if (!client) return null;
+  if (!client) return <div className="h-screen bg-slate-900 flex items-center justify-center text-white italic font-black">זיהוי מזהה לקוח...</div>;
 
   return (
-    <div className="flex h-screen bg-[#F8FAFC] text-slate-900 font-sans overflow-hidden select-none" dir="rtl">
+    <div className="flex h-[100dvh] bg-[#F1F3F5] text-slate-900 font-sans overflow-hidden select-none" dir="rtl">
       <Toaster position="top-center" richColors theme="light" />
-      <AnimatePresence>{showSplash && <SplashScreen finishLoading={handleAppStart} />}</AnimatePresence>
+      <AnimatePresence>{loading && <AppSplash onComplete={() => setLoading(false)} />}</AnimatePresence>
 
-      {/* --- Mobile Cart Drawer --- */}
+      {/* Mobile Drawer (Cart) */}
       <AnimatePresence>
         {isSidebarOpen && (
           <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsSidebarOpen(false)} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] lg:hidden" />
-            <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="fixed inset-y-0 right-0 w-[85%] max-w-sm bg-white z-[110] shadow-2xl flex flex-col lg:hidden">
-              <div className="p-6 border-b flex justify-between items-center bg-slate-50">
-                <h3 className="font-black text-blue-700 italic">סל הביצוע שלי</h3>
-                <button onClick={() => setIsSidebarOpen(false)} className="p-2 bg-white rounded-xl shadow-sm border"><X size={20}/></button>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsSidebarOpen(false)} className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-[100] lg:hidden" />
+            <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: "spring", damping: 25 }} className="fixed inset-y-0 right-0 w-[85%] bg-white z-[110] shadow-2xl flex flex-col lg:hidden rounded-l-[40px]">
+              <div className="p-8 border-b flex justify-between items-center bg-slate-50 rounded-tl-[40px]">
+                <div className="text-right">
+                  <h3 className="font-black text-blue-700 italic">הסל שלי</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">{client.project}</p>
+                </div>
+                <button onClick={() => setIsSidebarOpen(false)} className="p-2 bg-white rounded-2xl shadow-sm border"><X size={20}/></button>
               </div>
-              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
                 {cart.map(item => (
-                  <div key={item.sku} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex justify-between items-center">
+                  <div key={item.sku} className="p-4 bg-slate-50 rounded-3xl border border-slate-100 flex justify-between items-center group">
+                    <button onClick={() => setCart(cart.filter(c => c.sku !== item.sku))} className="text-slate-300 hover:text-red-500"><Trash2 size={18}/></button>
                     <div className="text-right">
-                      <p className="font-black text-sm">{item.product_name}</p>
+                      <p className="font-black text-[13px] leading-tight text-slate-800">{item.product_name}</p>
                       <p className="text-xs font-bold text-blue-600 mt-1">כמות: {item.qty}</p>
                     </div>
-                    <button onClick={() => setCart(cart.filter(c => c.sku !== item.sku))} className="text-slate-300 hover:text-red-500"><Trash2 size={18}/></button>
                   </div>
                 ))}
-                {cart.length === 0 && <p className="text-center text-xs text-slate-400 py-10">הסל ריק - מחכה לפקודה</p>}
+                {cart.length === 0 && <div className="text-center py-20 opacity-20 italic font-black text-sm uppercase tracking-widest">אין פריטים בסל</div>}
               </div>
-              <div className="p-4 border-t">
-                <button onClick={() => {setShowSummary(true); setIsSidebarOpen(false);}} disabled={cart.length === 0} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black shadow-lg disabled:opacity-30">סיכום לביצוע 🦾</button>
+              <div className="p-6 border-t bg-white rounded-bl-[40px]">
+                <button onClick={() => {setShowSummary(true); setIsSidebarOpen(false);}} disabled={cart.length === 0} className="w-full bg-slate-900 text-white py-5 rounded-[22px] font-black shadow-xl disabled:opacity-30 active:scale-95 transition-all">סגור הזמנה לביצוע 🦾</button>
               </div>
             </motion.aside>
           </>
         )}
       </AnimatePresence>
 
-      {/* --- Main App Layout --- */}
-      <main className="flex-1 flex flex-col relative bg-white">
+      {/* Main App Canvas */}
+      <main className="flex-1 flex flex-col relative bg-white lg:max-w-4xl lg:mx-auto lg:shadow-[0_0_100px_rgba(0,0,0,0.05)]">
         
-        {/* App Header */}
-        <header className="h-16 md:h-20 border-b border-slate-100 flex items-center justify-between px-4 md:px-8 bg-white/90 backdrop-blur-md sticky top-0 z-50">
-          <div className="flex items-center gap-3">
-            <button onClick={() => setIsSidebarOpen(true)} className="p-2.5 bg-slate-50 rounded-xl relative hover:scale-105 active:scale-95 transition-all">
-              <Menu size={22} />
-              {cart.length > 0 && <span className="absolute -top-1 -left-1 w-5 h-5 bg-blue-600 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white animate-pulse">{cart.length}</span>}
+        {/* Navigation Header */}
+        <header className="h-16 md:h-20 border-b border-slate-100 flex items-center justify-between px-5 md:px-10 bg-white/90 backdrop-blur-xl sticky top-0 z-50">
+          <div className="flex items-center gap-4">
+            <button onClick={() => setIsSidebarOpen(true)} className="p-2.5 bg-slate-50 rounded-2xl relative active:scale-90 transition-transform">
+              <Menu size={22} className="text-slate-700" />
+              {cart.length > 0 && <span className="absolute -top-1 -left-1 w-5 h-5 bg-blue-600 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white animate-bounce shadow-md">{cart.length}</span>}
             </button>
             <div className="text-right">
-              <h2 className="text-sm md:text-lg font-black text-slate-900 leading-none">VIP Agent</h2>
-              <div className="flex items-center gap-1.5 mt-1">
+              <h2 className="text-sm font-black text-slate-950 leading-none">VIP Portal</h2>
+              <div className="flex items-center gap-1.5 mt-1.5">
                 <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                <span className="text-[9px] md:text-[10px] text-emerald-600 font-bold uppercase tracking-tighter">Live secured sync</span>
+                <span className="text-[9px] text-emerald-600 font-bold uppercase tracking-tighter">Secured AI Sync</span>
               </div>
             </div>
           </div>
 
-          <div className="flex flex-col items-end">
-            <div className="w-10 h-10 md:w-12 md:h-12 bg-white rounded-xl shadow-lg border p-1.5 ring-2 ring-blue-50 overflow-hidden">
-               <img src={LOGO_PATH} alt="Saban" className="w-full h-full object-contain" />
-            </div>
+          <div className="w-10 h-10 md:w-12 md:h-12 bg-white rounded-2xl shadow-lg border p-1.5 ring-2 ring-blue-50 overflow-hidden">
+             <img src={LOGO_PATH} alt="Saban" className="w-full h-full object-contain" />
           </div>
         </header>
 
-        {/* Chat Feed */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 pb-32 scrollbar-hide bg-[#FDFDFD]">
+        {/* Message Feed */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-6 pb-40 scrollbar-hide bg-[#FDFDFD]">
           <AnimatePresence>
             {messages.map((m, i) => (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }} 
-                animate={{ opacity: 1, y: 0 }} 
-                key={i} 
-                className={`flex gap-3 ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}
-              >
+              <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} key={i} className={`flex gap-3 ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
                 {m.role === 'assistant' && (
-                  <div className="w-8 h-8 rounded-full overflow-hidden border bg-white flex-shrink-0 mt-1 shadow-sm">
+                  <div className="w-8 h-8 rounded-full overflow-hidden border bg-white flex-shrink-0 mt-1 shadow-sm ring-1 ring-slate-100">
                     <img src={LOGO_PATH} className="w-full h-full object-cover" />
                   </div>
                 )}
-                <div className={`max-w-[88%] md:max-w-[75%] p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-sm border ${
+                <div className={`max-w-[88%] p-4 md:p-6 rounded-[28px] shadow-sm border ${
                   m.role === 'user' 
-                  ? 'bg-white border-slate-200 text-black shadow-md' 
-                  : 'bg-blue-600 text-white border-blue-500 shadow-blue-100 shadow-lg'
+                  ? 'bg-white border-slate-200 text-slate-900 rounded-tr-none' 
+                  : 'bg-blue-600 text-white border-blue-500 shadow-blue-100 shadow-xl rounded-tl-none'
                 }`}>
-                  <div className={`flex items-center gap-2 mb-3 ${m.role === 'user' ? 'text-slate-400' : 'text-blue-100/70'}`}>
-                    <span className="text-[10px] font-black uppercase tracking-widest italic">{m.role === 'user' ? client.name : 'Ai-ח.סבן'}</span>
+                  <div className={`flex items-center gap-2 mb-2 ${m.role === 'user' ? 'text-slate-400' : 'text-blue-100/70'}`}>
+                    <span className="text-[9px] font-black uppercase tracking-widest">{m.role === 'user' ? client.name : 'Ai-ח.סבן'}</span>
                   </div>
-                  <div className="text-[15px] md:text-[18px] leading-relaxed font-bold text-right">
-                    <SmartRenderer text={m.content} onAdd={handleAction} />
+                  <div className="text-[15px] md:text-[17px] leading-relaxed font-bold text-right">
+                    <SmartAppRenderer text={m.content} onAdd={handleAction} />
                   </div>
                 </div>
               </motion.div>
             ))}
           </AnimatePresence>
-          {loading && (
+          {isBotTyping && (
             <div className="flex justify-end pr-11">
-              <div className="bg-white px-4 py-3 rounded-2xl shadow-md border border-blue-50 flex items-center gap-3">
-                <Loader2 className="animate-spin text-blue-600" size={18}/>
-                <span className="text-[11px] font-black text-blue-800 uppercase italic">מעבד פקודה...</span>
-              </div>
+              <motion.div animate={{ scale: [1, 1.05, 1] }} transition={{ repeat: Infinity }} className="bg-white px-4 py-2.5 rounded-2xl shadow-md border border-blue-50 flex items-center gap-3">
+                <Loader2 className="animate-spin text-blue-600" size={16}/>
+                <span className="text-[10px] font-black text-blue-800 uppercase italic">המוח מעבד...</span>
+              </motion.div>
             </div>
           )}
           <div ref={scrollRef} />
         </div>
 
-        {/* Input Dock */}
-        <footer className="fixed bottom-0 left-0 right-0 p-4 md:p-8 bg-gradient-to-t from-white via-white to-transparent pointer-events-none">
-          <div className="max-w-4xl mx-auto bg-white border-2 border-slate-200 p-2 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] flex items-center gap-2 pointer-events-auto ring-8 ring-slate-50">
+        {/* Input Docking Station */}
+        <footer className="fixed bottom-0 left-0 right-0 p-5 lg:relative lg:p-10 bg-gradient-to-t from-white via-white to-transparent pointer-events-none">
+          <div className="max-w-2xl mx-auto bg-white border-2 border-slate-100 p-2 rounded-[30px] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.2)] flex items-center gap-2 pointer-events-auto ring-8 ring-slate-50/50">
             <input 
               type="text" value={input} onChange={(e) => setInput(e.target.value)} 
               onKeyDown={(e) => e.key === 'Enter' && handleSend()} 
               placeholder={`${client.name}, מה בונים היום?`} 
-              className="flex-1 bg-transparent px-4 py-3 md:py-5 outline-none font-black text-[15px] md:text-[22px] text-right" 
+              className="flex-1 bg-transparent px-5 py-4 outline-none font-black text-[16px] text-right text-slate-900 placeholder-slate-300 italic" 
             />
             <button 
-              onClick={handleSend} disabled={loading}
-              className="w-12 h-12 md:w-16 md:h-16 bg-blue-600 hover:bg-blue-700 rounded-2xl flex items-center justify-center text-white active:scale-90 transition-all shadow-xl"
+              onClick={handleSend} disabled={isBotTyping}
+              className="w-14 h-14 bg-blue-600 hover:bg-blue-700 rounded-[22px] flex items-center justify-center text-white active:scale-90 transition-all shadow-lg"
             >
               <Send size={24} />
             </button>
@@ -281,16 +274,16 @@ export default function VipAppPortal() {
         </footer>
       </main>
 
-      {/* Order Summary Modal */}
+      {/* Full Order Summary Overlay */}
       <AnimatePresence>
-        {showSummary && <SummaryModal cart={cart} client={client} onClose={() => setShowSummary(false)} />}
+        {showSummary && <AppSummaryModal cart={cart} client={client} onClose={() => setShowSummary(false)} />}
       </AnimatePresence>
     </div>
   );
 }
 
-// --- מפענח טקסט חכם ---
-function SmartRenderer({ text, onAdd }: any) {
+// --- מפענח טקסט אפליקטיבי ---
+function SmartAppRenderer({ text, onAdd }: any) {
   const galleryRegex = /\[GALLERY:\s*([\s\S]*?)\]/i;
   const gMatch = text.match(galleryRegex);
   const urls = gMatch ? gMatch[1].split(',').map((u:any) => u.trim()) : null;
@@ -301,22 +294,22 @@ function SmartRenderer({ text, onAdd }: any) {
     <div className="space-y-4">
       {urls && (
         <div className="space-y-2 mb-4">
-          <div className="h-44 md:h-64 bg-white rounded-2xl overflow-hidden border shadow-inner flex items-center justify-center">
-             <img src={urls[0]} className="h-full object-contain" alt="prod" />
+          <div className="h-44 md:h-56 bg-white rounded-3xl overflow-hidden border shadow-inner flex items-center justify-center ring-4 ring-white/10">
+             <img src={urls[0]} className="h-full object-contain p-2" alt="prod" />
           </div>
         </div>
       )}
       {lines.map((line:any, i:any) => {
-        if (line.startsWith('###')) return <h3 key={i} className="text-lg md:text-2xl font-black underline decoration-blue-500/50 decoration-4 underline-offset-4 mt-4 text-right">{line.replace('###', '').trim()}</h3>;
+        if (line.startsWith('###')) return <h3 key={i} className="text-lg md:text-xl font-black underline decoration-blue-400/30 decoration-4 underline-offset-4 mt-4 text-right italic">{line.replace('###', '').trim()}</h3>;
         const parts = line.split(/(\*\*.*?\*\*)/g);
         return (
-          <p key={i} className="text-right leading-relaxed">
-            {parts.map((p:any, j:any) => p.startsWith('**') ? <span key={j} className="text-blue-300 font-black">{p.slice(2, -2)}</span> : p)}
+          <p key={i} className="text-right leading-relaxed text-[15px] md:text-[16px]">
+            {parts.map((p:any, j:any) => p.startsWith('**') ? <span key={j} className="text-blue-300 md:text-blue-200 font-black">{p.slice(2, -2)}</span> : p)}
           </p>
         );
       })}
       {Array.from(text.matchAll(/\[QUICK_ADD:(.*?)\]/g)).map((match, i) => (
-        <button key={i} onClick={() => onAdd(match[1])} className="w-full bg-white text-blue-700 py-4 rounded-xl font-black border-2 border-white shadow-xl hover:bg-blue-50 transition-all flex items-center justify-center gap-2 text-sm mt-4 active:scale-95">
+        <button key={i} onClick={() => onAdd(match[1])} className="w-full bg-white text-blue-700 py-4 rounded-2xl font-black shadow-lg hover:bg-blue-50 transition-all flex items-center justify-center gap-3 text-sm mt-4 active:scale-95 border border-blue-50">
           <ShoppingCart size={18} /> הוסף {match[1]} לסל לביצוע
         </button>
       ))}
@@ -324,40 +317,46 @@ function SmartRenderer({ text, onAdd }: any) {
   );
 }
 
-// --- מודאל סיכום הזמנה ---
-function SummaryModal({ cart, client, onClose }: any) {
+// --- מודאל סיכום אפליקטיבי ---
+function AppSummaryModal({ cart, client, onClose }: any) {
   const handleShare = () => {
     new Audio(SUCCESS_SOUND).play().catch(() => {});
     const items = cart.map((item:any, i:any) => `• *${item.product_name}* | כמות: ${item.qty}`).join('\n');
     const text = encodeURIComponent(
-      `🏗️ *אישור הזמנה לביצוע - ח. סבן*\n` +
+      `🏗️ *סידור עבודה - Ai-ח.סבן*\n` +
       `-----------------------------------\n` +
       `👤 *לקוח:* ${client.fullName}\n` +
       `🏗️ *פרויקט:* ${client.project}\n\n` +
       `*פריטים בסל:*\n${items}\n\n` +
-      `*נוצר ע"י השותף הדיגיטלי Ai-ח.סבן* 🦾`
+      `*הנחיות:* נא לאשר העמסה לבוקר. 🦾\n` +
+      `-----------------------------------\n` +
+      `_נוצר ע"י השותף הדיגיטלי של בר_`
     );
     window.open(`https://wa.me/972508860896?text=${text}`, '_blank');
   };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-slate-950/80 backdrop-blur-xl flex items-center justify-center p-4">
-      <motion.div initial={{ scale: 0.9, y: 30 }} className="bg-white rounded-[32px] w-full max-w-lg overflow-hidden shadow-2xl">
-        <div className="bg-slate-900 p-6 text-white flex justify-between items-center">
-          <h2 className="font-black italic uppercase">סידור עבודה</h2>
-          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-xl"><X /></button>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-slate-950/85 backdrop-blur-xl flex items-center justify-center p-4">
+      <motion.div initial={{ scale: 0.8, y: 50 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-[45px] w-full max-w-lg overflow-hidden shadow-[0_40px_100px_rgba(0,0,0,0.5)]">
+        <div className="bg-slate-900 p-8 text-white flex justify-between items-center relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/20 blur-3xl rounded-full" />
+          <div className="text-right z-10">
+            <h2 className="font-black italic uppercase text-2xl">סיכום ביצוע</h2>
+            <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mt-1">Ready for Dispatch</p>
+          </div>
+          <button onClick={onClose} className="p-2.5 bg-white/10 rounded-2xl z-10 transition-colors hover:bg-white/20"><X /></button>
         </div>
-        <div className="p-6 space-y-6 text-right">
-          <div className="max-h-60 overflow-y-auto space-y-3 pr-1">
+        <div className="p-8 space-y-6 text-right">
+          <div className="max-h-[300px] overflow-y-auto space-y-3 pr-2 scrollbar-hide">
             {cart.map((item:any, i:any) => (
-              <div key={i} className="p-4 bg-slate-50 rounded-2xl flex justify-between items-center border">
-                 <span className="bg-blue-600 text-white w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs">{item.qty}</span>
-                 <p className="font-bold text-sm">{item.product_name}</p>
+              <div key={i} className="p-5 bg-slate-50 rounded-[28px] flex justify-between items-center border border-slate-100 shadow-sm group hover:border-blue-200 transition-all">
+                 <span className="bg-blue-600 text-white w-10 h-10 rounded-2xl flex items-center justify-center font-black text-sm shadow-md shadow-blue-200">{item.qty}</span>
+                 <p className="font-black text-slate-800 text-[14px] leading-tight flex-1 mr-4">{item.product_name}</p>
               </div>
             ))}
           </div>
-          <button onClick={handleShare} className="w-full bg-[#25D366] text-white py-5 rounded-[22px] font-black text-lg flex items-center justify-center gap-3 shadow-xl active:scale-95 transition-all">
-            <Share2 size={24} /> אשר ושלח לווצאפ
+          <button onClick={handleShare} className="w-full bg-[#25D366] text-white py-6 rounded-[30px] font-black text-xl flex items-center justify-center gap-4 shadow-[0_20px_40px_rgba(37,211,102,0.3)] border-b-8 border-green-700 active:scale-95 transition-all">
+            <Share2 size={26} /> אשר ושלח לווצאפ
           </button>
         </div>
       </motion.div>
