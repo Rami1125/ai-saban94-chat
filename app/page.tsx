@@ -11,16 +11,11 @@ import { toast, Toaster } from "sonner";
 import { motion, AnimatePresence } from 'framer-motion';
 
 /**
- * Saban OS V10.0 - Executive Production Suite
+ * Saban OS V10.1 - High Contrast Edition
  * -------------------------------------------
- * Features:
- * - Smart Text/UI Parser (Images, Buttons, Headers)
- * - WhatsApp Premium Integration
- * - Real-time Order Monitor
- * - Premium Light Design (Glassmorphism)
+ * שיפורים: טקסט כהה וחד יותר, ניגודיות גבוהה, קריאות מקסימלית.
  */
 
-// --- 1. רכיב כפתור WhatsApp ירוק ומעוצב ---
 const WhatsAppOrderButton = ({ summary }: { summary: string }) => {
   const sendToWhatsApp = () => {
     const text = encodeURIComponent(`🏗️ *סיכום הזמנה לביצוע - ח. סבן*\n\n${summary}\n\n*נשלח מהמוח הלוגיסטי*`);
@@ -41,7 +36,6 @@ const WhatsAppOrderButton = ({ summary }: { summary: string }) => {
   );
 };
 
-// --- 2. מפענח טקסט חכם (Smart UI Parser) ---
 const SmartMessageRenderer = ({ text }: { text: string }) => {
   const lines = text.split('\n');
   const isOrderSummary = text.includes("סיכום הזמנה") || text.includes("הזמנה לביצוע");
@@ -49,41 +43,30 @@ const SmartMessageRenderer = ({ text }: { text: string }) => {
   return (
     <div className="space-y-4">
       {lines.map((line, i) => {
-        // א. זיהוי תמונה ![שם](URL)
         const imgMatch = line.match(/!\[.*?\]\((.*?)\)/);
         if (imgMatch) {
           return (
-            <motion.div key={i} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="group relative">
-              <div className="absolute inset-0 bg-blue-500/10 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
-              <img 
-                src={imgMatch[1]} 
-                alt="Product" 
-                className="w-full h-56 object-contain rounded-[28px] bg-white border border-slate-100 shadow-sm p-4 relative z-10"
-              />
-              <div className="absolute top-3 right-3 z-20 bg-white/80 backdrop-blur-md p-2 rounded-full shadow-sm">
-                <ImageIcon size={14} className="text-blue-600" />
-              </div>
+            <motion.div key={i} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
+              <img src={imgMatch[1]} alt="Product" className="w-full h-56 object-contain rounded-[28px] bg-white border border-slate-200 shadow-md p-4" />
             </motion.div>
           );
         }
 
-        // ב. זיהוי כותרת ###
         if (line.trim().startsWith('###')) {
           return (
-            <h3 key={i} className="text-blue-600 font-black text-lg pt-2 flex items-center gap-2">
-              <span className="w-1.5 h-6 bg-blue-500 rounded-full" />
+            <h3 key={i} className="text-blue-700 font-black text-lg pt-2 flex items-center gap-2">
+              <span className="w-1.5 h-6 bg-blue-600 rounded-full" />
               {line.replace('###', '').trim()}
             </h3>
           );
         }
 
-        // ג. זיהוי כפתור Markdown [Text](URL)
         const btnMatch = line.match(/\[(.*?)\]\((.*?)\)/);
         if (btnMatch && !line.includes("![")) {
           return (
             <a 
               key={i} href={btnMatch[2]} target="_blank" rel="noreferrer"
-              className="inline-flex items-center gap-2 bg-slate-50 hover:bg-blue-50 text-blue-700 px-5 py-3 rounded-2xl border border-blue-100 font-bold text-sm transition-all hover:shadow-md"
+              className="inline-flex items-center gap-2 bg-blue-50 hover:bg-blue-100 text-blue-800 px-5 py-3 rounded-2xl border border-blue-200 font-black text-sm transition-all shadow-sm"
             >
               {btnMatch[1]}
               <ChevronRight size={14} />
@@ -91,26 +74,22 @@ const SmartMessageRenderer = ({ text }: { text: string }) => {
           );
         }
 
-        // ד. טקסט רגיל עם הדגשות
         const parts = line.split(/(\*\*.*?\*\*)/g);
         return (
-          <p key={i} className="text-[14.5px] leading-relaxed text-slate-700">
+          <p key={i} className="text-[15px] leading-relaxed text-slate-950 font-medium">
             {parts.map((part, j) => 
               part.startsWith('**') 
-                ? <strong key={j} className="text-blue-900 font-black">{part.slice(2, -2)}</strong> 
+                ? <strong key={j} className="text-black font-black underline decoration-blue-500/30 underline-offset-4">{part.slice(2, -2)}</strong> 
                 : part
             )}
           </p>
         );
       })}
-
-      {/* הזרקת כפתור WhatsApp אם זה סיכום */}
       {isOrderSummary && <WhatsAppOrderButton summary={text} />}
     </div>
   );
 };
 
-// --- 3. קומפוננטת האפליקציה המרכזית ---
 export default function SabanOSV10() {
   const [view, setView] = useState<'chat' | 'monitor'>('chat');
   const [messages, setMessages] = useState<any[]>([]);
@@ -120,7 +99,6 @@ export default function SabanOSV10() {
   const [allSessions, setAllSessions] = useState<any[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // אתחול וסנכרון
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const sid = localStorage.getItem('saban_session_id') || `sid_${Math.random().toString(36).substring(2, 9)}`;
@@ -135,7 +113,6 @@ export default function SabanOSV10() {
       loadHistory();
     }
 
-    // האזנה לשינויים בזמן אמת עבור המוניטור
     const channel = supabase.channel('global_history').on('postgres_changes', { event: '*', schema: 'public', table: 'chat_history' }, () => {
       if (view === 'monitor') fetchMonitorData();
     }).subscribe();
@@ -183,80 +160,55 @@ export default function SabanOSV10() {
   };
 
   return (
-    <div className="flex h-screen bg-[#FDFDFD] text-slate-900 font-sans selection:bg-blue-100 overflow-hidden" dir="rtl">
+    <div className="flex h-screen bg-[#FDFDFD] text-slate-950 font-sans selection:bg-blue-200 overflow-hidden" dir="rtl">
       <Toaster position="top-center" richColors />
       
-      {/* Sidebar - Executive Navigation */}
-      <aside className="w-[300px] border-l border-slate-100 bg-white hidden lg:flex flex-col shadow-sm z-30">
-        <div className="p-8 border-b border-slate-50 flex items-center gap-4">
-          <div className="w-12 h-12 bg-blue-600 rounded-[20px] flex items-center justify-center text-white shadow-xl shadow-blue-100 ring-4 ring-blue-50">
+      <aside className="w-[300px] border-l border-slate-200 bg-white hidden lg:flex flex-col shadow-sm z-30">
+        <div className="p-8 border-b border-slate-100 flex items-center gap-4">
+          <div className="w-12 h-12 bg-blue-700 rounded-[20px] flex items-center justify-center text-white shadow-xl">
             <Zap size={24} fill="white" />
           </div>
           <div className="text-right">
-            <h1 className="font-black text-xl tracking-tighter leading-none italic uppercase">Ai-ח.סבן</h1>
-            <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-1"> ברוכים הבאים </p>
+            <h1 className="font-black text-xl tracking-tighter leading-none italic uppercase text-slate-900">SABAN OS</h1>
+            <p className="text-[10px] font-bold text-blue-700 uppercase tracking-widest mt-1">V10.1 High Contrast</p>
           </div>
         </div>
 
         <nav className="flex-1 p-6 space-y-3">
-          <button onClick={() => setView('chat')} className={`w-full p-4 rounded-2xl flex items-center gap-3 font-bold transition-all ${view === 'chat' ? 'bg-blue-50 text-blue-600 shadow-inner' : 'text-slate-400 hover:bg-slate-50'}`}>
+          <button onClick={() => setView('chat')} className={`w-full p-4 rounded-2xl flex items-center gap-3 font-black transition-all ${view === 'chat' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>
             <MessageSquare size={20} /> צ'אט לקוח
           </button>
-          <button onClick={() => { setView('monitor'); fetchMonitorData(); }} className={`w-full p-4 rounded-2xl flex items-center gap-3 font-bold transition-all ${view === 'monitor' ? 'bg-blue-50 text-blue-600 shadow-inner' : 'text-slate-400 hover:bg-slate-50'}`}>
+          <button onClick={() => { setView('monitor'); fetchMonitorData(); }} className={`w-full p-4 rounded-2xl flex items-center gap-3 font-black transition-all ${view === 'monitor' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}>
             <LayoutDashboard size={20} /> מוניטור הזמנות
-            <div className="mr-auto w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
           </button>
         </nav>
-
-        <div className="p-8 border-t border-slate-50">
-          <div className="p-4 bg-slate-50 rounded-[24px] border border-white flex items-center gap-3">
-            <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm font-black text-xs border border-slate-100 text-blue-600">RM</div>
-            <div className="text-right">
-              <p className="text-xs font-black">ראמי מסארוה</p>
-              <p className="text-[9px] font-bold text-slate-400 uppercase">Administrator</p>
-            </div>
-          </div>
-        </div>
       </aside>
 
-      {/* Main Container */}
       <main className="flex-1 flex flex-col relative bg-white overflow-hidden shadow-2xl lg:rounded-r-[40px]">
-        
         {view === 'chat' ? (
           <>
-            {/* Header */}
-            <header className="h-20 border-b border-slate-50 px-10 flex items-center justify-between bg-white/80 backdrop-blur-md z-10">
+            <header className="h-20 border-b border-slate-100 px-10 flex items-center justify-between bg-white/90 backdrop-blur-md z-10">
               <div className="flex items-center gap-3">
-                <ShieldCheck className="text-emerald-500" size={22} />
+                <ShieldCheck className="text-emerald-600" size={22} />
                 <div>
-                  <h2 className="text-base font-black uppercase italic tracking-tighter text-slate-800">Saban Executive Brain</h2>
-                  <div className="flex items-center gap-1.5 text-[10px] text-emerald-600 font-bold uppercase">
-                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> Live & Connected
-                  </div>
+                  <h2 className="text-base font-black uppercase italic tracking-tighter text-slate-950">Saban Executive Brain</h2>
+                  <div className="text-[10px] text-emerald-600 font-black uppercase tracking-widest">Live & Connected</div>
                 </div>
-              </div>
-              <div className="flex gap-3">
-                <div className="p-3 bg-slate-50 rounded-2xl text-slate-400 hover:text-blue-600 cursor-pointer transition-all active:scale-90"><Search size={20} /></div>
-                <div className="p-3 bg-slate-50 rounded-2xl text-slate-400 hover:text-blue-600 cursor-pointer transition-all active:scale-90"><Phone size={20} /></div>
               </div>
             </header>
 
-            {/* Chat Stream */}
-            <div className="flex-1 overflow-y-auto p-8 space-y-10 pb-32 scrollbar-hide bg-[#FDFDFD]">
+            <div className="flex-1 overflow-y-auto p-8 space-y-10 pb-32 scrollbar-hide bg-[#FAFBFC]">
               <AnimatePresence>
                 {messages.map((m, i) => (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 15, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-                    key={i} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}
-                  >
+                  <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} key={i} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
                     <div className={`max-w-[85%] md:max-w-[70%] p-7 rounded-[38px] shadow-sm border ${
                       m.role === 'user' 
-                        ? 'bg-white border-slate-100 text-slate-800 rounded-tr-none shadow-slate-200/50' 
-                        : 'bg-blue-600 text-white border-blue-500 rounded-tl-none shadow-blue-200 shadow-lg'
+                        ? 'bg-white border-slate-200 text-slate-950 rounded-tr-none shadow-md' 
+                        : 'bg-blue-700 text-white border-blue-800 rounded-tl-none shadow-blue-200 shadow-xl'
                     }`}>
-                      <div className="flex items-center gap-2 mb-3 opacity-40">
+                      <div className={`flex items-center gap-2 mb-3 ${m.role === 'user' ? 'text-slate-500' : 'text-blue-100'}`}>
                          {m.role === 'user' ? <User size={12} /> : <Zap size={12} fill="currentColor" />}
-                         <span className="text-[9px] font-black uppercase tracking-widest">{m.role === 'user' ? 'ראמי' : 'המוח'}</span>
+                         <span className="text-[10px] font-black uppercase tracking-widest">{m.role === 'user' ? 'ראמי' : 'המוח'}</span>
                       </div>
                       <SmartMessageRenderer text={m.content} />
                     </div>
@@ -266,78 +218,51 @@ export default function SabanOSV10() {
               
               {loading && (
                 <div className="flex justify-end">
-                  <div className="bg-blue-50 p-5 rounded-[28px] border border-blue-100 flex items-center gap-4 shadow-sm">
-                    <div className="flex gap-1.5">
-                      {[0, 0.2, 0.4].map(d => <motion.div key={d} animate={{ y: [0, -6, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: d }} className="w-1.5 h-1.5 bg-blue-400 rounded-full" />)}
-                    </div>
-                    <span className="text-[11px] font-black text-blue-500 uppercase tracking-tighter italic">המוח מעבד פקודה...</span>
+                  <div className="bg-white p-5 rounded-[28px] border border-blue-200 flex items-center gap-4 shadow-md">
+                    <Loader2 className="animate-spin text-blue-600" size={20} />
+                    <span className="text-[11px] font-black text-blue-700 uppercase tracking-tighter italic">המוח מעבד פקודה...</span>
                   </div>
                 </div>
               )}
               <div ref={scrollRef} />
             </div>
 
-            {/* Input Composer */}
-            <footer className="p-8 absolute bottom-0 w-full z-20 bg-gradient-to-t from-white via-white/95 to-transparent pt-16">
-              <div className="max-w-4xl mx-auto bg-white border border-slate-200 p-2.5 rounded-[40px] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.12)] flex items-center gap-3 ring-8 ring-slate-50/50 backdrop-blur-md">
+            <footer className="p-8 absolute bottom-0 w-full z-20 bg-gradient-to-t from-white via-white pt-16">
+              <div className="max-w-4xl mx-auto bg-white border-2 border-slate-300 p-2 rounded-[40px] shadow-2xl flex items-center gap-3">
                  <input 
                   type="text" value={input} onChange={(e) => setInput(e.target.value)} 
                   onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                  placeholder="כתוב פקודה לביצוע ראמי..." 
-                  className="flex-1 bg-transparent px-8 py-5 outline-none font-bold text-[15px] text-right text-slate-800 placeholder-slate-300" 
+                  placeholder="כתוב פקודה לביצוע..." 
+                  className="flex-1 bg-transparent px-8 py-5 outline-none font-black text-[16px] text-right text-black placeholder-slate-500" 
                 />
                 <button 
                   onClick={handleSend} disabled={loading}
-                  className="w-16 h-16 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-100 disabled:text-slate-300 rounded-[30px] flex items-center justify-center text-white transition-all active:scale-90 shadow-lg shadow-blue-300"
+                  className="w-16 h-16 bg-blue-700 hover:bg-blue-800 disabled:bg-slate-200 rounded-[30px] flex items-center justify-center text-white transition-all shadow-lg shadow-blue-300"
                 >
-                  {loading ? <Loader2 className="animate-spin" size={28} /> : <Send size={28} />}
+                  <Send size={28} />
                 </button>
               </div>
             </footer>
           </>
         ) : (
-          /* Monitor Mode Dashboard */
-          <div className="flex-1 flex flex-col bg-slate-50/50 overflow-hidden">
+          <div className="flex-1 flex flex-col bg-slate-50 overflow-hidden">
             <header className="h-20 bg-white border-b px-10 flex items-center justify-between shadow-sm">
-               <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white"><Users size={20} /></div>
-                  <h2 className="text-xl font-black italic tracking-tighter uppercase">Live Order Monitor</h2>
-               </div>
-               <div className="bg-emerald-50 text-emerald-600 px-6 py-2.5 rounded-full text-xs font-black border border-emerald-100 shadow-sm">
-                 {allSessions.length} לקוחות מחוברים כרגע
-               </div>
+               <h2 className="text-xl font-black text-slate-950 uppercase italic tracking-tighter">Live Monitor</h2>
+               <div className="bg-emerald-100 text-emerald-800 px-6 py-2.5 rounded-full text-xs font-black">{allSessions.length} פעילים</div>
             </header>
-            
             <div className="flex-1 overflow-y-auto p-10 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
               {allSessions.map(([sid, msgs]: any) => (
-                <motion.div 
-                  key={sid} layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                  className="bg-white border border-slate-100 rounded-[35px] p-7 shadow-md hover:shadow-2xl transition-all h-[480px] flex flex-col ring-1 ring-slate-50"
-                >
-                  <div className="flex justify-between items-center mb-5 pb-5 border-b border-slate-50">
-                    <span className="text-[10px] font-mono bg-slate-100 px-4 py-1.5 rounded-full text-slate-500 font-bold uppercase tracking-tighter">ID: {sid.slice(0,10)}</span>
-                    <div className="flex items-center gap-2 text-slate-300"><Clock size={14} /><span className="text-[10px] font-bold">פעיל כעת</span></div>
-                  </div>
-                  
+                <div key={sid} className="bg-white border-2 border-slate-200 rounded-[35px] p-7 shadow-lg flex flex-col h-[480px]">
+                  <div className="mb-5 pb-5 border-b border-slate-100 font-black text-slate-950 text-xs">ID: {sid.slice(0,10)}</div>
                   <div className="flex-1 overflow-y-auto space-y-4 scrollbar-hide mb-6 pr-1">
                     {msgs.slice(-8).map((m: any, idx: number) => (
-                      <div key={idx} className={`p-4 rounded-2xl text-[12.5px] leading-relaxed shadow-sm ${
-                        m.role === 'user' ? 'bg-slate-50 text-slate-600 border border-slate-100' : 'bg-blue-50 text-blue-700 border border-blue-100 font-medium'
-                      }`}>
-                        <strong className="block text-[8px] uppercase mb-1.5 tracking-widest opacity-50">{m.role === 'user' ? 'לקוח' : 'מוח'}</strong>
-                        {m.content.slice(0, 120)}{m.content.length > 120 ? '...' : ''}
+                      <div key={idx} className={`p-4 rounded-2xl text-[13px] font-bold ${m.role === 'user' ? 'bg-slate-100 text-slate-900' : 'bg-blue-50 text-blue-900 border border-blue-200'}`}>
+                        {m.content}
                       </div>
                     ))}
                   </div>
-                  
-                  <button 
-                    onClick={() => { setSessionId(sid); setMessages(msgs); setView('chat'); }}
-                    className="w-full py-4 bg-slate-900 text-white rounded-2xl text-xs font-black flex items-center justify-center gap-3 hover:bg-blue-600 transition-all shadow-lg active:scale-95 group"
-                  >
-                    <ExternalLink size={16} className="group-hover:rotate-12 transition-transform" /> 
-                    השתלט על שיחה
-                  </button>
-                </motion.div>
+                  <button onClick={() => { setSessionId(sid); setMessages(msgs); setView('chat'); }} className="w-full py-4 bg-slate-950 text-white rounded-2xl font-black shadow-lg">השתלט על שיחה</button>
+                </div>
               ))}
             </div>
           </div>
