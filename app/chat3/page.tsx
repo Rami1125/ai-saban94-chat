@@ -261,7 +261,7 @@ export default function SabanOSV10() {
                     <div className={`max-w-[85%] md:max-w-[70%] p-8 rounded-[42px] shadow-sm border ${
                       m.role === 'user' 
                         ? 'bg-white border-slate-200 text-slate-950 rounded-tr-none shadow-md' 
-                        : 'bg-blue-700 backdrop-blur-md text-white border-blue-800/30 rounded-tl-none shadow-blue-200/50 shadow-2xl'
+                        : 'bg-blue-700 backdrop-blur-md text-white border-blue-800/30 rounded-tl-none shadow-blue-200/40 shadow-2xl'
                     }`}>
                       <div className={`flex items-center gap-2 mb-4 ${m.role === 'user' ? 'text-slate-400' : 'text-blue-100/60'}`}>
                          {m.role === 'user' ? <User size={12} /> : <Zap size={12} fill="currentColor" />}
