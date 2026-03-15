@@ -209,7 +209,7 @@ export default function SabanOSFinal() {
       (async () => {
         const { data } = await supabase.from('chat_history').select('*').eq('session_id', sid).order('created_at', { ascending: true });
         if (data && data.length > 0) setMessages(data);
-        else setMessages([{ role: 'assistant', content: '### מערכת Ai-ח.סבן מוכנה\nשלום ראמי הבוס, המוח הלוגיסטי מחובר לביצוע מלא. **איזה פרויקט נבצע היום?** 🦾' }]);
+        else setMessages([{ role: 'assistant', content: '###תרצה לשאול על מוצר או לבצע הזמנה? Ai-היי!👋 אני היועץ ח.סבן🤖**' }]);
       })();
     }
   }, []);
