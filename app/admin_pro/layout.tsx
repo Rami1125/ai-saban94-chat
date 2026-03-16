@@ -5,24 +5,26 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, Zap, Users, Scale, ShieldAlert, 
-  Monitor, ShieldCheck, ShoppingBag, PlusCircle, Smartphone
+  Monitor, ShieldCheck, ShoppingBag, PlusCircle, Smartphone,
+  MessageSquare
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Toaster } from "sonner";
 
 /**
- * Saban Admin Pro - Shared Layout V29.5
+ * Saban Admin Pro - Shared Layout V38.5
  * ------------------------------------
- * הוספת קישור "ממשק שטח" (Mobile Ops) לתפריט הניווט.
+ * הוספת קישור "צ'אט מאסטר" (Master Brain) לתפריט הניווט.
  */
 
 const LOGO_PATH = "/ai.png";
 
 const NAV_ITEMS = [
   { href: '/admin_pro', label: 'לוח בקרה', icon: LayoutDashboard },
+  { href: '/admin_pro/chat', label: 'צ\'אט מאסטר', icon: MessageSquare }, // המוח המנהל החדש
   { href: '/admin_pro/orders', label: 'ניהול הזמנות', icon: ShoppingBag },
   { href: '/admin_pro/orders/create', label: 'יצירת הזמנה', icon: PlusCircle, highlight: true },
-  { href: '/admin_pro/logistics/mobile', label: 'ממשק שטח (נהג/מחסן)', icon: Smartphone }, // הקישור החדש
+  { href: '/admin_pro/logistics/mobile', label: 'ממשק שטח (נהג/מחסן)', icon: Smartphone },
   { href: '/admin_pro/dna', label: 'ניהול DNA וחוקים', icon: Zap },
   { href: '/admin_pro/vip', label: 'לקוחות VIP', icon: Users },
   { href: '/admin_pro/inventory', label: 'משקלים ומלאי', icon: Scale },
@@ -37,6 +39,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="flex h-screen bg-[#F8FAFC] text-slate-900 font-sans overflow-hidden" dir="rtl">
       <Toaster position="top-center" richColors />
       
+      {/* Sidebar - Desktop */}
       <aside className={`bg-[#0F172A] text-white transition-all duration-300 ${isSidebarOpen ? 'w-72' : 'w-24'} flex flex-col z-50 shadow-2xl shrink-0`}>
         <div className="p-6 flex items-center gap-4 border-b border-white/5 h-24 shrink-0">
           <div className="w-12 h-12 bg-white rounded-2xl p-2 shrink-0 shadow-lg ring-4 ring-blue-500/10">
@@ -44,8 +47,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
           {isSidebarOpen && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="overflow-hidden">
-              <h1 className="font-black text-xl italic tracking-tighter leading-none text-white">SABAN OS</h1>
-              <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mt-1">Admin Executive</p>
+              <h1 className="font-black text-xl italic tracking-tighter leading-none text-white text-right">SABAN OS</h1>
+              <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mt-1 text-right">Admin Executive</p>
             </motion.div>
           )}
         </div>
@@ -62,12 +65,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                       ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20' 
                       : 'text-slate-400 hover:bg-white/5 hover:text-white'
                 }`}>
-                  <item.icon size={24} className={isActive ? 'text-white' : item.highlight ? 'text-emerald-400' : 'text-slate-500 group-hover:text-blue-400'} />
+                  <div className="shrink-0">
+                    <item.icon size={24} className={isActive ? 'text-white' : item.highlight ? 'text-emerald-400' : 'text-slate-500 group-hover:text-blue-400'} />
+                  </div>
                   {isSidebarOpen && (
                     <span className="font-black text-sm uppercase tracking-tighter italic flex-1 text-right">{item.label}</span>
                   )}
                   {isSidebarOpen && item.badge && (
                     <span className="bg-rose-500 text-white text-[10px] font-black px-2 py-1 rounded-lg animate-pulse">Live</span>
+                  )}
+                  {!isSidebarOpen && isActive && (
+                    <div className="absolute left-0 w-1.5 h-8 bg-blue-500 rounded-r-full shadow-[0_0_10px_#3b82f6]" />
                   )}
                 </div>
               </Link>
@@ -82,6 +90,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </aside>
 
+      {/* Main Content Area */}
       <div className="flex-1 flex flex-col relative overflow-hidden">
         <header className="h-24 bg-white/80 backdrop-blur-xl border-b border-slate-200 px-8 flex items-center justify-between shrink-0 z-40">
           <div className="flex items-center gap-4 text-right">
