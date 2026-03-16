@@ -1,138 +1,85 @@
 import { NextResponse } from "next/server";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getSupabase } from "@/lib/supabase";
-
-/**
- * Saban OS V23.0 - Stable Dynamic Brain Engine
- * -------------------------------------------
- * - Strategy: Multi-Model Pool (1.5 Flash, 3.1 Flash Lite, 3.1 Pro).
- * - Resilience: Exponential backoff (1s, 2s, 4s, 8s, 16s).
- * - Context: Real-time VIP DNA Injection (Truck limits, History, Projects).
- */
 
 export const dynamic = 'force-dynamic';
 
-const STABLE_MODELS = [
-  "gemini-3.1-pro-preview",
-  "gemini-3.1-flash-lite-preview",
-  "gemini-1.5-flash"
-];
-
-const RETRY_DELAYS = [1000, 2000, 4000, 8000, 16000];
+const API_KEYS = (process.env.GOOGLE_AI_KEY_POOL || process.env.GOOGLE_AI_KEY || "").split(',').map(k => k.trim());
+const STABLE_MODELS = ["gemini-1.5-flash", "gemini-3.1-flash-lite-preview", "gemini-3.1-pro-preview"];
 
 export async function POST(req: Request) {
   try {
     const supabase = getSupabase();
-    
-    // קבלת נתוני הבקשה
-    const body = await req.json().catch(() => ({}));
-    const { sessionId, query, history, customerId } = body;
+    const { sessionId, query, userName, history } = await req.json();
 
-    if (!query) {
-      return NextResponse.json({ error: "Missing query" }, { status: 400 });
-    }
+    if (!query) return NextResponse.json({ error: "Missing query" }, { status: 400 });
 
-    // 1. שליפת פרופיל הלקוח (DNA) - ברירת מחדל בר אורניל
-    const targetId = customerId || '601992';
-    const { data: profile } = await supabase
-      .from('vip_profiles')
-      .select('*')
-      .eq('id', targetId)
-      .maybeSingle();
+    // 1. שליפת חוקים מה"מחנך" (ai_rules)
+    const { data: rules } = await supabase.from('ai_rules').select('instruction').eq('is_active', true);
+    const educatorDNA = rules?.map(r => r.instruction).join("\n\n") || "";
 
-    // 2. שליפת היסטוריית רכישות אחרונה למניעת כפילויות (48 שעות)
-    const { data: recentOrders } = await supabase
-      .from('vip_customer_history')
-      .select('product_name, quantity, created_at')
-      .eq('customer_id', targetId)
-      .order('created_at', { ascending: false })
-      .limit(5);
+    // 2. שמירת הודעת משתמש למוניטור
+    await supabase.from('chat_history').insert([{ session_id: sessionId, role: 'user', content: query }]);
 
-    // 3. בניית ה-System Instruction המקצועי של ח. סבן
-    const systemInstruction = `
-      אתה המוח הלוגיסטי והשותף המבצע של "ח. סבן חומרי בניין". המנהל והסמכות העליונה שלך הוא ראמי.
+    const historyContext = history?.map((m: any) => `${m.role === 'user' ? 'לקוח' : 'עוזר'}: ${m.content}`).join("\n") || "";
+
+    // 3. בניית ה-DNA הוויזואלי (Premium UI Framework)
+    const systemDNA = `
+      זהות: המוח הלוגיסטי והמעצב של ח. סבן חומרי בניין. המנהל: ראמי הבוס.
+      טון: מקצועי, יוקרתי, לוגיסטי.
+
+      ### חוקי המחנך (Educator DNA):
+      ${educatorDNA}
+
+      ### חוקי עיצוב פרימיום (Visual OS):
+      1. **סיכום הזמנה (WhatsApp Trigger)**: בכל פעם שיש סיכום עסקה, השתמש בכותרת "### 📋 סיכום הזמנה לביצוע". זה יפעיל אוטומטית את כפתור ה-WhatsApp הירוק בממשק.
+      2. **שימוש באימוג'ים**: השתמש באימוג'ים מקצועיים בלבד (🏗️, 📦, ⚖️, 🚚, ✅, 📍) בתחילת שורות.
+      3. **כרטיסי מוצר**: אם מדובר במוצר ספציפי, השורה הראשונה חייבת להיות תמונה: ![שם](URL).
+      4. **טקסט מודגש**: הדגש כמויות ונתונים טכניים בעזרת **[טקסט]**.
+      5. **מבנה נקי**: השתמש ב-Code Blocks (\`\`\`) רק עבור נתונים יבשים או רשימות ארוכות כדי לתת מראה של אפליקציית ניהול.
+
+      ### היסטוריה:
+      ${historyContext}
+
+      ### דוגמה לפורמט סיכום פרימיום:
+      ### 📋 סיכום הזמנה לביצוע
+      **פריטים שנבחרו:**
+      * 🏗️ **15** לוחות גבס ירוק (3 מטר)
+      * 📦 **10** שקי מלט
       
-      זהות הלקוח הנוכחי:
-      - שם מלא: ${profile?.full_name || 'לקוח VIP'}
-      - פרויקט פעיל: ${profile?.main_project || 'כללי'}
-      - פנייה אישית: ${profile?.nickname || 'אחי'} (חובה להשתמש בכינוי זה).
+      **פרטי הובלה:**
+      * 🚚 משאית מנוף (חכמת)
+      * 📍 יעד: [כתובת הלקוח]
+      
+      חתימה: תודה, ומה תרצה שנבצע היום? ראמי, הכל מוכן לביצוע. 🦾
+    `;
 
-      חוקי הבלמים והלוגיסטיקה (DNA מחייב):
-      1. חוק ה-12 טון: המשאית של ח.סבן מוגבלת ל-12,000 ק"ג. בלה ממוצעת = 700 ק"ג (גג 18 בלות). אם הלקוח חורג - עצור אותו והסבר את סכנת הבטיחות והדו"ח.
-      2. חוק מניעת כפילויות: היסטוריה אחרונה: ${JSON.stringify(recentOrders)}. אם המשתמש מזמין מוצר דומה שנקנה ביומיים האחרונים, שאל: "בר אחי, הזמנו את זה שלשום ל[פרויקט], אתה בטוח שצריך עוד?".
-      3. יועץ שטח: גבס דורש ניצבים/מסלולים. מלט דורש חול. אל תהיה רק "לוקח הזמנות", וודא שלא חסר לו ציוד קצה לביצוע.
-
-      סגנון וטון:
-      - פתח בברכה חמה לפי הזמן (בוקר טוב/ערב טוב) ושם הלקוח.
-      - היה מקצועי, חד, ותמציתי.
-      - בסיום כל הזמנה, הפק "### 🏗️ סיכום הזמנה לביצוע" מעוצב עם מק"טים וכמויות.
-
-      חתימה:
-      תודה, ומה תרצה שנבצע היום?
-      ראמי, הכל מוכן לביצוע. 🦾
-    `.trim();
-
-    const apiKey = ""; // המפתח מוזרק בזמן ריצה ע"י הסביבה
-    let finalAiText = "";
-    let success = false;
-
-    // 4. לוגיקת ריצה על בריכת המודלים עם Exponential Backoff
-    for (const modelName of STABLE_MODELS) {
-      if (success) break;
-
-      for (let attempt = 0; attempt < RETRY_DELAYS.length; attempt++) {
+    let lastError = null;
+    for (const key of API_KEYS) {
+      if (!key) continue;
+      for (const modelName of STABLE_MODELS) {
         try {
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-          
-          const payload = {
-            contents: [{
-              role: "user",
-              parts: [{ text: `היסטוריית שיחה:\n${JSON.stringify(history || [])}\n\nבקשת הלקוח: ${query}` }]
-            }],
-            systemInstruction: {
-              parts: [{ text: systemInstruction }]
-            }
-          };
-
-          const response = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
+          const genAI = new GoogleGenerativeAI(key);
+          const model = genAI.getGenerativeModel({ 
+            model: modelName, 
+            systemInstruction: systemDNA 
           });
-
-          if (response.ok) {
-            const result = await response.json();
-            finalAiText = result.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (finalAiText) {
-              success = true;
-              break;
-            }
-          }
           
-          // אם נכשל, נמתין לפי הדיליי המוגדר (Exponential Backoff)
-          await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]));
-        } catch (err) {
-          if (attempt === RETRY_DELAYS.length - 1) break; // ניסיון אחרון נכשל
+          const result = await model.generateContent(query);
+          const aiText = result.response.text();
+
+          // שמירת תגובת המוח ל-DB
+          await supabase.from('chat_history').insert([{ session_id: sessionId, role: 'assistant', content: aiText }]);
+          
+          return NextResponse.json({ answer: aiText, model: modelName });
+        } catch (e: any) {
+          lastError = e;
+          continue;
         }
       }
     }
-
-    if (!success) {
-      return NextResponse.json({ 
-        answer: "בר אחי, המוח עמוס כרגע בחישובי משקלים. תן לי רגע לנשום ונסה שוב. 🦾" 
-      });
-    }
-
-    // 5. תיעוד ההיסטוריה ב-Supabase
-    if (sessionId) {
-      await supabase.from('chat_history').insert([
-        { session_id: sessionId, role: 'user', content: query },
-        { session_id: sessionId, role: 'assistant', content: finalAiText }
-      ]);
-    }
-
-    return NextResponse.json({ answer: finalAiText });
-
+    throw new Error(`כל המפתחות נכשלו: ${lastError?.message}`);
   } catch (error: any) {
-    return NextResponse.json({ error: "שגיאת מערכת פנימית" }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
