@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 
 /**
- * Saban OS - Google Assets Search API V32.0
+ * Saban OS - Google Assets Search API V34.0
  * ----------------------------------------
- * מחבר את הקטלוג לחיפוש תמונות וסרטונים של Google Custom Search.
+ * מחזיר תמיד מערך, גם במקרה של שגיאה, כדי למנוע קריסת פרונט-אנד.
  */
 
 export async function GET(req: Request) {
@@ -16,7 +16,8 @@ export async function GET(req: Request) {
     const CX = process.env.NEXT_PUBLIC_GOOGLE_CSE_ID;
 
     if (!API_KEY || !CX) {
-      throw new Error("Missing Google Search Configuration (API Key or CSE ID)");
+      console.error("Search API Key or CSE ID missing in Env");
+      return NextResponse.json([]); // מחזיר מערך ריק במקום שגיאה
     }
 
     const googleUrl = new URL("https://www.googleapis.com/customsearch/v1");
@@ -31,18 +32,19 @@ export async function GET(req: Request) {
     const response = await fetch(googleUrl.toString());
     const data = await response.json();
 
-    if (data.error) throw new Error(data.error.message);
+    if (!data.items) {
+      return NextResponse.json([]);
+    }
 
-    const results = data.items?.map((item: any) => ({
+    const results = data.items.map((item: any) => ({
       title: item.title,
       link: item.link,
-      thumbnail: item.image?.thumbnailLink || item.pagemap?.cse_thumbnail?.[0]?.src,
-      context: item.image?.contextLink || item.link
-    })) || [];
+      thumbnail: item.image?.thumbnailLink || item.pagemap?.cse_thumbnail?.[0]?.src
+    }));
 
     return NextResponse.json(results);
   } catch (error: any) {
-    console.error("Google Search Error:", error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Google Proxy Error:", error.message);
+    return NextResponse.json([]); // בטיחות מעל הכל
   }
 }
