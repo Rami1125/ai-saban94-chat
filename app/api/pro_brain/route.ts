@@ -1,81 +1,138 @@
 import { NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getSupabase } from "@/lib/supabase";
 
 /**
- * Saban OS V22.0 - Dynamic Brain Engine
- * ------------------------------------
- * - Fetches real-time VIP profile from DB.
- * - Injects context-specific rules (Truck weight, projects).
- * - Implements the "Brotherly Consultant" persona.
+ * Saban OS V23.0 - Stable Dynamic Brain Engine
+ * -------------------------------------------
+ * - Strategy: Multi-Model Pool (1.5 Flash, 3.1 Flash Lite, 3.1 Pro).
+ * - Resilience: Exponential backoff (1s, 2s, 4s, 8s, 16s).
+ * - Context: Real-time VIP DNA Injection (Truck limits, History, Projects).
  */
 
 export const dynamic = 'force-dynamic';
 
-const API_KEYS = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').map(k => k.trim());
-const STABLE_MODELS = ["gemini-1.5-flash", "gemini-3.1-flash-lite-preview", "gemini-3.1-pro-preview"];
+const STABLE_MODELS = [
+  "gemini-3.1-pro-preview",
+  "gemini-3.1-flash-lite-preview",
+  "gemini-1.5-flash"
+];
+
+const RETRY_DELAYS = [1000, 2000, 4000, 8000, 16000];
 
 export async function POST(req: Request) {
   try {
     const supabase = getSupabase();
-    const { sessionId, query, history, customerId } = await req.json();
+    
+    // קבלת נתוני הבקשה
+    const body = await req.json().catch(() => ({}));
+    const { sessionId, query, history, customerId } = body;
 
-    // 1. שליפת פרופיל הלקוח מה-DB בזמן אמת
+    if (!query) {
+      return NextResponse.json({ error: "Missing query" }, { status: 400 });
+    }
+
+    // 1. שליפת פרופיל הלקוח (DNA) - ברירת מחדל בר אורניל
+    const targetId = customerId || '601992';
     const { data: profile } = await supabase
       .from('vip_profiles')
       .select('*')
-      .eq('id', customerId || '601992')
+      .eq('id', targetId)
       .maybeSingle();
 
-    // 2. שליפת היסטוריית רכישות אחרונה למניעת כפילויות
+    // 2. שליפת היסטוריית רכישות אחרונה למניעת כפילויות (48 שעות)
     const { data: recentOrders } = await supabase
       .from('vip_customer_history')
-      .select('product_name, created_at')
-      .eq('customer_id', customerId || '601992')
+      .select('product_name, quantity, created_at')
+      .eq('customer_id', targetId)
       .order('created_at', { ascending: false })
       .limit(5);
 
-    // 3. בניית ה-DNA המקצועי המוזרק
-    const systemDNA = `
-      זהות: המוח הלוגיסטי של ח. סבן. המנהל: ראמי הבוס.
-      לקוח נוכחי: ${profile?.full_name || 'VIP'} (פרויקט: ${profile?.main_project || 'כללי'}).
-      כינוי לפנייה: ${profile?.nickname || 'אחי'}.
+    // 3. בניית ה-System Instruction המקצועי של ח. סבן
+    const systemInstruction = `
+      אתה המוח הלוגיסטי והשותף המבצע של "ח. סבן חומרי בניין". המנהל והסמכות העליונה שלך הוא ראמי.
+      
+      זהות הלקוח הנוכחי:
+      - שם מלא: ${profile?.full_name || 'לקוח VIP'}
+      - פרויקט פעיל: ${profile?.main_project || 'כללי'}
+      - פנייה אישית: ${profile?.nickname || 'אחי'} (חובה להשתמש בכינוי זה).
 
-      ### חוקי הבלמים (Executive Enforcement):
-      - מגבלת משאית: ${profile?.truck_limit_kg || 12000} ק"ג (כ-18 בלות). 
-      - חוק המשקל: אם ההזמנה חורגת מהמשקל, עצור את בר והסבר לו את הסכנה והדו"ח.
-      - חוק הכפילות: היסטוריה אחרונה: ${JSON.stringify(recentOrders)}. אם הוא מזמין משהו שקנה ביומיים האחרונים, שאל "בטוח שצריך עוד?".
-      - חוק השלמה: גבס דורש ניצבים/מסלולים. מלט דורש חול.
+      חוקי הבלמים והלוגיסטיקה (DNA מחייב):
+      1. חוק ה-12 טון: המשאית של ח.סבן מוגבלת ל-12,000 ק"ג. בלה ממוצעת = 700 ק"ג (גג 18 בלות). אם הלקוח חורג - עצור אותו והסבר את סכנת הבטיחות והדו"ח.
+      2. חוק מניעת כפילויות: היסטוריה אחרונה: ${JSON.stringify(recentOrders)}. אם המשתמש מזמין מוצר דומה שנקנה ביומיים האחרונים, שאל: "בר אחי, הזמנו את זה שלשום ל[פרויקט], אתה בטוח שצריך עוד?".
+      3. יועץ שטח: גבס דורש ניצבים/מסלולים. מלט דורש חול. אל תהיה רק "לוקח הזמנות", וודא שלא חסר לו ציוד קצה לביצוע.
 
-      ### שפה וטון:
-      - פתח תמיד בברכה אישית לפי הזמן (בוקר/ערב) וכינוי הלקוח.
-      - היה יועץ ומחשב כמויות, לא רק לוקח הזמנות.
-      - בסיום, הפק "סיכום הזמנה" ברור לקבוצת הווצאפ.
+      סגנון וטון:
+      - פתח בברכה חמה לפי הזמן (בוקר טוב/ערב טוב) ושם הלקוח.
+      - היה מקצועי, חד, ותמציתי.
+      - בסיום כל הזמנה, הפק "### 🏗️ סיכום הזמנה לביצוע" מעוצב עם מק"טים וכמויות.
 
       חתימה:
       תודה, ומה תרצה שנבצע היום?
       ראמי, הכל מוכן לביצוע. 🦾
-    `;
+    `.trim();
 
-    // 4. שליפת מפתח וביצוע שיחה
-    const genAI = new GoogleGenerativeAI(API_KEYS[0]);
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash",
-      systemInstruction: systemDNA 
-    });
+    const apiKey = ""; // המפתח מוזרק בזמן ריצה ע"י הסביבה
+    let finalAiText = "";
+    let success = false;
 
-    const result = await model.generateContent(query);
-    const aiText = result.response.text();
+    // 4. לוגיקת ריצה על בריכת המודלים עם Exponential Backoff
+    for (const modelName of STABLE_MODELS) {
+      if (success) break;
 
-    // 5. שמירת התגובה להיסטוריה
-    await supabase.from('chat_history').insert([{ 
-      session_id: sessionId, 
-      role: 'assistant', 
-      content: aiText 
-    }]);
+      for (let attempt = 0; attempt < RETRY_DELAYS.length; attempt++) {
+        try {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+          
+          const payload = {
+            contents: [{
+              role: "user",
+              parts: [{ text: `היסטוריית שיחה:\n${JSON.stringify(history || [])}\n\nבקשת הלקוח: ${query}` }]
+            }],
+            systemInstruction: {
+              parts: [{ text: systemInstruction }]
+            }
+          };
 
-    return NextResponse.json({ answer: aiText });
+          const response = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            finalAiText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (finalAiText) {
+              success = true;
+              break;
+            }
+          }
+          
+          // אם נכשל, נמתין לפי הדיליי המוגדר (Exponential Backoff)
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]));
+        } catch (err) {
+          if (attempt === RETRY_DELAYS.length - 1) break; // ניסיון אחרון נכשל
+        }
+      }
+    }
+
+    if (!success) {
+      return NextResponse.json({ 
+        answer: "בר אחי, המוח עמוס כרגע בחישובי משקלים. תן לי רגע לנשום ונסה שוב. 🦾" 
+      });
+    }
+
+    // 5. תיעוד ההיסטוריה ב-Supabase
+    if (sessionId) {
+      await supabase.from('chat_history').insert([
+        { session_id: sessionId, role: 'user', content: query },
+        { session_id: sessionId, role: 'assistant', content: finalAiText }
+      ]);
+    }
+
+    return NextResponse.json({ answer: finalAiText });
+
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: "שגיאת מערכת פנימית" }, { status: 500 });
   }
 }
