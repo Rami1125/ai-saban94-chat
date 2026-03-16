@@ -6,26 +6,29 @@ import {
   Send, Zap, ShieldCheck, ShoppingCart, User, 
   Loader2, Menu, X, Trash2, Scale, Truck, 
   ChevronRight, MapPin, RefreshCcw, Search, Sparkles,
-  Plus, Minus, Package
+  Plus, Minus, Package, Save
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast, Toaster } from "sonner";
+import { useRouter } from 'next/navigation';
 
 /**
- * Saban Admin Pro - Executive Chat Interface V31.5 (Clean Render Fix)
+ * Saban Admin Pro - Executive Chat Interface V32.0 (Final Execution)
  * -----------------------------------------------------------------
- * Fix: Removed raw command strings and markdown artifacts from bubbles.
- * UI: Enhanced floating input and synchronized cart with DB.
+ * Fix: Connected "הזרק הזמנה לביצוע" to /api/orders/create.
+ * UI: Full order lifecycle from chat to warehouse sync.
  */
 
 const LOGO_PATH = "/ai.png";
 
 export default function AdminProChat() {
+  const router = useRouter();
   const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [cart, setCart] = useState<any[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isInjecting, setIsInjecting] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // 1. טעינת היסטוריה
@@ -45,7 +48,7 @@ export default function AdminProChat() {
 
   useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
 
-  // 2. לוגיקת שליחה וניקוי פקודות
+  // 2. לוגיקת שליחה למוח
   const handleSend = async () => {
     if (!input.trim() || loading) return;
     const q = input; setInput("");
@@ -60,13 +63,13 @@ export default function AdminProChat() {
           sessionId: 'admin_session', 
           query: q, 
           history: messages.slice(-5),
-          customerId: '601992'
+          customerId: '601992' // בר אורניל כברירת מחדל
         })
       });
 
       const data = await res.json();
       
-      // ביצוע פקודות שקטות שהמוח מחזיר בטקסט
+      // ביצוע פקודות שקטות שהמוח מחזיר
       const addMatch = data.answer.match(/\[QUICK_ADD:(.*?)\]/);
       if (addMatch) handleQuickAdd(addMatch[1]);
       
@@ -97,6 +100,43 @@ export default function AdminProChat() {
     setCart(prev => prev.map(i => i.sku === sku ? {...i, qty} : i));
   };
 
+  // --- פונקציית הקסם: הזרקת הזמנה מהצ'אט ל-DB (סגירת המעגל) ---
+  const handleInjectOrder = async () => {
+    if (cart.length === 0 || isInjecting) return;
+    setIsInjecting(true);
+    const toastId = toast.loading("מזריק פקודת עבודה למערכת...");
+
+    try {
+      const response = await fetch('/api/orders/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerId: '601992', // בר אורניל
+          items: cart,
+          deliveryDetails: {
+            address: "סטרומה 4, הרצליה",
+            contact_name: "בר",
+            contact_phone: "054-5998111",
+            project: "סטרומה 4"
+          }
+        })
+      });
+
+      const result = await response.json();
+      if (!result.success) throw new Error(result.error);
+
+      toast.success("ההזמנה הוזרקה לביצוע בהצלחה! 🦾", { id: toastId });
+      setCart([]);
+      setIsSidebarOpen(false);
+      router.push('/admin_pro/orders'); // מעבר למעקב הזמנות
+
+    } catch (err: any) {
+      toast.error("תקלה בהזרקה: " + err.message, { id: toastId });
+    } finally {
+      setIsInjecting(false);
+    }
+  };
+
   return (
     <div className="flex h-[calc(100vh-120px)] bg-[#F8FAFC] rounded-[45px] overflow-hidden border border-slate-200 shadow-2xl relative" dir="rtl">
       <Toaster position="top-center" richColors />
@@ -123,7 +163,14 @@ export default function AdminProChat() {
                     </div>
                   ))}
                </div>
-               <button className="w-full bg-slate-950 text-white py-5 rounded-2xl font-black shadow-xl mt-6 active:scale-95 transition-all uppercase text-xs italic tracking-widest border-b-4 border-slate-800">הזרק הזמנה לביצוע 🦾</button>
+               <button 
+                onClick={handleInjectOrder}
+                disabled={cart.length === 0 || isInjecting}
+                className="w-full bg-slate-950 text-white py-5 rounded-2xl font-black shadow-xl mt-6 active:scale-95 transition-all uppercase text-xs italic tracking-widest border-b-4 border-slate-800 flex items-center justify-center gap-3 disabled:opacity-50"
+               >
+                  {isInjecting ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>}
+                  הזרק הזמנה לביצוע 🦾
+               </button>
             </motion.aside>
           </>
         )}
@@ -131,7 +178,6 @@ export default function AdminProChat() {
 
       {/* Main Area */}
       <div className="flex-1 flex flex-col bg-white overflow-hidden">
-        
         <div className="h-16 border-b border-slate-100 bg-white/50 backdrop-blur-md flex items-center justify-between px-8 shrink-0">
            <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-xl border border-blue-100 font-black text-[10px] uppercase tracking-widest italic">
@@ -144,7 +190,7 @@ export default function AdminProChat() {
            </button>
         </div>
 
-        {/* Message List with FIX for commands */}
+        {/* Message List */}
         <div className="flex-1 overflow-y-auto p-8 space-y-10 scrollbar-hide bg-[#FAFBFC] pb-40">
            {messages.map((m, i) => (
              <motion.div 
@@ -204,15 +250,13 @@ export default function AdminProChat() {
   );
 }
 
-// --- המפענח החכם (The Fix) ---
 function SmartMessageRenderer({ text, onAdd }: { text: string, onAdd: any }) {
   if (!text) return null;
 
-  // 1. ניקוי ארטיפקטים של Markdown ופקודות שרת
   const cleanContent = text
-    .replace(/```text|```|text```/gi, '') // הסרת בלוקי קוד טקסטואליים
-    .replace(/\[QUICK_ADD:.*?\]/g, '') // הסרת פקודות הוספה מהטקסט
-    .replace(/\[SET_QTY:.*?:.*?\]/g, '') // הסרת פקודות כמות מהטקסט
+    .replace(/```text|```|text```/gi, '')
+    .replace(/\[QUICK_ADD:.*?\]/g, '')
+    .replace(/\[SET_QTY:.*?:.*?\]/g, '')
     .trim();
 
   const lines = cleanContent.split('\n');
@@ -221,17 +265,9 @@ function SmartMessageRenderer({ text, onAdd }: { text: string, onAdd: any }) {
     <div className="space-y-4">
       {lines.map((line, i) => {
         if (!line.trim()) return null;
-        
-        // טיפול בכותרות ###
         if (line.startsWith('###')) {
-          return (
-            <h3 key={i} className="text-blue-400 text-xl font-black uppercase mt-6 mb-3 border-r-4 border-blue-500 pr-4 italic tracking-tighter">
-              {line.replace('###', '').trim()}
-            </h3>
-          );
+          return <h3 key={i} className="text-blue-400 text-xl font-black uppercase mt-6 mb-3 border-r-4 border-blue-500 pr-4 italic">{line.replace('###', '').trim()}</h3>;
         }
-
-        // רינדור טקסט רגיל (תומך ב-** לבולד)
         const parts = line.split(/(\*\*.*?\*\*)/g);
         return (
           <p key={i} className="text-[18px] md:text-[20px] leading-relaxed">
@@ -239,15 +275,11 @@ function SmartMessageRenderer({ text, onAdd }: { text: string, onAdd: any }) {
           </p>
         );
       })}
-
-      {/* 2. הזרקת כפתורי פעולה במידה וזוהו פקודות בטקסט המקורי */}
       {Array.from(text.matchAll(/\[QUICK_ADD:(.*?)\]/g)).map((match, i) => (
         <motion.button 
-          key={i}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
+          key={i} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
           onClick={() => onAdd(match[1])}
-          className="w-full mt-6 bg-blue-600 text-white py-5 rounded-[25px] font-black shadow-2xl flex items-center justify-center gap-4 text-sm uppercase tracking-widest italic border-b-4 border-blue-800"
+          className="w-full mt-6 bg-blue-600 text-white py-5 rounded-[25px] font-black shadow-2xl flex items-center justify-center gap-4 text-sm uppercase italic border-b-4 border-blue-800"
         >
           <Plus size={20} /> שמור מק"ט {match[1]} לסל פקודה
         </motion.button>
