@@ -2,140 +2,112 @@ import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 
 /**
- * Saban Admin Pro - Executive Brain V31.0 (Stable March 2026)
- * ---------------------------------------------------------
- * - Model Pool: Updated to Gemini 2.5 series (Flash & Pro).
- * - Key Rotation: Advanced cycle through GOOGLE_AI_KEY_POOL.
- * - Logic: Real-time context injection from DNA and Inventory.
+ * Saban Admin Pro - Master Controller Brain V35.0
+ * ----------------------------------------------
+ * Role: The Mentor Brain. Manages system DNA via Rule Injection.
+ * Logic: Cycles through GOOGLE_AI_KEY_POOL, updates ai_rules table.
+ * Model: gemini-2.5-flash-preview-09-2025 (Stable March 2026).
  */
 
 export const dynamic = 'force-dynamic';
-
-// רשימת המודלים היציבים ביותר למרץ 2026
-const MODEL_POOL = [
-  "gemini-2.5-flash",      // המהיר והיציב ביותר לביצועים לוגיסטיים
-  "gemini-2.5-pro",       // החכם ביותר לפתרון בעיות מורכבות
-  "gemini-2.0-pro-exp-02-05" // מודל גיבוי חזק
-];
 
 const RETRY_DELAYS = [1000, 2000, 4000];
 
 export async function POST(req: Request) {
   try {
     const supabase = getSupabase();
-    const body = await req.json().catch(() => ({}));
+    const body = await req.json();
     const { sessionId, query, history, customerId } = body;
 
     if (!query) return NextResponse.json({ error: "Missing query" }, { status: 400 });
 
-    // 1. שליפת קונטקסט (DNA, מלאי, משקלים, הזמנות)
-    const targetId = customerId || '601992'; // ברירת מחדל בר אורניל
-    
-    const [profileRes, rulesRes, weightsRes, activeOrdersRes] = await Promise.all([
-      supabase.from('vip_profiles').select('*').eq('id', targetId).maybeSingle(),
-      supabase.from('ai_rules').select('instruction').eq('is_active', true),
-      supabase.from('product_weights').select('*'),
-      supabase.from('orders').select('*').eq('customer_id', targetId).neq('status', 'delivered')
+    // 1. Context Acquisition (DNA, VIP Profiles, Inventory)
+    const [rulesRes, profilesRes, inventoryRes] = await Promise.all([
+      supabase.from('ai_rules').select('*').eq('is_active', true),
+      supabase.from('vip_profiles').select('*'),
+      supabase.from('inventory').select('product_name, sku').limit(30)
     ]);
 
-    const profile = profileRes.data;
-    const dynamicRules = rulesRes.data?.map(r => r.instruction).join("\n") || "";
-    const weightMap = JSON.stringify(weightsRes.data || []);
-    const currentOrders = JSON.stringify(activeOrdersRes.data || []);
+    const activeDNA = rulesRes.data?.map(r => r.instruction).join("\n") || "";
 
-    // 2. בניית ה-System DNA המעודכן
     const systemPrompt = `
-      אתה "המוח הלוגיסטי" - השותף המבצע הבכיר של ראמי בחברת ח. סבן.
-      
-      ### לקוח VIP נוכחי:
-      - שם: ${profile?.full_name || 'לקוח כללי'}
-      - פרויקט: ${profile?.main_project || 'לא ידוע'}
-      - כינוי: ${profile?.nickname || 'אחי'}
+      אתה "המוח המאסטר של Saban OS" - השותף המבצע הבכיר של ראמי.
+      תפקידך: לנהל את כל המוחות במערכת (VIP וכללי) דרך עדכון ספר החוקים.
 
-      ### חוקים ונתונים (DNA):
-      ${dynamicRules}
-      - מפת משקלים: ${weightMap}
-      - הזמנות פתוחות בשטח: ${currentOrders}
+      ### מצב המערכת כרגע:
+      - חוקי DNA פעילים: ${activeDNA}
+      - לקוחות VIP מחוברים: ${profilesRes.data?.length || 0}
+      - מוצרים זמינים במלאי: ${inventoryRes.data?.length || 0}
 
-      ### פרוטוקול ביצוע:
-      1. חוק ה-12 טון: עצור חריגות מעל 12,000 ק"ג.
-      2. מניעת כפילויות: בדוק היסטוריה מול הזמנות פתוחות.
-      3. פקודות UI: הזרק [QUICK_ADD:SKU] או [SET_QTY:SKU:QTY] כשיש החלטה על מוצר.
-      4. טון: מקצועי, חד, "מתכנת אומנותי", חברי.
+      ### יכולת מיוחדת - הזרקת DNA (Rule Injection):
+      אם ראמי מבקש לשנות חוק, להוסיף הנחיה או לעדכן התנהגות:
+      חובה להחזיר פקודה מוסתרת בפורמט: [UPDATE_RULE:NAME:CONTENT]
+      המערכת תזהה את זה ותעדכן את ה-Database מיידית.
+
+      ### הנחיות ביצוע:
+      1. השתמש ב-[QUICK_ADD:SKU] להוספת מוצר לסל של ראמי.
+      2. הטון: Executive, חברי (ראמי הבוס), חד ומקצועי.
+      3. מנע כפילויות וחריגות 12 טון בזמן אמת.
 
       חתימה חובה:
-      תודה, ומה תרצה שנבצע היום?
-      ראמי, הכל מוכן לביצוע. 🦾
+      ראמי, המוח המרכזי מסונכרן. מחכה לפקודה. 🦾
     `.trim();
 
-    // 3. לוגיקת רוטציית מפתחות וסבב מודלים
+    // 2. Key Rotation & API Execution
     const apiKeys = (process.env.GOOGLE_AI_KEY_POOL || "").split(",").map(k => k.trim()).filter(k => k.length > 5);
-    
-    if (apiKeys.length === 0) throw new Error("API Keys Pool is empty");
+    if (apiKeys.length === 0) throw new Error("API Key Pool Exhausted");
 
     let finalAnswer = "";
     let success = false;
 
-    // ניסיון ראשון עם המודל האופטימלי, ואז גיבוי
-    for (const modelName of MODEL_POOL) {
+    for (const apiKey of apiKeys) {
       if (success) break;
-
-      for (const apiKey of apiKeys) {
-        if (success) break;
-
-        for (const delay of RETRY_DELAYS) {
-          try {
-            const response = await fetch(
-              `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  contents: [{ 
-                    role: "user", 
-                    parts: [{ text: `היסטוריה: ${JSON.stringify(history || [])}\nשאילתה: ${query}` }] 
-                  }],
-                  systemInstruction: { parts: [{ text: systemPrompt }] },
-                  generationConfig: { temperature: 0.1, topP: 0.8 }
-                })
-              }
-            );
-
-            if (response.ok) {
-              const data = await response.json();
-              finalAnswer = data.candidates?.[0]?.content?.parts?.[0]?.text;
-              if (finalAnswer) {
-                success = true;
-                break;
-              }
-            } else if (response.status === 429) {
-              // חריגת מכסה - עובר למפתח הבא
-              break; 
+      for (const delay of RETRY_DELAYS) {
+        try {
+          const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [{ role: "user", parts: [{ text: `היסטוריה: ${JSON.stringify(history || [])}\nשאילתה: ${query}` }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] }
+              })
             }
-            
-            await new Promise(r => setTimeout(r, delay));
-          } catch (e) {
-            continue;
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+            finalAnswer = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (finalAnswer) { success = true; break; }
           }
-        }
+          await new Promise(r => setTimeout(r, delay));
+        } catch (e) { continue; }
       }
     }
 
-    if (!success) throw new Error("All models and keys failed to respond.");
+    if (!success) throw new Error("Brain Communication Failure");
 
-    // 4. רישום להיסטוריה
+    // 3. Automated Rule Injection Handling
+    const ruleMatch = finalAnswer.match(/\[UPDATE_RULE:(.*?):(.*?)\]/);
+    if (ruleMatch) {
+      const [_, ruleName, instruction] = ruleMatch;
+      await supabase.from('ai_rules').upsert({
+        rule_name: ruleName,
+        instruction: instruction,
+        is_active: true
+      }, { onConflict: 'rule_name' });
+    }
+
+    // 4. Persistence
     await supabase.from('chat_history').insert([
-      { session_id: sessionId || 'admin_session', role: 'user', content: query },
-      { session_id: sessionId || 'admin_session', role: 'assistant', content: finalAnswer }
+      { session_id: sessionId || 'admin_master', role: 'user', content: query },
+      { session_id: sessionId || 'admin_master', role: 'assistant', content: finalAnswer }
     ]);
 
-    return NextResponse.json({ answer: finalAnswer });
+    return NextResponse.json({ answer: finalAnswer, ruleInjected: !!ruleMatch });
 
   } catch (error: any) {
-    console.error("Brain System Error:", error.message);
-    return NextResponse.json({ 
-      error: "תקלה במוח הלוגיסטי", 
-      details: error.message 
-    }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
