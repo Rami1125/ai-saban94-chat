@@ -2,10 +2,10 @@
 
 import React, { useEffect, useState } from 'react';
 import { supabase } from "@/lib/supabase";
-import { Users, Plus, Phone, MapPin, Scale, ChevronRight, Search } from 'lucide-react';
-import { toast } from "sonner";
+import { Users, Plus, Phone, MapPin, Scale, ChevronRight, Search, Star, MessageCircle } from 'lucide-react';
+import { motion } from 'framer-motion';
 
-export default function VipClients() {
+export default function VipManagement() {
   const [clients, setClients] = useState<any[]>([]);
 
   useEffect(() => { fetchClients(); }, []);
@@ -16,51 +16,60 @@ export default function VipClients() {
   }
 
   return (
-    <div className="space-y-8">
-      <div className="flex justify-between items-center">
-        <div className="flex-1 max-w-md relative">
-           <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-           <input placeholder="חפש לקוח זהב..." className="w-full bg-white border border-slate-200 pr-12 pl-4 py-4 rounded-2xl font-bold shadow-sm" />
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
+      <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+        <div className="w-full max-w-xl relative group">
+           <Search className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={20} />
+           <input placeholder="חפש לקוח VIP, פרויקט או טלפון..." className="w-full bg-white border border-slate-200 pr-14 pl-6 py-5 rounded-3xl font-bold shadow-sm outline-none focus:ring-4 ring-blue-500/10 transition-all text-lg" />
         </div>
-        <button className="bg-slate-900 text-white px-8 py-4 rounded-2xl font-black shadow-lg flex items-center gap-3 text-xs italic uppercase">
-           <Plus size={20}/> הוסף לקוח VIP
+        <button className="bg-slate-900 text-white px-10 py-5 rounded-[22px] font-black shadow-xl flex items-center gap-4 text-xs italic uppercase tracking-widest hover:bg-blue-600 transition-all active:scale-95 shrink-0 border-b-4 border-slate-700">
+           <Plus size={22}/> הוסף לקוח זהב
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {clients.map(client => (
-          <div key={client.id} className="bg-white rounded-[40px] border border-slate-100 shadow-sm hover:shadow-xl transition-all group overflow-hidden border-b-8 border-b-blue-600/10 hover:border-b-blue-600">
-            <div className="p-8 space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {clients.map((client, i) => (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}
+            key={client.id} className="bg-white rounded-[45px] border border-slate-100 shadow-sm hover:shadow-2xl transition-all group overflow-hidden border-b-[10px] border-b-blue-600/5 hover:border-b-blue-600"
+          >
+            <div className="p-10 space-y-8">
               <div className="flex justify-between items-start">
-                <div className="w-16 h-16 bg-blue-50 rounded-[25px] flex items-center justify-center text-blue-600 shadow-inner">
-                  <Users size={32} />
+                <div className="w-20 h-20 bg-blue-50 rounded-[30px] flex items-center justify-center text-blue-600 shadow-inner relative group-hover:scale-110 transition-transform">
+                  <Users size={40} />
+                  <div className="absolute -top-2 -right-2 bg-amber-400 p-1.5 rounded-xl border-4 border-white shadow-sm animate-bounce"><Star size={14} fill="white" className="text-white"/></div>
                 </div>
-                <div className="bg-blue-50 text-blue-700 px-3 py-1 rounded-xl font-black text-[9px] uppercase tracking-widest">Client ID: {client.id}</div>
+                <div className="bg-blue-50 text-blue-700 px-4 py-1.5 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] shadow-sm">ID: {client.id}</div>
               </div>
               
-              <div>
-                <h3 className="text-xl font-black text-slate-900 italic">{client.full_name}</h3>
-                <p className="text-sm font-bold text-slate-400 mt-1 flex items-center gap-2"><MapPin size={14}/> {client.main_project}</p>
+              <div className="text-right">
+                <h3 className="text-2xl font-black text-slate-900 italic tracking-tight">{client.full_name}</h3>
+                <p className="text-sm font-bold text-slate-400 mt-2 flex items-center justify-end gap-2"><MapPin size={16}/> {client.main_project}</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 pt-4 border-t border-slate-50">
-                <div className="bg-slate-50 p-4 rounded-2xl">
-                  <p className="text-[9px] font-black text-slate-400 uppercase mb-1">מגבלת משקל</p>
-                  <p className="font-black text-slate-800 flex items-center gap-2 text-sm italic"><Scale size={14}/> {client.truck_limit_kg / 1000} טון</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-slate-50 p-5 rounded-[25px] border border-slate-100 text-center">
+                  <p className="text-[10px] font-black text-slate-400 uppercase mb-2 tracking-tighter italic">Truck Limit</p>
+                  <p className="font-black text-slate-800 flex items-center justify-center gap-2 text-base italic"><Scale size={16} className="text-blue-500"/> {client.truck_limit_kg / 1000} TON</p>
                 </div>
-                <div className="bg-slate-50 p-4 rounded-2xl">
-                  <p className="text-[9px] font-black text-slate-400 uppercase mb-1">טלפון</p>
-                  <p className="font-black text-slate-800 flex items-center gap-2 text-sm italic"><Phone size={14}/> {client.phone}</p>
+                <div className="bg-slate-50 p-5 rounded-[25px] border border-slate-100 text-center">
+                  <p className="text-[10px] font-black text-slate-400 uppercase mb-2 tracking-tighter italic">Phone</p>
+                  <p className="font-black text-slate-800 flex items-center justify-center gap-2 text-base italic"><Phone size={16} className="text-blue-500"/> {client.phone.slice(-4)}</p>
                 </div>
               </div>
             </div>
             
-            <button className="w-full bg-slate-50 py-4 font-black text-[10px] uppercase tracking-widest text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all flex items-center justify-center gap-2">
-               צפה בהיסטוריה וניהול <ChevronRight size={14}/>
-            </button>
-          </div>
+            <div className="flex divide-x divide-x-reverse divide-slate-100 border-t border-slate-100 bg-slate-50/50">
+               <button className="flex-1 py-5 font-black text-[10px] uppercase tracking-widest text-slate-400 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center gap-2 italic">
+                  תיק לקוח <ChevronRight size={14}/>
+               </button>
+               <button onClick={() => window.open(`https://wa.me/${client.phone.replace(/-/g,'')}`, '_blank')} className="px-8 py-5 hover:bg-emerald-500 hover:text-white transition-all text-slate-400">
+                  <MessageCircle size={20} />
+               </button>
+            </div>
+          </motion.div>
         ))}
       </div>
-    </div>
+    </motion.div>
   );
 }
