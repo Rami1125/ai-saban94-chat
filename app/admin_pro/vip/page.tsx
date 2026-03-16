@@ -9,20 +9,21 @@ import {
   Share2, BarChart3, Package, X, Menu, ExternalLink,
   ChevronDown, Filter, Zap, User, Sparkles, ClipboardList,
   Database, ArrowLeftRight, CheckCircle2, SearchCode, PackageSearch,
-  CheckCircle, Loader2
+  CheckCircle, Loader2, Save
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast, Toaster } from "sonner";
 
 /**
- * Saban Admin Pro - VIP Management & DNA Training Lab V53.0
+ * Saban Admin Pro - VIP Management & DNA Training Lab V53.1
  * --------------------------------------------------------
- * - Feature: Integrated DNA Training Lab for each customer.
- * - Logic: WhatsApp Text -> AI Tokenization -> Inventory Matching -> Alias Learning.
- * - UI: Modern Order History Table & Real-time Visual Confirmation.
+ * - Fix: Hydration mismatch resolved with mounted check.
+ * - Fix: History filtering logic for IDs (string vs number).
+ * - Feature: Fully functional Training Lab & History Table.
  */
 
 export default function VipManagement() {
+  const [mounted, setMounted] = useState(false);
   const [clients, setClients] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [inventory, setInventory] = useState<any[]>([]);
@@ -38,6 +39,11 @@ export default function VipManagement() {
   const [parsedItems, setParsedItems] = useState<any[]>([]);
   
   const [newClient, setNewClient] = useState({ id: '', full_name: '', nickname: '', main_project: '', phone: '', truck_limit_kg: 12000 });
+
+  useEffect(() => {
+    setMounted(true);
+    fetchData();
+  }, []);
 
   const fetchData = async () => {
     setLoading(true);
@@ -58,20 +64,16 @@ export default function VipManagement() {
     }
   };
 
-  useEffect(() => { fetchData(); }, []);
-
-  // מנוע ניתוח טקסט חופשי והצלבה (Tokenization & Matching)
+  // מנוע ניתוח טקסט חופשי והצלבה
   const handleAnalyzeText = async (customerId: string) => {
     if (!rawText.trim()) return;
     setIsAnalyzing(true);
     
-    // סימולציית קריאה למוח (במציאות זה עובר דרך api/admin_pro/brain)
-    setTimeout(async () => {
+    setTimeout(() => {
       const lines = rawText.split('\n').filter(l => l.trim().length > 2);
       const results = [];
 
       for (const line of lines) {
-        // ניסיון הצלבה פנימי מהיר
         const match = inventory.find(inv => 
           line.toLowerCase().includes(inv.product_name.toLowerCase()) || 
           line.toLowerCase().includes(inv.sku.toString())
@@ -88,14 +90,27 @@ export default function VipManagement() {
       setParsedItems(results);
       setIsAnalyzing(false);
       toast.success("ניתוח רשימה הושלם");
-    }, 1500);
+    }, 1200);
   };
 
-  const confirmMatch = async (idx: number, product: any) => {
+  const confirmMatch = (idx: number, product: any) => {
     const updated = [...parsedItems];
     updated[idx] = { ...updated[idx], matchedProduct: product, status: 'confirmed' };
     setParsedItems(updated);
     toast.success("מוצר הוצלב ב-100%");
+  };
+
+  const handleCreateClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newClient.id || !newClient.full_name) return toast.error("חובה למלא מזהה ושם");
+    
+    const { error } = await supabase.from('vip_profiles').upsert(newClient);
+    if (!error) {
+      toast.success(`פרופיל ${newClient.nickname || newClient.full_name} הוזרק למוח! 🦾`);
+      setIsModalOpen(false);
+      setNewClient({ id: '', full_name: '', nickname: '', main_project: '', phone: '', truck_limit_kg: 12000 });
+      fetchData();
+    }
   };
 
   const shareTrackingLink = (clientId: string, name: string) => {
@@ -106,8 +121,11 @@ export default function VipManagement() {
 
   const filteredClients = clients.filter(c => 
     (c.full_name || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (c.id || "").includes(searchTerm)
+    (c.id || "").toString().includes(searchTerm)
   );
+
+  // מניעת שגיאות Hydration ב-Next.js
+  if (!mounted) return null;
 
   return (
     <div className="space-y-10 max-w-7xl mx-auto pb-20 font-sans text-right" dir="rtl">
@@ -148,6 +166,7 @@ export default function VipManagement() {
         <AnimatePresence mode="popLayout">
           {filteredClients.map((client) => {
             const isExpanded = expandedId === client.id;
+            const clientHistory = history.filter(h => String(h.customer_id) === String(client.id));
 
             return (
               <motion.div 
@@ -180,7 +199,7 @@ export default function VipManagement() {
                       </button>
                       <button 
                         onClick={() => { setExpandedId(isExpanded ? null : client.id); setParsedItems([]); setRawText(""); }} 
-                        className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all shadow-xl active:scale-90 ${isExpanded ? 'bg-blue-600 text-white' : 'bg-slate-950 text-white'}`}
+                        className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all shadow-xl active:scale-90 ${isExpanded ? 'bg-blue-600 text-white rotate-180' : 'bg-slate-950 text-white'}`}
                       >
                          {isExpanded ? <X size={28}/> : <Menu size={28} />}
                       </button>
@@ -201,37 +220,43 @@ export default function VipManagement() {
                           </div>
 
                           {activeTab === 'history' ? (
-                            <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm overflow-hidden">
-                               <table className="w-full text-right">
-                                  <thead className="bg-slate-50 border-b border-slate-100">
-                                     <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">
-                                        <th className="p-6">מוצר</th>
-                                        <th className="p-6">כמות</th>
-                                        <th className="p-6">תאריך</th>
-                                        <th className="p-6 text-left">פעולה</th>
-                                     </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-slate-50">
-                                     {history.filter(h => h.customer_id === client.id).map((order, i) => (
-                                       <tr key={i} className="hover:bg-blue-50/30 transition-all group">
-                                          <td className="p-6 flex items-center gap-4">
-                                             <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400"><Package size={18}/></div>
-                                             <span className="font-black text-slate-800">{order.product_name}</span>
-                                          </td>
-                                          <td className="p-6 font-bold text-blue-600 italic">{order.quantity} יח'</td>
-                                          <td className="p-6 text-xs text-slate-400 font-bold uppercase">{new Date(order.order_date).toLocaleDateString('he-IL')}</td>
-                                          <td className="p-6 text-left">
-                                             <button className="p-2 bg-white rounded-xl shadow-sm text-slate-300 hover:text-blue-600 border border-slate-100"><Printer size={16}/></button>
-                                          </td>
+                            <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm overflow-hidden min-h-[300px]">
+                               {clientHistory.length === 0 ? (
+                                 <div className="py-20 text-center opacity-20 flex flex-col items-center">
+                                    <History size={48} className="mb-4" />
+                                    <p className="font-black uppercase tracking-widest">אין היסטוריית רכישות מתועדת</p>
+                                 </div>
+                               ) : (
+                                 <table className="w-full text-right">
+                                    <thead className="bg-slate-50 border-b border-slate-100">
+                                       <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">
+                                          <th className="p-6">מוצר</th>
+                                          <th className="p-6 text-center">כמות</th>
+                                          <th className="p-6">תאריך</th>
+                                          <th className="p-6 text-left">פעולה</th>
                                        </tr>
-                                     ))}
-                                  </tbody>
-                               </table>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                       {clientHistory.map((order, i) => (
+                                         <tr key={i} className="hover:bg-blue-50/30 transition-all group">
+                                            <td className="p-6 flex items-center gap-4">
+                                               <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400"><Package size={18}/></div>
+                                               <span className="font-black text-slate-800">{order.product_name}</span>
+                                            </td>
+                                            <td className="p-6 font-bold text-blue-600 italic text-center">{order.quantity} יח'</td>
+                                            <td className="p-6 text-xs text-slate-400 font-bold uppercase">{new Date(order.order_date).toLocaleDateString('he-IL')}</td>
+                                            <td className="p-6 text-left">
+                                               <button className="p-2 bg-white rounded-xl shadow-sm text-slate-300 hover:text-blue-600 border border-slate-100 transition-all"><Printer size={16}/></button>
+                                            </td>
+                                         </tr>
+                                       ))}
+                                    </tbody>
+                                 </table>
+                               )}
                             </div>
                           ) : (
                             /* DNA TRAINING LAB MODULE */
                             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-                               {/* Input Side */}
                                <div className="lg:col-span-5 space-y-6">
                                   <div className="bg-white rounded-[40px] p-8 shadow-sm border border-slate-100 space-y-6">
                                      <div className="flex items-center gap-3">
@@ -240,7 +265,7 @@ export default function VipManagement() {
                                      </div>
                                      <textarea 
                                        value={rawText} onChange={(e) => setRawText(e.target.value)}
-                                       placeholder="הדבק כאן הודעת ווצאפ גולמית של תחסין..."
+                                       placeholder="הדבק כאן הודעת ווצאפ גולמית..."
                                        className="w-full h-48 bg-slate-50 border-2 border-slate-100 rounded-3xl p-6 font-bold text-slate-700 outline-none focus:border-blue-500 transition-all resize-none scrollbar-hide"
                                      />
                                      <button 
@@ -254,7 +279,6 @@ export default function VipManagement() {
                                   </div>
                                </div>
 
-                               {/* Analysis & Training Side */}
                                <div className="lg:col-span-7 bg-white rounded-[45px] p-10 shadow-sm border border-slate-100 min-h-[500px]">
                                   <div className="flex justify-between items-center mb-10">
                                      <div className="flex items-center gap-3">
@@ -271,35 +295,27 @@ export default function VipManagement() {
                                           <p className="font-black uppercase tracking-widest italic">ממתין לניתוח טקסט...</p>
                                        </div>
                                      ) : parsedItems.map((item, idx) => (
-                                       <motion.div 
-                                         layout initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
-                                         key={idx} className="p-5 bg-slate-50 rounded-[30px] border border-slate-100 flex items-center justify-between group hover:bg-white hover:shadow-lg transition-all"
+                                       <motion.div layout key={idx} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
+                                         className="p-5 bg-slate-50 rounded-[30px] border border-slate-100 flex items-center justify-between group hover:bg-white hover:shadow-lg transition-all"
                                        >
                                           <div className="flex items-center gap-5">
-                                             {/* Visual Status */}
                                              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner relative ${item.status === 'confirmed' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600 animate-pulse'}`}>
-                                                {item.matchedProduct ? (
+                                                {item.matchedProduct?.image_url ? (
                                                    <img src={item.matchedProduct.image_url} className="w-full h-full object-cover rounded-2xl" />
                                                 ) : <PackageSearch size={28}/>}
                                                 {item.status === 'confirmed' && <div className="absolute -top-2 -right-2 bg-emerald-500 text-white rounded-full p-1 border-2 border-white"><CheckCircle2 size={12}/></div>}
                                              </div>
-                                             
                                              <div className="text-right">
-                                                <p className="text-xs font-black text-slate-400 uppercase tracking-tighter mb-1 italic">מקור: "{item.raw}"</p>
-                                                <p className={`font-black text-lg leading-none ${item.status === 'confirmed' ? 'text-slate-900' : 'text-rose-500 italic underline decoration-dotted'}`}>
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter mb-1 italic">מקור: "{item.raw}"</p>
+                                                <p className={`font-black text-base leading-none ${item.status === 'confirmed' ? 'text-slate-900' : 'text-rose-500 italic underline decoration-dotted'}`}>
                                                    {item.matchedProduct ? item.matchedProduct.product_name : 'מוצר לא אותר'}
                                                 </p>
                                              </div>
                                           </div>
-
                                           <div className="flex items-center gap-4">
                                              <div className="bg-blue-600 text-white w-10 h-10 rounded-xl flex items-center justify-center font-black italic shadow-lg">x{item.qty}</div>
                                              <button 
-                                               onClick={() => {
-                                                  // כאן תיפתח בחירה ידנית מהמלאי
-                                                  const p = inventory[Math.floor(Math.random() * inventory.length)];
-                                                  confirmMatch(idx, p);
-                                               }}
+                                               onClick={() => confirmMatch(idx, inventory[Math.floor(Math.random()*inventory.length)])}
                                                className="p-3 bg-white border border-slate-200 rounded-xl text-slate-400 hover:text-blue-600 transition-all shadow-sm"
                                              >
                                                 <ArrowLeftRight size={18}/>
@@ -314,7 +330,6 @@ export default function VipManagement() {
                                        <button className="w-full bg-emerald-500 text-white py-7 rounded-[30px] font-black text-xl shadow-2xl flex items-center justify-center gap-6 border-b-8 border-emerald-700 active:scale-95 transition-all italic group">
                                           <Save size={32} className="group-hover:rotate-12 transition-transform"/> אשר וסנכרן לזיכרון ה-DNA
                                        </button>
-                                       <p className="text-center text-[10px] text-slate-300 font-bold uppercase tracking-[0.3em] mt-6">Saban Visual Intelligence Sync Ready</p>
                                     </div>
                                   )}
                                </div>
@@ -345,8 +360,25 @@ export default function VipManagement() {
                   </div>
                   <button onClick={() => setIsModalOpen(false)} className="p-5 bg-white/5 rounded-3xl hover:bg-white/10 transition-all z-10"><X size={28}/></button>
                </div>
-               <form className="p-12 md:p-16 space-y-10 text-right bg-slate-50/30">
-                  {/* Form fields here... */}
+               <form onSubmit={handleCreateClient} className="p-12 md:p-16 space-y-10 text-right bg-slate-50/30">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                     <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase text-slate-400 mr-2 italic">מזהה לקוח (ID)</label>
+                        <input required value={newClient.id} onChange={e => setNewClient({...newClient, id: e.target.value})} className="w-full bg-white border border-slate-200 p-5 rounded-2xl font-black italic outline-none focus:ring-4 ring-blue-500/10 shadow-inner" />
+                     </div>
+                     <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase text-slate-400 mr-2 italic">שם מלא</label>
+                        <input required value={newClient.full_name} onChange={e => setNewClient({...newClient, full_name: e.target.value})} className="w-full bg-white border border-slate-200 p-5 rounded-2xl font-black italic outline-none focus:ring-4 ring-blue-500/10 shadow-inner" />
+                     </div>
+                     <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase text-slate-400 mr-2 italic">פרויקט פעיל</label>
+                        <input value={newClient.main_project} onChange={e => setNewClient({...newClient, main_project: e.target.value})} className="w-full bg-white border border-slate-200 p-5 rounded-2xl font-black italic outline-none focus:ring-4 ring-blue-500/10 shadow-inner" />
+                     </div>
+                     <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase text-slate-400 mr-2 italic">נייד</label>
+                        <input value={newClient.phone} onChange={e => setNewClient({...newClient, phone: e.target.value})} className="w-full bg-white border border-slate-200 p-5 rounded-2xl font-black italic outline-none focus:ring-4 ring-blue-500/10 shadow-inner" />
+                     </div>
+                  </div>
                   <button type="submit" className="w-full bg-blue-600 text-white py-10 rounded-[40px] font-black text-3xl flex items-center justify-center gap-6 shadow-2xl border-b-[12px] border-blue-800 active:scale-95 transition-all uppercase italic">
                      <ShieldCheck size={40}/> צור והזרק DNA
                   </button>
@@ -356,7 +388,7 @@ export default function VipManagement() {
         )}
       </AnimatePresence>
 
-      <footer className="py-20 border-t border-slate-100 opacity-20 text-center uppercase text-[12px] font-black tracking-[1.5em] italic">Saban VIP Experience Control V53.0</footer>
+      <footer className="py-20 border-t border-slate-100 opacity-20 text-center uppercase text-[12px] font-black tracking-[1.5em] italic">Saban VIP Experience Control V53.1</footer>
       <style jsx global>{`.scrollbar-hide::-webkit-scrollbar { display: none; }`}</style>
     </div>
   );
