@@ -11,10 +11,9 @@ import { getSupabase } from "@/lib/supabase";
 
 export const dynamic = 'force-dynamic';
 
-const MODEL_POOL = [
-  "gemini-2.5-flash",      // המהיר והיציב ביותר לביצועים לוגיסטיים
-  "gemini-2.5-pro",       // החכם ביותר לפתרון בעיות מורכבות
-  "gemini-2.0-pro-exp-02-05" // מודל גיבוי חזק
+const STABLE_MODELS = [
+  "gemini-2.5-flash-preview-09-2025",
+  "gemini-2.5-pro-preview-09-2025"
 ];
 
 const RETRY_DELAYS = [1000, 2000, 4000];
