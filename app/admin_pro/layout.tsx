@@ -5,22 +5,24 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, Zap, Users, Scale, ShieldAlert, 
-  Menu, X, Bell, LogOut, Monitor, ShieldCheck, ShoppingBag
+  Menu, X, Bell, LogOut, Monitor, ShieldCheck, 
+  ShoppingBag, PlusCircle 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster } from "sonner";
 
 /**
- * Saban Admin Pro - Shared Layout V26.5
+ * Saban Admin Pro - Shared Layout V27.5
  * ------------------------------------
- * Updated with Orders Management integration.
+ * הוספת קישור "יצירת הזמנה" לתפריט הניווט המרכזי.
  */
 
 const LOGO_PATH = "/ai.png";
 
 const NAV_ITEMS = [
   { href: '/admin_pro', label: 'לוח בקרה', icon: LayoutDashboard },
-  { href: '/admin_pro/orders', label: 'ניהול הזמנות', icon: ShoppingBag }, // דף חדש בתפריט
+  { href: '/admin_pro/orders', label: 'ניהול הזמנות', icon: ShoppingBag },
+  { href: '/admin_pro/orders/create', label: 'יצירת הזמנה', icon: PlusCircle, highlight: true }, // הקישור החדש
   { href: '/admin_pro/dna', label: 'ניהול DNA וחוקים', icon: Zap },
   { href: '/admin_pro/vip', label: 'לקוחות VIP', icon: Users },
   { href: '/admin_pro/inventory', label: 'משקלים ומלאי', icon: Scale },
@@ -55,9 +57,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             return (
               <Link key={item.href} href={item.href}>
                 <div className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all duration-200 relative group cursor-pointer ${
-                  isActive ? 'bg-blue-600 text-white shadow-xl shadow-blue-600/30' : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                  isActive 
+                    ? 'bg-blue-600 text-white shadow-xl shadow-blue-600/30' 
+                    : item.highlight 
+                      ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20' 
+                      : 'text-slate-400 hover:bg-white/5 hover:text-white'
                 }`}>
-                  <item.icon size={24} className={isActive ? 'text-white' : 'text-slate-500 group-hover:text-blue-400'} />
+                  <item.icon size={24} className={isActive ? 'text-white' : item.highlight ? 'text-emerald-400' : 'text-slate-500 group-hover:text-blue-400'} />
                   {isSidebarOpen && (
                     <span className="font-black text-sm uppercase tracking-tighter italic flex-1 text-right">{item.label}</span>
                   )}
@@ -100,8 +106,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <div className="flex items-center gap-2 bg-emerald-50 text-emerald-600 px-4 py-2 rounded-xl border border-emerald-100 font-black text-[10px] uppercase tracking-widest">
               <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_#10b981]" /> Brain Online
             </div>
-            <button className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all relative">
-              <Bell size={20} className="text-slate-600" />
+            <button className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all relative text-slate-600">
+              <Bell size={20} />
               <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-rose-500 border-2 border-white rounded-full shadow-sm" />
             </button>
             <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center text-white font-black italic shadow-xl border-2 border-white">R</div>
