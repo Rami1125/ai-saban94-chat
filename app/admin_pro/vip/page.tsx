@@ -7,14 +7,15 @@ import {
   Search, Star, MessageCircle, MoreVertical, Trash2, Edit3, 
   History, UserPlus, ShieldCheck, AlertCircle, Printer,
   Share2, BarChart3, Package, X, Menu, ExternalLink,
-  ChevronDown, Filter, Zap
+  ChevronDown, Filter, Zap, User, Sparkles // נוספו User ו-Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast, Toaster } from "sonner";
 
 /**
- * Saban Admin Pro - VIP Management Elite V52.0
+ * Saban Admin Pro - VIP Management Elite V52.1
  * -------------------------------------------
+ * - Fix: Added missing User & Sparkles imports to prevent ReferenceError.
  * - Feature: Hamburger-style expansion for deep customer DNA.
  * - Components: Top Products Ranking, Order History, Magic Link Sharing.
  * - Design: Stitched Elite (Slate-950 / Emerald-500).
@@ -68,6 +69,8 @@ export default function VipManagement() {
       toast.success(`פרופיל ${newClient.nickname} הוזרק למערכת! 🦾`);
       setIsModalOpen(false);
       fetchAllData();
+    } else {
+      toast.error("שגיאה בהזרקת פרופיל");
     }
   };
 
@@ -78,8 +81,8 @@ export default function VipManagement() {
   };
 
   const filteredClients = clients.filter(c => 
-    c.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    c.id?.includes(searchTerm)
+    (c.full_name || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (c.id || "").includes(searchTerm)
   );
 
   return (
@@ -93,7 +96,7 @@ export default function VipManagement() {
               <Users size={32} />
            </div>
            <div>
-              <h1 className="text-3xl font-black italic uppercase tracking-tighter leading-none">ניהול לקוחות VIP</h1>
+              <h1 className="text-3xl font-black italic uppercase tracking-tighter leading-none">ניהול לקוחות</h1>
               <p className="text-[10px] font-bold text-slate-400 mt-2 uppercase tracking-[0.3em]">Master Database & DNA Engine</p>
            </div>
         </div>
@@ -268,6 +271,12 @@ export default function VipManagement() {
                      <input placeholder="פרויקט פעיל" value={newClient.main_project} onChange={e => setNewClient({...newClient, main_project: e.target.value})} className="w-full bg-white border border-slate-200 p-5 rounded-2xl font-black italic outline-none focus:ring-4 ring-blue-500/10" />
                      <input placeholder="טלפון" value={newClient.phone} onChange={e => setNewClient({...newClient, phone: e.target.value})} className="w-full bg-white border border-slate-200 p-5 rounded-2xl font-black italic outline-none focus:ring-4 ring-blue-500/10" />
                   </div>
+                  <div className="bg-blue-50 p-6 rounded-3xl border border-blue-100 flex items-center gap-4">
+                     <Sparkles className="text-blue-600" size={32} />
+                     <p className="text-sm font-bold text-blue-900 leading-relaxed italic">
+                        הזרקת לקוח חדש תעדכן את המוח (AI) באופן מיידי. הלקוח יוכל לקבל "לינק קסם" ולהתחיל לבצע הזמנות בשיטת DNA.
+                     </p>
+                  </div>
                   <button type="submit" className="w-full bg-blue-600 text-white py-8 rounded-[35px] font-black text-2xl flex items-center justify-center gap-6 shadow-2xl border-b-8 border-blue-800 uppercase italic">
                      <ShieldCheck size={32}/> צור פרופיל והזרק DNA
                   </button>
@@ -277,7 +286,7 @@ export default function VipManagement() {
         )}
       </AnimatePresence>
 
-      <footer className="py-20 border-t border-slate-100 opacity-20 text-center uppercase text-[12px] font-black tracking-[1.5em]">Saban VIP Logic Center V52.0</footer>
+      <footer className="py-20 border-t border-slate-100 opacity-20 text-center uppercase text-[12px] font-black tracking-[1.5em]">Saban VIP Logic Center V52.1</footer>
       <style jsx global>{`.scrollbar-hide::-webkit-scrollbar { display: none; }`}</style>
     </div>
   );
