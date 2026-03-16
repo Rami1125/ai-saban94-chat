@@ -2,65 +2,83 @@
 
 import React, { useEffect, useState } from 'react';
 import { supabase } from "@/lib/supabase";
-import { Users, Plus, Phone, MapPin, Scale, ChevronRight, Search } from 'lucide-react';
+import { Scale, Package, Search, Save, AlertTriangle, RefreshCw, Layers } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { toast } from "sonner";
 
-export default function VipClients() {
-  const [clients, setClients] = useState<any[]>([]);
+export default function WeightsCenter() {
+  const [items, setItems] = useState<any[]>([]);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => { fetchClients(); }, []);
+  useEffect(() => { fetchInventory(); }, []);
 
-  async function fetchClients() {
-    const { data } = await supabase.from('vip_profiles').select('*').order('created_at', { ascending: false });
-    setClients(data || []);
+  async function fetchInventory() {
+    setLoading(true);
+    const { data } = await supabase.from('product_weights').select('*');
+    setItems(data || []);
+    setLoading(false);
+  }
+
+  async function updateWeight(sku: string, weight: number) {
+    const { error } = await supabase.from('product_weights').update({ weight_kg: weight }).eq('sku', sku);
+    if (!error) toast.success("המשקל עודכן ב-DNA הלוגיסטי");
   }
 
   return (
-    <div className="space-y-8">
-      <div className="flex justify-between items-center">
-        <div className="flex-1 max-w-md relative">
-           <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-           <input placeholder="חפש לקוח זהב..." className="w-full bg-white border border-slate-200 pr-12 pl-4 py-4 rounded-2xl font-bold shadow-sm" />
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8 max-w-6xl mx-auto">
+      
+      <div className="bg-gradient-to-r from-amber-500 to-orange-600 p-8 rounded-[40px] flex items-center gap-8 shadow-2xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 blur-[60px] rounded-full" />
+        <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center shrink-0 shadow-xl border-4 border-amber-500/20 text-orange-600"><Scale size={44}/></div>
+        <div className="text-white">
+          <h3 className="font-black text-3xl italic tracking-tighter leading-none mb-3">בקרת עומס (חוק ה-12 טון)</h3>
+          <p className="text-white/80 text-sm font-bold leading-relaxed max-w-2xl">כאן נקבע ה-DNA של המוח לחישוב חריגות משקל למשאיות 'חכמת'. הקפד על דיוק כדי למנוע דו"חות ובלאי משאיות. כל שינוי משפיע על הבלמים בשטח.</p>
         </div>
-        <button className="bg-slate-900 text-white px-8 py-4 rounded-2xl font-black shadow-lg flex items-center gap-3 text-xs italic uppercase">
-           <Plus size={20}/> הוסף לקוח VIP
-        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {clients.map(client => (
-          <div key={client.id} className="bg-white rounded-[40px] border border-slate-100 shadow-sm hover:shadow-xl transition-all group overflow-hidden border-b-8 border-b-blue-600/10 hover:border-b-blue-600">
-            <div className="p-8 space-y-6">
-              <div className="flex justify-between items-start">
-                <div className="w-16 h-16 bg-blue-50 rounded-[25px] flex items-center justify-center text-blue-600 shadow-inner">
-                  <Users size={32} />
-                </div>
-                <div className="bg-blue-50 text-blue-700 px-3 py-1 rounded-xl font-black text-[9px] uppercase tracking-widest">Client ID: {client.id}</div>
+      <div className="bg-white rounded-[45px] border border-slate-200 shadow-xl overflow-hidden min-h-[600px]">
+        <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row justify-between items-center gap-6">
+           <div className="relative w-full md:w-[400px] group">
+             <Search className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={20} />
+             <input placeholder="חפש מק''ט או מוצר..." value={search} onChange={e => setSearch(e.target.value)} className="w-full bg-white border border-slate-200 pr-14 pl-6 py-4 rounded-2xl font-bold shadow-sm outline-none focus:ring-4 ring-blue-500/10 transition-all italic" />
+           </div>
+           <button onClick={fetchInventory} className="p-4 bg-white border border-slate-200 rounded-2xl hover:bg-slate-50 transition-all shadow-sm">
+              <RefreshCw className={loading ? 'animate-spin' : ''} size={20} />
+           </button>
+        </div>
+        
+        <div className="p-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {items.filter(i => i.sku.includes(search)).map((item, i) => (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.05 }}
+              key={item.sku} className="bg-slate-50 p-8 rounded-[35px] border border-slate-100 relative group hover:border-blue-200 hover:bg-white transition-all shadow-sm"
+            >
+              <div className="flex justify-between items-start mb-8">
+                <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-md text-blue-600 border border-slate-100 group-hover:scale-110 transition-transform"><Layers size={28}/></div>
+                <div className="text-[10px] font-black text-slate-300 uppercase tracking-widest border border-slate-200 px-2 py-1 rounded-lg italic">SKU: {item.sku}</div>
               </div>
               
-              <div>
-                <h3 className="text-xl font-black text-slate-900 italic">{client.full_name}</h3>
-                <p className="text-sm font-bold text-slate-400 mt-1 flex items-center gap-2"><MapPin size={14}/> {client.main_project}</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 pt-4 border-t border-slate-50">
-                <div className="bg-slate-50 p-4 rounded-2xl">
-                  <p className="text-[9px] font-black text-slate-400 uppercase mb-1">מגבלת משקל</p>
-                  <p className="font-black text-slate-800 flex items-center gap-2 text-sm italic"><Scale size={14}/> {client.truck_limit_kg / 1000} טון</p>
+              <h4 className="font-black text-slate-900 italic mb-6 text-lg">מוצר לוגיסטי {item.sku}</h4>
+              
+              <div className="space-y-4">
+                <label className="text-[10px] font-black uppercase text-slate-400 mr-2 italic tracking-widest">משקל לביצוע (ק"ג)</label>
+                <div className="flex gap-3">
+                  <input 
+                    type="number"
+                    defaultValue={item.weight_kg} 
+                    onBlur={e => updateWeight(item.sku, parseFloat(e.target.value))} 
+                    className="flex-1 bg-white border-2 border-slate-100 p-5 rounded-[22px] font-black text-2xl outline-none focus:border-blue-500 focus:ring-4 ring-blue-500/10 transition-all text-center" 
+                  />
+                  <div className={`w-16 h-16 rounded-[22px] flex items-center justify-center font-black text-xs shadow-inner ${item.is_big_bag ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-600'}`}>
+                    {item.is_big_bag ? 'בלה' : 'שק'}
+                  </div>
                 </div>
-                <div className="bg-slate-50 p-4 rounded-2xl">
-                  <p className="text-[9px] font-black text-slate-400 uppercase mb-1">טלפון</p>
-                  <p className="font-black text-slate-800 flex items-center gap-2 text-sm italic"><Phone size={14}/> {client.phone}</p>
-                </div>
               </div>
-            </div>
-            
-            <button className="w-full bg-slate-50 py-4 font-black text-[10px] uppercase tracking-widest text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all flex items-center justify-center gap-2">
-               צפה בהיסטוריה וניהול <ChevronRight size={14}/>
-            </button>
-          </div>
-        ))}
+            </motion.div>
+          ))}
+        </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
