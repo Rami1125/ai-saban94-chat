@@ -5,20 +5,22 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, Zap, Users, Scale, ShieldAlert, 
-  Menu, X, Bell, LogOut, Monitor, ShieldCheck
+  Menu, X, Bell, LogOut, Monitor, ShieldCheck, ShoppingBag
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster } from "sonner";
 
 /**
- * Saban Admin Pro - Shared Layout
- * פותר את שגיאת ה-motion ומנהל את הניווט המרכזי
+ * Saban Admin Pro - Shared Layout V26.5
+ * ------------------------------------
+ * Updated with Orders Management integration.
  */
 
 const LOGO_PATH = "/ai.png";
 
 const NAV_ITEMS = [
   { href: '/admin_pro', label: 'לוח בקרה', icon: LayoutDashboard },
+  { href: '/admin_pro/orders', label: 'ניהול הזמנות', icon: ShoppingBag }, // דף חדש בתפריט
   { href: '/admin_pro/dna', label: 'ניהול DNA וחוקים', icon: Zap },
   { href: '/admin_pro/vip', label: 'לקוחות VIP', icon: Users },
   { href: '/admin_pro/inventory', label: 'משקלים ומלאי', icon: Scale },
@@ -34,7 +36,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <Toaster position="top-center" richColors />
       
       {/* Sidebar - Desktop */}
-      <aside className={`bg-[#0F172A] text-white transition-all duration-300 ${isSidebarOpen ? 'w-72' : 'w-24'} flex flex-col z-50 shadow-2xl`}>
+      <aside className={`bg-[#0F172A] text-white transition-all duration-300 ${isSidebarOpen ? 'w-72' : 'w-24'} flex flex-col z-50 shadow-2xl shrink-0`}>
         <div className="p-6 flex items-center gap-4 border-b border-white/5 h-24 shrink-0">
           <div className="w-12 h-12 bg-white rounded-2xl p-2 shrink-0 shadow-lg ring-4 ring-blue-500/10">
             <img src={LOGO_PATH} alt="Saban" className="w-full h-full object-contain" />
@@ -58,6 +60,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   <item.icon size={24} className={isActive ? 'text-white' : 'text-slate-500 group-hover:text-blue-400'} />
                   {isSidebarOpen && (
                     <span className="font-black text-sm uppercase tracking-tighter italic flex-1 text-right">{item.label}</span>
+                  )}
+                  {isSidebarOpen && item.badge && (
+                    <span className="bg-rose-500 text-white text-[10px] font-black px-2 py-1 rounded-lg animate-pulse">Live</span>
                   )}
                   {!isSidebarOpen && isActive && (
                     <div className="absolute left-0 w-1.5 h-8 bg-blue-500 rounded-r-full shadow-[0_0_10px_#3b82f6]" />
