@@ -13,6 +13,7 @@ import { getSupabase } from "@/lib/supabase";
 export const dynamic = 'force-dynamic';
 
 const API_KEYS = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').map(k => k.trim());
+const STABLE_MODELS = ["gemini-1.5-flash", "gemini-3.1-flash-lite-preview", "gemini-3.1-pro-preview"];
 
 export async function POST(req: Request) {
   try {
