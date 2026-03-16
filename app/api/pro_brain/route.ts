@@ -2,83 +2,78 @@ import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getSupabase } from "@/lib/supabase";
 
+/**
+ * Saban OS V22.0 - Dynamic Brain Engine
+ * ------------------------------------
+ * - Fetches real-time VIP profile from DB.
+ * - Injects context-specific rules (Truck weight, projects).
+ * - Implements the "Brotherly Consultant" persona.
+ */
+
 export const dynamic = 'force-dynamic';
 
-const API_KEYS = (process.env.GOOGLE_AI_KEY_POOL || process.env.GOOGLE_AI_KEY || "").split(',').map(k => k.trim());
-const STABLE_MODELS = ["gemini-1.5-flash", "gemini-3.1-flash-lite-preview", "gemini-3.1-pro-preview"];
+const API_KEYS = (process.env.GOOGLE_AI_KEY_POOL || "").split(',').map(k => k.trim());
 
 export async function POST(req: Request) {
   try {
     const supabase = getSupabase();
-    const { sessionId, query, userName, history } = await req.json();
+    const { sessionId, query, history, customerId } = await req.json();
 
-    if (!query) return NextResponse.json({ error: "Missing query" }, { status: 400 });
+    // 1. שליפת פרופיל הלקוח מה-DB בזמן אמת
+    const { data: profile } = await supabase
+      .from('vip_profiles')
+      .select('*')
+      .eq('id', customerId || '601992')
+      .maybeSingle();
 
-    // 1. שליפת חוקים מה"מחנך" (ai_rules)
-    const { data: rules } = await supabase.from('ai_rules').select('instruction').eq('is_active', true);
-    const educatorDNA = rules?.map(r => r.instruction).join("\n\n") || "";
+    // 2. שליפת היסטוריית רכישות אחרונה למניעת כפילויות
+    const { data: recentOrders } = await supabase
+      .from('vip_customer_history')
+      .select('product_name, created_at')
+      .eq('customer_id', customerId || '601992')
+      .order('created_at', { ascending: false })
+      .limit(5);
 
-    // 2. שמירת הודעת משתמש למוניטור
-    await supabase.from('chat_history').insert([{ session_id: sessionId, role: 'user', content: query }]);
-
-    const historyContext = history?.map((m: any) => `${m.role === 'user' ? 'לקוח' : 'עוזר'}: ${m.content}`).join("\n") || "";
-
-    // 3. בניית ה-DNA הוויזואלי (Premium UI Framework)
+    // 3. בניית ה-DNA המקצועי המוזרק
     const systemDNA = `
-      זהות: המוח הלוגיסטי והמעצב של ח. סבן חומרי בניין. המנהל: ראמי הבוס.
-      טון: מקצועי, יוקרתי, לוגיסטי.
+      זהות: המוח הלוגיסטי של ח. סבן. המנהל: ראמי הבוס.
+      לקוח נוכחי: ${profile?.full_name || 'VIP'} (פרויקט: ${profile?.main_project || 'כללי'}).
+      כינוי לפנייה: ${profile?.nickname || 'אחי'}.
 
-      ### חוקי המחנך (Educator DNA):
-      ${educatorDNA}
+      ### חוקי הבלמים (Executive Enforcement):
+      - מגבלת משאית: ${profile?.truck_limit_kg || 12000} ק"ג (כ-18 בלות). 
+      - חוק המשקל: אם ההזמנה חורגת מהמשקל, עצור את בר והסבר לו את הסכנה והדו"ח.
+      - חוק הכפילות: היסטוריה אחרונה: ${JSON.stringify(recentOrders)}. אם הוא מזמין משהו שקנה ביומיים האחרונים, שאל "בטוח שצריך עוד?".
+      - חוק השלמה: גבס דורש ניצבים/מסלולים. מלט דורש חול.
 
-      ### חוקי עיצוב פרימיום (Visual OS):
-      1. **סיכום הזמנה (WhatsApp Trigger)**: בכל פעם שיש סיכום עסקה, השתמש בכותרת "### 📋 סיכום הזמנה לביצוע". זה יפעיל אוטומטית את כפתור ה-WhatsApp הירוק בממשק.
-      2. **שימוש באימוג'ים**: השתמש באימוג'ים מקצועיים בלבד (🏗️, 📦, ⚖️, 🚚, ✅, 📍) בתחילת שורות.
-      3. **כרטיסי מוצר**: אם מדובר במוצר ספציפי, השורה הראשונה חייבת להיות תמונה: ![שם](URL).
-      4. **טקסט מודגש**: הדגש כמויות ונתונים טכניים בעזרת **[טקסט]**.
-      5. **מבנה נקי**: השתמש ב-Code Blocks (\`\`\`) רק עבור נתונים יבשים או רשימות ארוכות כדי לתת מראה של אפליקציית ניהול.
+      ### שפה וטון:
+      - פתח תמיד בברכה אישית לפי הזמן (בוקר/ערב) וכינוי הלקוח.
+      - היה יועץ ומחשב כמויות, לא רק לוקח הזמנות.
+      - בסיום, הפק "סיכום הזמנה" ברור לקבוצת הווצאפ.
 
-      ### היסטוריה:
-      ${historyContext}
-
-      ### דוגמה לפורמט סיכום פרימיום:
-      ### 📋 סיכום הזמנה לביצוע
-      **פריטים שנבחרו:**
-      * 🏗️ **15** לוחות גבס ירוק (3 מטר)
-      * 📦 **10** שקי מלט
-      
-      **פרטי הובלה:**
-      * 🚚 משאית מנוף (חכמת)
-      * 📍 יעד: [כתובת הלקוח]
-      
-      חתימה: תודה, ומה תרצה שנבצע היום? ראמי, הכל מוכן לביצוע. 🦾
+      חתימה:
+      תודה, ומה תרצה שנבצע היום?
+      ראמי, הכל מוכן לביצוע. 🦾
     `;
 
-    let lastError = null;
-    for (const key of API_KEYS) {
-      if (!key) continue;
-      for (const modelName of STABLE_MODELS) {
-        try {
-          const genAI = new GoogleGenerativeAI(key);
-          const model = genAI.getGenerativeModel({ 
-            model: modelName, 
-            systemInstruction: systemDNA 
-          });
-          
-          const result = await model.generateContent(query);
-          const aiText = result.response.text();
+    // 4. שליפת מפתח וביצוע שיחה
+    const genAI = new GoogleGenerativeAI(API_KEYS[0]);
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-1.5-flash",
+      systemInstruction: systemDNA 
+    });
 
-          // שמירת תגובת המוח ל-DB
-          await supabase.from('chat_history').insert([{ session_id: sessionId, role: 'assistant', content: aiText }]);
-          
-          return NextResponse.json({ answer: aiText, model: modelName });
-        } catch (e: any) {
-          lastError = e;
-          continue;
-        }
-      }
-    }
-    throw new Error(`כל המפתחות נכשלו: ${lastError?.message}`);
+    const result = await model.generateContent(query);
+    const aiText = result.response.text();
+
+    // 5. שמירת התגובה להיסטוריה
+    await supabase.from('chat_history').insert([{ 
+      session_id: sessionId, 
+      role: 'assistant', 
+      content: aiText 
+    }]);
+
+    return NextResponse.json({ answer: aiText });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
