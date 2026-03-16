@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 
 /**
- * Saban Admin Pro - Master Brain V42.0
+ * Saban Admin Pro - Master Brain V42.1
  * -----------------------------------
- * - Professional Skip: Detects 403, 401, 429 and immediately rotates to the next key.
- * - Multi-Model Resilience: Tries Gemini 3.1 Pro, then Flash-Lite.
- * - Full DNA Integration: Aware of inventory specs and rules.
+ * - Smart Skip: Detects 403 (API disabled), 401 (Invalid), and 429 (Quota).
+ * - Automatic Quarantine: Moves to the next key in the pool without returning 500.
+ * - Dual-Model Resilience: Gemini 3.1 Pro -> Flash-Lite.
  */
 
 export const dynamic = 'force-dynamic';
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
 
     if (!query) return NextResponse.json({ error: "Query is required" }, { status: 400 });
 
-    // 1. Context Acquisition
+    // 1. שליפת קונטקסט DNA
     const [rulesRes, inventoryRes] = await Promise.all([
       supabase.from('ai_rules').select('*').eq('is_active', true),
       supabase.from('inventory').select('*').limit(10)
@@ -31,22 +31,23 @@ export async function POST(req: Request) {
     
     const systemPrompt = `
       אתה המוח המנהל של Saban OS. ראמי הוא הבוס.
-      תפקידך: ניהול חוקי DNA, מלאי והזמנות VIP.
-      מפרט נוכחי: ${activeRules}
-      חתימה: ראמי, הכל מוכן לביצוע. 🦾
+      תפקידך: ניהול חוקי DNA והזמנות VIP.
+      חתימה חובה: ראמי, הכל מוכן לביצוע. 🦾
     `.trim();
 
-    // 2. Key Pool Processing
-    const rawKeys = process.env.GOOGLE_AI_KEY_POOL || "";
-    const apiKeys = rawKeys.split(",").map(k => k.trim()).filter(k => k.length > 5);
+    // 2. עיבוד בריכת המפתחות
+    const apiKeys = (process.env.GOOGLE_AI_KEY_POOL || "")
+      .split(",")
+      .map(k => k.trim())
+      .filter(k => k.length > 5);
     
-    if (apiKeys.length === 0) throw new Error("No API keys found in pool");
+    if (apiKeys.length === 0) throw new Error("No API keys found in GOOGLE_AI_KEY_POOL");
 
     let finalAnswer = "";
     let success = false;
     let lastError = "";
 
-    // 3. Dual-Layer Rotation Logic (Models x Keys)
+    // 3. לוגיקת רוטציה כפולה עם דילוג חכם (Failover)
     for (const model of MODEL_POOL) {
       if (success) break;
 
@@ -65,45 +66,44 @@ export async function POST(req: Request) {
                   parts: [{ text: `היסטוריה: ${JSON.stringify(history || [])}\nשאילתה: ${query}` }] 
                 }],
                 systemInstruction: { parts: [{ text: systemPrompt }] },
-                generationConfig: { 
-                  temperature: 0.15,
-                  topP: 0.95,
-                  maxOutputTokens: 2048 
-                }
+                generationConfig: { temperature: 0.15, topP: 0.95 }
               })
             }
           );
 
+          const data = await response.json();
+
           if (response.ok) {
-            const data = await response.json();
             finalAnswer = data.candidates?.[0]?.content?.parts?.[0]?.text;
             if (finalAnswer) {
               success = true;
               break;
             }
           } else {
-            const errorData = await response.json();
+            // זיהוי שגיאות שדורשות דילוג מיידי על המפתח
             const status = response.status;
-            lastError = `Status ${status}: ${errorData.error?.message || 'Unknown error'}`;
+            lastError = `Key ${apiKey.slice(-4)} failed with ${status}: ${data.error?.message}`;
 
-            // אם המפתח "מלשין" (403/401) או נגמרה המכסה (429) - דלג מיד למפתח הבא
             if ([401, 403, 429].includes(status)) {
-              console.warn(`Skipping key due to ${status}.`);
-              continue;
+              console.warn(`[Saban Brain] Skipping key due to status ${status}`);
+              continue; // עובר למפתח הבא ברשימה
             }
+            
+            // שגיאות שרת כלליות (500/503) - נסה שוב או דלג
+            continue;
           }
         } catch (e: any) {
           lastError = e.message;
-          continue; // שגיאת רשת - נסה מפתח הבא
+          continue; 
         }
       }
     }
 
     if (!success) {
-      throw new Error(`כל המפתחות ברוטציה נכשלו. שגיאה אחרונה: ${lastError}`);
+      throw new Error(`כל המפתחות נכשלו. שגיאה אחרונה: ${lastError}`);
     }
 
-    // 4. Record to history
+    // 4. תיעוד להיסטוריה
     await supabase.from('chat_history').insert([
       { session_id: sessionId || 'admin_master', role: 'user', content: query },
       { session_id: sessionId || 'admin_master', role: 'assistant', content: finalAnswer }
@@ -112,13 +112,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ 
       answer: finalAnswer, 
       success: true,
-      stats: { rotated: true, status: "stable" }
+      stats: { model_used: "gemini-3.1", rotated: true }
     });
 
   } catch (error: any) {
-    console.error("Master Brain Critical Failure:", error.message);
+    console.error("Critical Brain Failure:", error.message);
     return NextResponse.json({ 
-      error: "תקלה ברוטציית המפתחות", 
+      error: "תקלה ברוטציה", 
       details: error.message 
     }, { status: 500 });
   }
