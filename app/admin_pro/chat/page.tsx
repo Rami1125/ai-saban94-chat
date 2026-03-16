@@ -5,17 +5,17 @@ import { supabase } from "@/lib/supabase";
 import { 
   Send, Zap, ShieldCheck, ShoppingCart, User, 
   Loader2, Menu, X, Trash2, Scale, Truck, 
-  ChevronRight, MapPin, RefreshCcw, Search, Sparkles
+  ChevronRight, MapPin, RefreshCcw, Search, Sparkles,
+  Plus, Minus, Package
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast, Toaster } from "sonner";
 
 /**
- * Saban Admin Pro - Executive Chat Interface V30.0
- * ----------------------------------------------
- * - Persona: Direct communication with the Logistics Brain.
- * - Integration: Real-time cart and order sync.
- * - Design: High-contrast, floating glassmorphism input.
+ * Saban Admin Pro - Executive Chat Interface V31.5 (Clean Render Fix)
+ * -----------------------------------------------------------------
+ * Fix: Removed raw command strings and markdown artifacts from bubbles.
+ * UI: Enhanced floating input and synchronized cart with DB.
  */
 
 const LOGO_PATH = "/ai.png";
@@ -28,7 +28,7 @@ export default function AdminProChat() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // 1. טעינת היסטוריה והגדרות
+  // 1. טעינת היסטוריה
   useEffect(() => {
     async function init() {
       const { data } = await supabase
@@ -45,7 +45,7 @@ export default function AdminProChat() {
 
   useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
 
-  // 2. לוגיקת שליחה למוח
+  // 2. לוגיקת שליחה וניקוי פקודות
   const handleSend = async () => {
     if (!input.trim() || loading) return;
     const q = input; setInput("");
@@ -60,15 +60,18 @@ export default function AdminProChat() {
           sessionId: 'admin_session', 
           query: q, 
           history: messages.slice(-5),
-          customerId: '601992' // בר אורניל כברירת מחדל לניהול
+          customerId: '601992'
         })
       });
 
       const data = await res.json();
       
-      // זיהוי פקודות שקטות מהמוח (QUICK_ADD / SET_QTY)
+      // ביצוע פקודות שקטות שהמוח מחזיר בטקסט
       const addMatch = data.answer.match(/\[QUICK_ADD:(.*?)\]/);
       if (addMatch) handleQuickAdd(addMatch[1]);
+      
+      const qtyMatch = data.answer.match(/\[SET_QTY:(.*?):(.*?)\]/);
+      if (qtyMatch) handleUpdateQty(qtyMatch[1], parseInt(qtyMatch[2]));
 
       setMessages(prev => [...prev, { role: 'assistant', content: data.answer }]);
     } catch (e) {
@@ -81,16 +84,24 @@ export default function AdminProChat() {
   const handleQuickAdd = async (sku: string) => {
     const { data } = await supabase.from('inventory').select('*').eq('sku', sku).maybeSingle();
     if (data) {
-      setCart(prev => [...prev, { ...data, qty: 1 }]);
-      toast.success(`מק"ט ${sku} נוסף לסל הפקודה`);
+      setCart(prev => {
+        const existing = prev.find(i => i.sku === sku);
+        if (existing) return prev.map(i => i.sku === sku ? {...i, qty: i.qty + 1} : i);
+        return [...prev, { ...data, qty: 1 }];
+      });
+      toast.success(`נוסף לסל: ${data.product_name}`);
     }
   };
 
+  const handleUpdateQty = (sku: string, qty: number) => {
+    setCart(prev => prev.map(i => i.sku === sku ? {...i, qty} : i));
+  };
+
   return (
-    <div className="flex h-[calc(100vh-120px)] bg-[#F8FAFC] rounded-[45px] overflow-hidden border border-slate-200 shadow-2xl relative">
+    <div className="flex h-[calc(100vh-120px)] bg-[#F8FAFC] rounded-[45px] overflow-hidden border border-slate-200 shadow-2xl relative" dir="rtl">
       <Toaster position="top-center" richColors />
 
-      {/* Sidebar - Cart Management */}
+      {/* Sidebar - Cart */}
       <AnimatePresence>
         {isSidebarOpen && (
           <>
@@ -101,26 +112,26 @@ export default function AdminProChat() {
                   <button onClick={() => setIsSidebarOpen(false)} className="p-2 bg-slate-50 rounded-xl"><X size={20}/></button>
                </div>
                <div className="flex-1 overflow-y-auto space-y-4 scrollbar-hide">
+                  {cart.length === 0 && <p className="text-center text-slate-300 font-bold italic py-10">הסל ממתין לפקודה...</p>}
                   {cart.map((item, i) => (
-                    <div key={i} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex justify-between items-center">
-                       <button onClick={() => setCart(cart.filter((_, idx) => idx !== i))} className="text-slate-300 hover:text-rose-500"><Trash2 size={16}/></button>
+                    <div key={i} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex justify-between items-center group">
+                       <button onClick={() => setCart(cart.filter(c => c.sku !== item.sku))} className="text-slate-300 hover:text-rose-500 transition-colors"><Trash2 size={16}/></button>
                        <div className="text-right">
                           <p className="font-black text-xs text-slate-800">{item.product_name}</p>
-                          <p className="text-[10px] font-bold text-blue-600 mt-1">QTY: {item.qty}</p>
+                          <p className="text-[10px] font-bold text-blue-600 mt-1">כמות: {item.qty}</p>
                        </div>
                     </div>
                   ))}
                </div>
-               <button className="w-full bg-slate-950 text-white py-5 rounded-2xl font-black shadow-xl mt-6 active:scale-95 transition-all uppercase text-xs italic tracking-widest">הזרק הזמנה לביצוע 🦾</button>
+               <button className="w-full bg-slate-950 text-white py-5 rounded-2xl font-black shadow-xl mt-6 active:scale-95 transition-all uppercase text-xs italic tracking-widest border-b-4 border-slate-800">הזרק הזמנה לביצוע 🦾</button>
             </motion.aside>
           </>
         )}
       </AnimatePresence>
 
-      {/* Main Chat Interface */}
-      <div className="flex-1 flex flex-col bg-white">
+      {/* Main Area */}
+      <div className="flex-1 flex flex-col bg-white overflow-hidden">
         
-        {/* Sub-Header */}
         <div className="h-16 border-b border-slate-100 bg-white/50 backdrop-blur-md flex items-center justify-between px-8 shrink-0">
            <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-xl border border-blue-100 font-black text-[10px] uppercase tracking-widest italic">
@@ -129,12 +140,12 @@ export default function AdminProChat() {
            </div>
            <button onClick={() => setIsSidebarOpen(true)} className="p-3 bg-slate-50 rounded-xl relative hover:bg-blue-50 transition-colors group">
               <ShoppingCart size={22} className="text-slate-600 group-hover:text-blue-600" />
-              {cart.length > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-600 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white animate-bounce">{cart.length}</span>}
+              {cart.length > 0 && <span className="absolute -top-1 -left-1 w-5 h-5 bg-blue-600 text-white text-[10px] font-black rounded-full flex items-center justify-center border-2 border-white animate-bounce">{cart.length}</span>}
            </button>
         </div>
 
-        {/* Message Feed */}
-        <div className="flex-1 overflow-y-auto p-8 space-y-8 scrollbar-hide bg-[#FAFBFC]">
+        {/* Message List with FIX for commands */}
+        <div className="flex-1 overflow-y-auto p-8 space-y-10 scrollbar-hide bg-[#FAFBFC] pb-40">
            {messages.map((m, i) => (
              <motion.div 
                initial={{ opacity: 0, y: 20 }} 
@@ -142,47 +153,47 @@ export default function AdminProChat() {
                key={i} 
                className={`flex gap-4 ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}
              >
-                <div className={`max-w-[85%] p-6 rounded-[35px] shadow-sm border ${
+                <div className={`max-w-[85%] p-7 rounded-[35px] shadow-sm border ${
                   m.role === 'user' 
-                  ? 'bg-white border-slate-200 text-slate-900 rounded-tl-none ring-4 ring-slate-50' 
+                  ? 'bg-white border-slate-200 text-slate-900 rounded-tl-none ring-[12px] ring-slate-50' 
                   : 'bg-slate-900 text-white border-slate-800 shadow-2xl rounded-tr-none'
                 }`}>
-                   <div className={`flex items-center gap-2 mb-4 text-[10px] font-black uppercase tracking-widest italic opacity-40 ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
+                   <div className={`flex items-center gap-2 mb-6 text-[10px] font-black uppercase tracking-widest italic opacity-40 ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
                       {m.role === 'user' ? 'Rami Executive' : 'Logistics Brain'}
                       {m.role === 'user' ? <User size={14}/> : <Zap size={14} fill="currentColor"/>}
                    </div>
-                   <div className="text-right leading-relaxed font-bold whitespace-pre-wrap italic">
-                      <MessageContent text={m.content} />
+                   <div className="text-right leading-relaxed font-bold italic">
+                      <SmartMessageRenderer text={m.content} onAdd={handleQuickAdd} />
                    </div>
                 </div>
              </motion.div>
            ))}
            {loading && (
              <div className="flex justify-end pr-4">
-                <div className="bg-slate-50 px-6 py-4 rounded-3xl border border-slate-100 flex items-center gap-4 animate-pulse">
-                   <Loader2 size={18} className="animate-spin text-blue-600" />
-                   <span className="text-xs font-black text-slate-400 uppercase italic tracking-widest">מחשב מהלך לוגיסטי...</span>
+                <div className="bg-slate-50 px-8 py-5 rounded-[30px] border border-slate-100 flex items-center gap-4 animate-pulse">
+                   <Loader2 size={22} className="animate-spin text-blue-600" />
+                   <span className="text-sm font-black text-slate-400 uppercase italic tracking-widest">מחשב מהלך לוגיסטי...</span>
                 </div>
              </div>
            )}
            <div ref={scrollRef} />
         </div>
 
-        {/* Floating Executive Input */}
+        {/* Input Area */}
         <div className="p-10 absolute bottom-0 w-full pointer-events-none">
-           <div className="max-w-4xl mx-auto bg-white border-2 border-slate-100 p-2 rounded-[40px] shadow-[0_40px_80px_rgba(0,0,0,0.1)] flex items-center gap-3 pointer-events-auto ring-[15px] ring-slate-50/50">
+           <div className="max-w-4xl mx-auto bg-white border-2 border-slate-100 p-2 rounded-[45px] shadow-[0_40px_80px_rgba(0,0,0,0.15)] flex items-center gap-3 pointer-events-auto ring-[20px] ring-slate-50/50 backdrop-blur-xl">
               <input 
                 type="text" 
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                 placeholder="כתוב פקודה לביצוע ראמי..." 
-                className="flex-1 bg-transparent px-8 py-5 outline-none font-black text-xl text-right text-slate-900 placeholder:text-slate-300" 
+                className="flex-1 bg-transparent px-8 py-6 outline-none font-black text-2xl text-right text-slate-900 placeholder:text-slate-200" 
               />
               <button 
                 onClick={handleSend}
                 disabled={loading}
-                className="w-16 h-16 bg-slate-900 hover:bg-blue-600 rounded-[28px] flex items-center justify-center text-white shadow-xl active:scale-90 transition-all"
+                className="w-16 h-16 bg-slate-900 hover:bg-blue-600 rounded-full flex items-center justify-center text-white shadow-xl active:scale-90 transition-all"
               >
                  <Send size={28} />
               </button>
@@ -193,15 +204,54 @@ export default function AdminProChat() {
   );
 }
 
-// מפענח טקסט לכותרות ועיצוב בתוך הבועה
-function MessageContent({ text }: { text: string }) {
-  const lines = text.split('\n');
+// --- המפענח החכם (The Fix) ---
+function SmartMessageRenderer({ text, onAdd }: { text: string, onAdd: any }) {
+  if (!text) return null;
+
+  // 1. ניקוי ארטיפקטים של Markdown ופקודות שרת
+  const cleanContent = text
+    .replace(/```text|```|text```/gi, '') // הסרת בלוקי קוד טקסטואליים
+    .replace(/\[QUICK_ADD:.*?\]/g, '') // הסרת פקודות הוספה מהטקסט
+    .replace(/\[SET_QTY:.*?:.*?\]/g, '') // הסרת פקודות כמות מהטקסט
+    .trim();
+
+  const lines = cleanContent.split('\n');
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {lines.map((line, i) => {
-        if (line.startsWith('###')) return <h3 key={i} className="text-blue-400 text-lg font-black uppercase mt-4 mb-2 border-r-4 border-blue-500 pr-3">{line.replace('###', '')}</h3>;
-        return <p key={i}>{line}</p>;
+        if (!line.trim()) return null;
+        
+        // טיפול בכותרות ###
+        if (line.startsWith('###')) {
+          return (
+            <h3 key={i} className="text-blue-400 text-xl font-black uppercase mt-6 mb-3 border-r-4 border-blue-500 pr-4 italic tracking-tighter">
+              {line.replace('###', '').trim()}
+            </h3>
+          );
+        }
+
+        // רינדור טקסט רגיל (תומך ב-** לבולד)
+        const parts = line.split(/(\*\*.*?\*\*)/g);
+        return (
+          <p key={i} className="text-[18px] md:text-[20px] leading-relaxed">
+            {parts.map((p, j) => p.startsWith('**') ? <strong key={j} className="text-blue-300 font-black">{p.slice(2, -2)}</strong> : p)}
+          </p>
+        );
       })}
+
+      {/* 2. הזרקת כפתורי פעולה במידה וזוהו פקודות בטקסט המקורי */}
+      {Array.from(text.matchAll(/\[QUICK_ADD:(.*?)\]/g)).map((match, i) => (
+        <motion.button 
+          key={i}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={() => onAdd(match[1])}
+          className="w-full mt-6 bg-blue-600 text-white py-5 rounded-[25px] font-black shadow-2xl flex items-center justify-center gap-4 text-sm uppercase tracking-widest italic border-b-4 border-blue-800"
+        >
+          <Plus size={20} /> שמור מק"ט {match[1]} לסל פקודה
+        </motion.button>
+      ))}
     </div>
   );
 }
