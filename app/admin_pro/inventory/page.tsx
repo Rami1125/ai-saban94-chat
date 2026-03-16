@@ -5,16 +5,15 @@ import { supabase } from "@/lib/supabase";
 import { 
   Scale, Package, Search, Save, AlertTriangle, 
   RefreshCw, Layers, Truck, Filter, ArrowUpDown,
-  History, Info, CheckCircle2
+  History, Info, CheckCircle2, Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from "sonner";
 
 /**
- * Saban Admin Pro - Inventory & Weights Control
+ * Saban Admin Pro - Inventory & Weights Control V25.1
  * -------------------------------------------
- * Logic: Managing the 12-ton truck rule via product weights.
- * DB: Connected to 'product_weights' table.
+ * Fix: Added null-safety for SKU filtering and empty state logic.
  */
 
 export default function InventoryWeights() {
@@ -23,7 +22,7 @@ export default function InventoryWeights() {
   const [search, setSearch] = useState("");
   const [updatingSku, setUpdatingSku] = useState<string | null>(null);
 
-  // 1. שליפת נתוני משקלים מה-DB
+  // 1. שליפת נתוני משקלים מה-DB עם טיפול בשגיאות
   const fetchWeights = async () => {
     setLoading(true);
     try {
@@ -32,10 +31,18 @@ export default function InventoryWeights() {
         .select('*')
         .order('sku', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase Error:", error);
+        toast.error("שגיאה בסנכרון: " + error.message);
+        return;
+      }
+      
       setItems(data || []);
+      if (data?.length === 0) {
+        toast.warning("שי לב: טבלת המשקלים ריקה ב-DB");
+      }
     } catch (err: any) {
-      toast.error("שגיאה בסנכרון משקלים: " + err.message);
+      toast.error("שגיאת מערכת בחיבור ל-DB");
     } finally {
       setLoading(false);
     }
@@ -45,6 +52,7 @@ export default function InventoryWeights() {
 
   // 2. עדכון משקל לוגיסטי בזמן אמת
   const updateWeight = async (sku: string, weight: number) => {
+    if (!sku) return;
     setUpdatingSku(sku);
     try {
       const { error } = await supabase
@@ -54,49 +62,50 @@ export default function InventoryWeights() {
 
       if (error) throw error;
       toast.success(`משקל מק"ט ${sku} עודכן ב-DNA`);
-      // עדכון מקומי מהיר
       setItems(prev => prev.map(item => item.sku === sku ? { ...item, weight_kg: weight } : item));
     } catch (err) {
-      toast.error("עדכון נכשל");
+      toast.error("עדכון נכשל - בדוק הרשאות ב-SQL");
     } finally {
       setUpdatingSku(null);
     }
   };
 
+  // סינון חסין (Null-Safe)
   const filteredItems = items.filter(i => 
-    i.sku.toLowerCase().includes(search.toLowerCase())
+    (i.sku || "").toString().toLowerCase().includes(search.toLowerCase())
   );
 
   return (
     <motion.div 
       initial={{ opacity: 0, y: 10 }} 
       animate={{ opacity: 1, y: 0 }} 
-      className="space-y-8 max-w-7xl mx-auto"
+      className="space-y-8 max-w-7xl mx-auto font-sans"
+      dir="rtl"
     >
       
       {/* Executive Logistics Banner */}
       <div className="bg-slate-900 rounded-[45px] p-10 text-white relative overflow-hidden shadow-2xl border border-white/5">
         <div className="absolute top-0 right-0 w-80 h-80 bg-blue-600/10 blur-[100px] rounded-full" />
-        <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-8">
+        <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-8 text-right">
            <div className="flex items-center gap-8">
               <div className="w-24 h-24 bg-white rounded-[35px] flex items-center justify-center shadow-xl border-4 border-blue-500/20 text-blue-600">
                 <Truck size={48} />
               </div>
-              <div className="text-right lg:text-right">
+              <div>
                 <h2 className="text-3xl font-black italic uppercase tracking-tighter leading-none mb-3">בקרת עומס משאית (12 טון)</h2>
                 <p className="text-blue-300/80 text-sm font-bold leading-relaxed max-w-xl">
-                  ניהול משקלים קריטי עבור המוח הלוגיסטי. נתונים אלו קובעים מתי המערכת עוצרת את בר או לקוחות VIP אחרים בשטח כדי למנוע חריגות ודו"חות.
+                  ניהול משקלים קריטי עבור המוח הלוגיסטי. נתונים אלו קובעים מתי המערכת עוצרת את בר או לקוחות VIP אחרים בשטח.
                 </p>
               </div>
            </div>
            <div className="flex gap-4">
-              <div className="bg-white/5 border border-white/10 p-5 rounded-[25px] text-center backdrop-blur-md">
+              <div className="bg-white/5 border border-white/10 p-5 rounded-[25px] text-center backdrop-blur-md min-w-[120px]">
                  <p className="text-[10px] font-black uppercase text-blue-400 mb-1">Total SKUs</p>
                  <p className="text-2xl font-black italic leading-none">{items.length}</p>
               </div>
-              <div className="bg-emerald-500/10 border border-emerald-500/20 p-5 rounded-[25px] text-center backdrop-blur-md">
+              <div className="bg-emerald-500/10 border border-emerald-500/20 p-5 rounded-[25px] text-center backdrop-blur-md min-w-[120px]">
                  <p className="text-[10px] font-black uppercase text-emerald-400 mb-1">Status</p>
-                 <p className="text-2xl font-black italic leading-none text-emerald-400 flex items-center gap-2">
+                 <p className="text-2xl font-black italic leading-none text-emerald-400 flex items-center gap-2 justify-center">
                     <CheckCircle2 size={20}/> LIVE
                  </p>
               </div>
@@ -115,7 +124,7 @@ export default function InventoryWeights() {
                 placeholder="חפש מק''ט או מוצר במלאי..." 
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full bg-white border border-slate-200 pr-14 pl-6 py-4 rounded-2xl font-bold shadow-sm outline-none focus:ring-8 ring-blue-500/5 transition-all italic text-lg" 
+                className="w-full bg-white border border-slate-200 pr-14 pl-6 py-4 rounded-2xl font-bold shadow-sm outline-none focus:ring-8 ring-blue-500/5 transition-all italic text-lg text-right" 
               />
            </div>
            <div className="flex items-center gap-3">
@@ -137,6 +146,22 @@ export default function InventoryWeights() {
           {loading ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                {[1,2,3,4,5,6].map(i => <div key={i} className="h-64 bg-slate-50 animate-pulse rounded-[40px]" />)}
+            </div>
+          ) : items.length === 0 ? (
+            <div className="py-32 text-center space-y-6">
+               <AlertTriangle size={80} className="mx-auto text-amber-200" />
+               <div>
+                  <p className="text-slate-400 font-black italic uppercase tracking-widest text-lg">טבלת המשקלים ריקה</p>
+                  <p className="text-slate-300 text-xs font-bold mt-2">וודא שהרצת את פקודת ה-SQL להזרקת משקלים ב-Supabase</p>
+               </div>
+            </div>
+          ) : filteredItems.length === 0 ? (
+            <div className="py-32 text-center space-y-6">
+               <Search size={80} className="mx-auto text-slate-100" />
+               <div>
+                  <p className="text-slate-400 font-black italic uppercase tracking-widest text-lg">לא נמצאו מק"טים תואמים לחיפוש</p>
+                  <p className="text-slate-300 text-xs font-bold mt-2">נסה לחפש לפי המק"ט המדויק מהטבלה</p>
+               </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -200,22 +225,12 @@ export default function InventoryWeights() {
               </AnimatePresence>
             </div>
           )}
-
-          {!loading && filteredItems.length === 0 && (
-            <div className="py-32 text-center space-y-6">
-               <Scale size={80} className="mx-auto text-slate-100" />
-               <div>
-                  <p className="text-slate-400 font-black italic uppercase tracking-widest text-lg">לא נמצאו מק"טים תואמים</p>
-                  <p className="text-slate-300 text-xs font-bold mt-2">נסה לחפש לפי המק"ט המדויק מהטבלה</p>
-               </div>
-            </div>
-          )}
         </div>
       </div>
 
       {/* Footer System Context */}
       <footer className="py-12 border-t border-slate-200 opacity-20 flex justify-between items-center px-10">
-         <p className="text-[10px] font-black uppercase tracking-[0.5em] italic">Payload Management System V24.0</p>
+         <p className="text-[10px] font-black uppercase tracking-[0.5em] italic">Payload Management System V25.1</p>
          <div className="flex gap-1">
             {[1,2,3].map(i => <div key={i} className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: `${i*0.2}s` }} />)}
          </div>
