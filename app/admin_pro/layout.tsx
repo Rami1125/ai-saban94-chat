@@ -12,22 +12,24 @@ import { motion } from 'framer-motion';
 import { Toaster } from "sonner";
 
 /**
- * Saban Admin Pro - Shared Layout V38.5
+ * Saban Admin Pro - Shared Layout V39.0
  * ------------------------------------
- * הוספת קישור "צ'אט מאסטר" (Master Brain) לתפריט הניווט.
+ * - Feature: Disguised VIP Management as "לקוחות" (Customers).
+ * - UI: Main Sidebar with dynamic active states and badges.
  */
 
 const LOGO_PATH = "/ai.png";
 
+// ניהול רשימת הניווט - שינוי "לקוחות VIP" ל-"לקוחות"
 const NAV_ITEMS = [
   { href: '/admin_pro', label: 'לוח בקרה', icon: LayoutDashboard },
-  { href: '/admin_pro/chat', label: 'צ\'אט מאסטר', icon: MessageSquare }, // המוח המנהל החדש
+  { href: '/admin_pro/chat', label: "צ'אט מאסטר", icon: MessageSquare }, 
   { href: '/admin_pro/orders', label: 'ניהול הזמנות', icon: ShoppingBag },
   { href: '/admin_pro/orders/create', label: 'יצירת הזמנה', icon: PlusCircle, highlight: true },
+  { href: '/admin_pro/vip', label: 'לקוחות', icon: Users }, // הסוואה של ניהול ה-VIP
   { href: '/admin_pro/logistics/mobile', label: 'ממשק שטח (נהג/מחסן)', icon: Smartphone },
-  { href: '/admin_pro/dna', label: 'ניהול DNA וחוקים', icon: Zap },
-  { href: '/admin_pro/vip', label: 'לקוחות VIP', icon: Users },
   { href: '/admin_pro/inventory', label: 'משקלים ומלאי', icon: Scale },
+  { href: '/admin_pro/dna', label: 'ניהול DNA וחוקים', icon: Zap },
   { href: '/admin_pro/approvals', label: 'מרכז אישורים', icon: ShieldAlert, badge: true },
 ];
 
