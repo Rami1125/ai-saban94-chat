@@ -1,196 +1,172 @@
 "use client";
 
-import React, { useState, useEffect, useRef, use } from 'react';
-import { supabase } from "@/lib/supabase"; 
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Send, Zap, ShoppingCart, Loader2, User, ShieldCheck, 
-  Image as ImageIcon, X, PlayCircle, Clock, Hammer, Calculator,
-  ArrowRight, Sparkles, Smartphone, Menu
+  ArrowLeft, MoreVertical, Minus, Plus, 
+  ShoppingCart, Home, Cpu, User, Trash2, 
+  Truck, ShieldCheck, Loader2, ShoppingBag
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast, Toaster } from "sonner";
-import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, onSnapshot, doc, setDoc } from 'firebase/firestore';
-import { getAuth, signInAnonymously } from 'firebase/auth';
+import { initializeApp, getApp, getApps } from 'firebase/app'; // הוספת getApp, getApps
+import { getFirestore, collection, onSnapshot, doc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 
 /**
- * Saban OS V46.0 - Main Customer Chat
+ * Saban OS V31.0 - Cart Review Live Sync (Build Safe)
  * -------------------------------------------
- * - Connected: Real-time VIP Profile (id from URL).
- * - Designer: Stitched Elite UI components.
- * - Integration: Syncs with Firebase Live Cart & Admin Dashboard.
+ * Fix: Added check to prevent duplicate Firebase initialization during build.
  */
 
-const LOGO_PATH = "/ai.png";
 const firebaseConfig = JSON.parse(process.env.NEXT_PUBLIC_FIREBASE_CONFIG || '{}');
-const app = initializeApp(firebaseConfig);
+
+// בדיקה אם האפליקציה כבר קיימת לפני אתחול (מונע שגיאת duplicate-app ב-Vercel)
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const db = getFirestore(app);
 const auth = getAuth(app);
 const appId = "saban-os-v1";
 
-export default function UnifiedVipChat({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const [client, setClient] = useState<any>(null);
-  const [messages, setMessages] = useState<any[]>([]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [cartCount, setCartCount] = useState(0);
-  const scrollRef = useRef<HTMLDivElement>(null);
+export default function CartReviewPage() {
+  const [cartItems, setCartItems] = useState<any[]>([]);
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  // 1. אתחול נתונים (פרופיל + סל חי)
   useEffect(() => {
-    async function init() {
-      // שליפת פרופיל לקוח
-      const { data } = await supabase.from('vip_profiles').select('*').eq('id', id).maybeSingle();
-      setClient(data);
+    const initAuth = async () => {
+      try {
+        await signInAnonymously(auth);
+      } catch (err) {
+        console.error("Auth failed:", err);
+      }
+    };
+    initAuth();
+    
+    const unsubscribeAuth = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+    });
 
-      // חיבור אנונימי לסל
-      await signInAnonymously(auth);
-      const cartCol = collection(db, 'artifacts', appId, 'users', id, 'cart');
-      onSnapshot(cartCol, (snap) => setCartCount(snap.size));
-      
-      setMessages([{ 
-        role: 'assistant', 
-        content: `### המוח הלוגיסטי של ח. סבן פעיל 🦾\nאהלן ${data?.nickname || 'אחי'}, אני מסונכרן לביצוע ב**${data?.main_project || 'שטח'}**. מה נבצע היום?` 
-      }]);
-    }
-    init();
-  }, [id]);
+    return () => unsubscribeAuth();
+  }, []);
 
-  useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
+  useEffect(() => {
+    if (!user) return;
 
-  // 2. הזרקה לסל מתוך כרטיס המוצר
-  const addToCart = async (sku: string) => {
-    const toastId = toast.loading("מזריק לסל...");
-    try {
-      const { data: p } = await supabase.from('inventory').select('*').eq('sku', sku).single();
-      const cartRef = doc(db, 'artifacts', appId, 'users', id, 'cart', sku);
-      await setDoc(cartRef, { sku, name: p.product_name, qty: 1, img: p.image_url, price: p.price || 0 });
-      toast.success(`${p.product_name} שמור בסל 🦾`, { id: toastId });
-    } catch (e) { toast.error("תקלה בסנכרון", { id: toastId }); }
-  };
-
-  const handleSend = async () => {
-    if (!input.trim() || loading) return;
-    const q = input; setInput("");
-    setMessages(prev => [...prev, { role: 'user', content: q }]);
     setLoading(true);
+    const cartCollection = collection(db, 'artifacts', appId, 'users', user.uid, 'cart');
+    const unsubscribeCart = onSnapshot(cartCollection, (snapshot) => {
+      const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setCartItems(items);
+      setLoading(false);
+    }, (error) => {
+      console.error("Cart fetch error:", error);
+      setLoading(false);
+    });
 
-    try {
-      const res = await fetch('/api/admin_pro/brain', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: id, query: q, history: messages.slice(-5), customerId: id })
-      });
-      const data = await res.json();
-      setMessages(prev => [...prev, { role: 'assistant', content: data.answer }]);
-    } catch (e) { toast.error("נתק ב-DNA"); } finally { setLoading(false); }
+    return () => unsubscribeCart();
+  }, [user]);
+
+  const updateQty = async (id: string, delta: number) => {
+    if (!user) return;
+    const item = cartItems.find(i => i.id === id);
+    if (!item) return;
+
+    const newQty = Math.max(1, item.qty + delta);
+    const itemRef = doc(db, 'artifacts', appId, 'users', user.uid, 'cart', id);
+    await updateDoc(itemRef, { qty: newQty });
   };
 
-  return (
-    <div className="flex h-screen bg-[#F8FAFC] text-slate-900 font-sans overflow-hidden" dir="rtl">
-      <Toaster position="top-center" richColors theme="light" />
-      
-      <main className="flex-1 flex flex-col relative bg-white max-w-4xl mx-auto shadow-2xl border-x border-slate-100">
-        {/* Header */}
-        <header className="h-20 border-b flex items-center justify-between px-8 bg-white/95 backdrop-blur-md sticky top-0 z-50">
-           <div className="flex items-center gap-4">
-              <div className="w-11 h-11 bg-slate-950 rounded-2xl flex items-center justify-center text-blue-500 shadow-xl border-2 border-white ring-8 ring-slate-50">
-                 <Zap size={22} fill="currentColor" />
-              </div>
-              <div className="text-right">
-                 <h2 className="text-lg font-black italic leading-none uppercase tracking-tighter">{client?.full_name || 'Saban OS'}</h2>
-                 <p className="text-[9px] text-emerald-500 font-black uppercase tracking-[0.2em] mt-1 italic flex items-center gap-2">
-                   <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> Live VIP Portal
-                 </p>
-              </div>
-           </div>
-           <div className="flex items-center gap-4">
-              <button onClick={() => window.location.href='/cart'} className="relative p-2 bg-slate-50 rounded-xl">
-                 <ShoppingCart size={20} />
-                 {cartCount > 0 && <span className="absolute -top-1 -left-1 bg-blue-600 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center border border-white">{cartCount}</span>}
-              </button>
-              <img src={LOGO_PATH} alt="Logo" className="h-8 object-contain" />
-           </div>
-        </header>
+  const removeItem = async (id: string) => {
+    if (!user) return;
+    const itemRef = doc(db, 'artifacts', appId, 'users', user.uid, 'cart', id);
+    await deleteDoc(itemRef);
+    toast.error("המוצר הוסר מהסל");
+  };
 
-        {/* Message Feed */}
-        <div className="flex-1 overflow-y-auto p-6 md:p-10 space-y-12 pb-48 scrollbar-hide bg-[#FBFCFD]">
-          <AnimatePresence>
-            {messages.map((m, i) => (
-              <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} key={i} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
-                <div className={`max-w-[95%] p-6 md:p-10 rounded-[45px] shadow-sm border ${
-                  m.role === 'user' ? 'bg-white border-slate-200 text-slate-900 shadow-md' : 'bg-blue-700 text-white border-blue-800 shadow-2xl rounded-tr-none'
-                }`}>
-                  <div className={`flex items-center gap-3 mb-6 ${m.role === 'user' ? 'text-slate-400' : 'text-blue-100/50'}`}>
-                     {m.role === 'user' ? <User size={14}/> : <ShieldCheck size={14}/>}
-                     <span className="text-[10px] font-black uppercase tracking-widest">{m.role === 'user' ? (client?.nickname || 'ראמי הבוס') : 'AI MASTER'}</span>
-                  </div>
-                  <SmartMessageRenderer text={m.content} onAdd={addToCart} />
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-          {loading && <div className="flex justify-end pr-4 animate-pulse"><Loader2 className="animate-spin text-blue-600" size={24} /></div>}
-          <div ref={scrollRef} />
-        </div>
+  const { subtotal, tax, total } = useMemo(() => {
+    const sub = cartItems.reduce((acc, item) => acc + (item.price * item.qty), 0);
+    const t = sub * 0.17;
+    return { subtotal: sub, tax: t, total: sub + t };
+  }, [cartItems]);
 
-        {/* Input Bar */}
-        <footer className="p-6 bg-gradient-to-t from-white via-white to-transparent absolute bottom-0 w-full">
-          <div className="max-w-4xl mx-auto bg-white border-2 border-slate-100 p-2 rounded-[45px] shadow-[0_30px_60px_rgba(0,0,0,0.1)] flex items-center gap-3 ring-[15px] ring-slate-50/50">
-            <input 
-              type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} 
-              placeholder="מה בונים היום אחי?..." 
-              className="flex-1 bg-transparent px-8 py-5 outline-none font-black text-xl text-right text-slate-900 placeholder:text-slate-200" 
-            />
-            <button onClick={handleSend} className="w-16 h-16 bg-blue-600 rounded-[35px] flex items-center justify-center text-white active:scale-90 transition-all shadow-xl hover:bg-blue-700">
-              <Send size={28} />
-            </button>
-          </div>
-        </footer>
-      </main>
+  const handleCheckout = async () => {
+    if (cartItems.length === 0) return;
+    toast.success("ההזמנה שודרה לביצוע בחדר המצב! 🦾");
+  };
 
-      <style jsx global>{`.scrollbar-hide::-webkit-scrollbar { display: none; }`}</style>
+  if (loading && !user) return (
+    <div className="min-h-screen bg-[#020617] flex items-center justify-center">
+       <Loader2 className="animate-spin text-emerald-500" size={48} />
     </div>
   );
-}
-
-// --- המפענח המשודרג (V46.0) ---
-function SmartMessageRenderer({ text, onAdd }: any) {
-  if (!text) return null;
-
-  const galleryMatch = text.match(/\[GALLERY:\s*([\s\S]*?)\]/i);
-  const urls = galleryMatch ? galleryMatch[1].split(',').map((u:string) => u.trim()) : [];
-  const skuMatch = text.match(/\[QUICK_ADD:(.*?)\]/);
-  const sku = skuMatch ? skuMatch[1] : null;
-
-  const cleanText = text
-    .replace(/\[GALLERY:.*?\]/gi, '')
-    .replace(/\[QUICK_ADD:.*?\]/gi, '')
-    .trim();
 
   return (
-    <div className="space-y-6">
-      {urls.length > 0 && (
-         <div className="flex gap-3 h-52">
-            <div className="flex-[2] bg-slate-900 rounded-[30px] overflow-hidden"><img src={urls[0]} className="w-full h-full object-cover" /></div>
-            {urls[1] && <div className="flex-1 bg-slate-900 rounded-[22px] overflow-hidden"><img src={urls[1]} className="w-full h-full object-cover" /></div>}
-         </div>
-      )}
+    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#020617] font-sans selection:bg-emerald-500/30" dir="rtl">
+      <Toaster position="top-center" richColors theme="dark" />
+      
+      <div className="relative flex h-auto min-h-screen w-full max-w-md mx-auto flex-col bg-[#F8FAFC] dark:bg-[#020617] overflow-x-hidden border-x border-slate-200 dark:border-slate-800 shadow-2xl">
+        <header className="flex items-center p-6 justify-between">
+          <button onClick={() => window.history.back()} className="size-12 flex items-center justify-center rounded-full bg-slate-100 dark:bg-slate-900 border border-dashed border-emerald-500/30 text-slate-900 dark:text-white transition-transform active:scale-90">
+            <ArrowLeft size={20} />
+          </button>
+          <h2 className="text-slate-900 dark:text-white text-sm font-black uppercase tracking-[0.3em] flex-1 text-center italic">Cart Review</h2>
+          <button className="size-12 flex items-center justify-center rounded-full bg-slate-100 dark:bg-slate-900 border border-dashed border-emerald-500/30">
+            <MoreVertical size={20} className="text-slate-400" />
+          </button>
+        </header>
 
-      <div className="space-y-4">
-        {cleanText.split('\n').map((line: string, i: number) => {
-          if (!line.trim()) return null;
-          if (line.startsWith('###')) return <h3 key={i} className="text-xl font-black italic border-r-4 border-blue-400 pr-3 my-4">{line.replace('###', '')}</h3>;
-          return <p key={i} className="text-[17px] leading-relaxed font-bold text-right">{line}</p>;
-        })}
+        <div className="px-6 py-4 flex-1">
+          <div className="bg-slate-100 dark:bg-slate-900/50 p-1 rounded-[60px] border border-dashed border-emerald-500/30">
+            <div className="bg-white dark:bg-[#0F172A] rounded-[60px] p-8 shadow-2xl min-h-[400px]">
+              <div className="flex justify-between items-center mb-8">
+                 <h2 className="text-slate-900 dark:text-white text-2xl font-black italic uppercase tracking-tighter">Elite Selection</h2>
+                 <span className="text-[10px] font-black bg-emerald-500/10 text-emerald-500 px-3 py-1 rounded-full border border-emerald-500/20">{cartItems.length} ITEMS</span>
+              </div>
+
+              {cartItems.length === 0 ? (
+                <div className="py-20 text-center opacity-20">
+                   <ShoppingBag size={64} className="mx-auto mb-4" />
+                   <p className="font-black uppercase tracking-widest italic">סל ריק</p>
+                </div>
+              ) : (
+                <AnimatePresence mode="popLayout">
+                  {cartItems.map((item) => (
+                    <motion.div layout key={item.id} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.9 }} className="group">
+                      <div className="flex items-center gap-5 py-4">
+                        <div className="relative size-20 shrink-0">
+                          <img src={item.img} className="w-full h-full object-cover rounded-[22px] ring-2 ring-emerald-500/10" alt={item.name} />
+                          <button onClick={() => removeItem(item.id)} className="absolute -top-2 -right-2 bg-rose-500 text-white p-1.5 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={12} /></button>
+                        </div>
+                        <div className="flex-1 text-right">
+                          <p className="text-slate-900 dark:text-white font-black text-lg leading-tight italic truncate max-w-[120px]">{item.name}</p>
+                          <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-800 w-fit px-3 py-1.5 rounded-full mt-3">
+                            <button onClick={() => updateQty(item.id, -1)} className="text-emerald-500"><Minus size={14}/></button>
+                            <span className="text-sm font-black dark:text-white">{item.qty}</span>
+                            <button onClick={() => updateQty(item.id, 1)} className="text-emerald-500"><Plus size={14}/></button>
+                          </div>
+                        </div>
+                        <div className="text-left shrink-0"><p className="text-slate-900 dark:text-white font-black text-lg">₪{(item.price * item.qty).toLocaleString()}</p></div>
+                      </div>
+                      <div className="h-px bg-slate-100 dark:bg-white/5 my-2 last:hidden" />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-auto px-6 pb-32">
+          <div className="bg-slate-100 dark:bg-slate-900/80 p-8 rounded-[60px] border border-dashed border-emerald-500/30 backdrop-blur-xl">
+            <div className="flex justify-between items-center mb-8">
+              <span className="text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest text-sm">Total Amount</span>
+              <span className="text-4xl font-black text-emerald-500 italic tracking-tighter leading-none">₪{total.toLocaleString()}</span>
+            </div>
+            <button onClick={handleCheckout} disabled={cartItems.length === 0} className="w-full bg-emerald-500 hover:bg-emerald-400 text-[#020617] font-black text-xl py-7 rounded-[40px] flex items-center justify-center gap-4 transition-all active:translate-y-1 border-b-[8px] border-emerald-700 shadow-2xl uppercase italic disabled:opacity-30">
+              <ShoppingCart size={24} /> PROCEED TO COMMAND 🦾
+            </button>
+          </div>
+        </div>
       </div>
-
-      {sku && (
-        <button onClick={() => onAdd(sku)} className="w-full bg-white text-blue-700 py-6 rounded-[35px] font-black text-xs uppercase tracking-[0.4em] shadow-xl flex items-center justify-center gap-5 border-b-8 border-slate-100 active:scale-95 transition-all italic">
-           הוסף להזמנה <ShoppingCart size={20} />
-        </button>
-      )}
     </div>
   );
 }
