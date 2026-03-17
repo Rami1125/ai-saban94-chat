@@ -8,17 +8,17 @@ import {
   Trash2, Edit3, Target, ShieldCheck, RefreshCw,
   Search, Package, Image as ImageIcon, Plus, X, 
   AlertCircle, Eye, HardDrive, MousePointer2, BrainCircuit,
-  Layers, Tag, Activity, FileText, ChevronRight
+  Tag, ChevronRight, CheckCircle, ListPlus, Smartphone
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast, Toaster } from "sonner";
 
 /**
- * Saban OS V64.0 - DNA Neural Factory (Precision Edition)
+ * Saban OS V66.0 - DNA Neural Factory (Precision Alignment)
  * ------------------------------------------------------
- * - Feature: Slang-to-SKU Neural Mapping.
- * - Interaction: Click-to-Select Alignment Flow.
- * - Management: Full Visual Inventory CRUD.
+ * - Feature: Word-by-Word Mapping based on Bar Orenil orders.
+ * - Interaction: 100% Click-to-Align Visual Feedback.
+ * - Sync: Direct Injection of Slang into Inventory Keywords.
  */
 
 export default function DnaNeuralStudio() {
@@ -28,9 +28,9 @@ export default function DnaNeuralStudio() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<'lab' | 'inventory'>('lab');
   
-  // Matrix Training State
-  const [inputRaw, setInputRaw] = useState(""); 
-  const [outputRaw, setOutputRaw] = useState(""); 
+  // Matrix State
+  const [inputRaw, setInputRaw] = useState(""); // הטקסט מהווצאפ
+  const [outputRaw, setOutputRaw] = useState(""); // התעודה מקומקס
   const [matrix, setMatrix] = useState<any[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
@@ -50,44 +50,41 @@ export default function DnaNeuralStudio() {
       if (error) throw error;
       setInventory(data || []);
     } catch (e: any) {
-      toast.error("סנכרון מלאי נכשל: " + e.message);
+      toast.error("סנכרון מלאי נכשל");
     } finally {
       setLoading(false);
     }
   };
 
-  // --- מנוע הניתוח: פירוק מילים והצלבת מילון מונחים ---
+  // --- מנוע הפירוק וההצלבה המדויק ---
   const handleStartAnalysis = () => {
     if (!inputRaw) return toast.error("הזרק רשימה מהשטח לניתוח");
     setIsAnalyzing(true);
 
     setTimeout(() => {
-      // פירוק רשימת שטח (למשל של בר אורניל)
+      // פירוק הרשימה (למשל של בר אורניל בסטרומה 4)
       const slangLines = inputRaw.split('\n')
         .map(l => l.trim().replace(/^\*?\s*/, ''))
-        .filter(l => l.length > 1);
+        .filter(l => l.length > 2);
       
-      // פירוק תעודת קומקס לזיהוי מק"טים
       const comaxLines = outputRaw.split('\n').map(line => {
         const parts = line.split('\t');
         return {
           sku: parts[2]?.trim() || line.match(/\d{5,}/)?.[0],
-          name: parts[1]?.trim() || line,
-          qty: parts[0]?.trim() || "1"
+          name: parts[1]?.trim() || line
         };
       }).filter(s => s.sku);
 
       const newMatrix = slangLines.map((line) => {
         const cleanLine = line.toLowerCase();
         
-        // א. חיפוש אוטומטי לפי מילות מפתח (DNA)
+        // 1. חיפוש אוטומטי לפי מילות מפתח (DNA)
         const autoMatch = inventory.find(inv => {
           const kws = (inv.keywords || "").toLowerCase().split(',').map((k:string) => k.trim());
           return kws.some(k => k.length > 2 && cleanLine.includes(k)) || 
                  cleanLine.includes((inv.product_name || "").toLowerCase());
         });
 
-        // ב. חיפוש בתוך תעודת המשלוח שהודבקה (Comax Bridge)
         const deliveryMatch = !autoMatch ? comaxLines.find(cl => cleanLine.includes(cl.name.toLowerCase().split(' ')[0])) : null;
         const finalProduct = autoMatch || inventory.find(inv => inv.sku === deliveryMatch?.sku);
 
@@ -95,7 +92,7 @@ export default function DnaNeuralStudio() {
           raw: line,
           product: finalProduct || null,
           status: finalProduct ? 'matched' : 'needs_training',
-          qty: deliveryMatch?.qty || line.match(/\d+/)?.[0] || "1"
+          qty: line.match(/\d+/)?.[0] || "1"
         };
       });
 
@@ -105,8 +102,8 @@ export default function DnaNeuralStudio() {
     }, 800);
   };
 
-  // --- הזרקת DNA: שמירת המילה במלאי לשימוש חוזר ---
-  const handleInjectDNA = async (idx: number, product: any) => {
+  // --- הזרקת DNA: סנכרון מילות מפתח למלאי ---
+  const handleTrainDna = async (idx: number, product: any) => {
     const item = matrix[idx];
     const cleanSlang = item.raw.replace(/[0-9*.\-]/g, '').trim();
     
@@ -116,9 +113,7 @@ export default function DnaNeuralStudio() {
     
     try {
       const existing = product.keywords || "";
-      const updatedKeywords = Array.from(new Set([...existing.split(','), cleanSlang]))
-        .join(', ')
-        .replace(/^, /, '');
+      const updatedKeywords = Array.from(new Set([...existing.split(','), cleanSlang])).join(', ').replace(/^, /, '');
 
       const { error } = await supabase
         .from('inventory')
@@ -135,19 +130,10 @@ export default function DnaNeuralStudio() {
       newMatrix[idx] = { ...item, product, status: 'synced' };
       setMatrix(newMatrix);
       
-      toast.success(`המוח אומן! "${cleanSlang}" ➡️ ${product.product_name}`, { id: toastId });
+      toast.success(`המוח למד: "${cleanSlang}" ➡️ ${product.product_name}`, { id: toastId });
       fetchData(); 
     } catch (e) {
       toast.error("סנכרון נכשל");
-    }
-  };
-
-  const deleteProduct = async (sku: string) => {
-    if (!confirm("אח יקר, בטוח שמוחקים את המוצר מהמלאי?")) return;
-    const { error } = await supabase.from('inventory').delete().eq('sku', sku);
-    if (!error) {
-      toast.success("מוצר הוסר לצמיתות");
-      fetchData();
     }
   };
 
@@ -164,37 +150,42 @@ export default function DnaNeuralStudio() {
     <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-10 font-sans text-right" dir="rtl">
       <Toaster position="top-center" richColors theme="dark" />
 
-      <div className="max-w-[1750px] mx-auto space-y-10">
+      <div className="max-w-[1700px] mx-auto space-y-10">
         
-        {/* --- Executive Header --- */}
+        {/* --- Studio Header --- */}
         <div className="flex flex-col lg:flex-row justify-between items-center gap-8 bg-white p-10 rounded-[60px] border border-slate-100 shadow-xl relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-64 h-full bg-blue-600/5 -skew-x-12 translate-x-16 group-hover:translate-x-8 transition-transform duration-1000" />
-          <div className="flex items-center gap-10 relative z-10">
+          <div className="flex items-center gap-8 relative z-10">
              <div className="w-24 h-24 bg-slate-950 text-blue-500 rounded-[40px] flex items-center justify-center shadow-2xl ring-8 ring-slate-50">
                 <BrainCircuit size={48} />
              </div>
              <div>
-                <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter leading-none text-slate-900">Neural DNA Factory</h1>
+                <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter leading-none text-slate-900 text-right">Neural DNA Alignment</h1>
                 <p className="text-[11px] font-bold text-slate-400 mt-3 uppercase tracking-[0.5em] flex items-center gap-2">
-                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" /> Precision Training v64.0
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" /> Precision Training v66.0
                 </p>
              </div>
           </div>
           
           <div className="flex items-center gap-6 relative z-10">
-             <StatCard label="מלאי רשום" value={inventory.length} icon={<Package size={16}/>} />
-             <StatCard label="מוצלב DNA" value={inventory.filter(i => i.keywords).length} color="text-emerald-500" icon={<ShieldCheck size={16}/>} />
-             <StatCard label="דורש אימון" value={inventory.filter(i => !i.keywords).length} color="text-rose-500" icon={<Target size={16}/>} />
+             <div className="bg-slate-50 px-10 py-6 rounded-[40px] shadow-inner flex flex-col items-center min-w-[180px] border border-slate-100">
+                <span className="text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest leading-none italic">Total Assets</span>
+                <span className="text-4xl font-black italic text-slate-900">{inventory.length}</span>
+             </div>
+             <div className="bg-slate-50 px-10 py-6 rounded-[40px] shadow-inner flex flex-col items-center min-w-[180px] border border-slate-100">
+                <span className="text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest leading-none italic">DNA Trained</span>
+                <span className="text-4xl font-black italic text-emerald-500">{inventory.filter(i => i.keywords).length}</span>
+             </div>
           </div>
         </div>
 
-        {/* --- Tab Navigation --- */}
+        {/* --- Navigation Tabs --- */}
         <div className="flex gap-4 bg-white/50 p-2 rounded-[35px] w-fit border border-slate-100 shadow-sm">
            <button onClick={() => setActiveTab('lab')} className={`px-12 py-4 rounded-[28px] font-black text-sm uppercase tracking-widest transition-all flex items-center gap-3 ${activeTab === 'lab' ? 'bg-slate-900 text-white shadow-xl scale-105' : 'text-slate-400 hover:bg-white'}`}>
-              <Zap size={18} fill={activeTab === 'lab' ? 'currentColor' : 'none'}/> מעבדת הצלבות
+              <Zap size={18} fill={activeTab === 'lab' ? 'currentColor' : 'none'}/> מעבדת הצלבות DNA
            </button>
            <button onClick={() => setActiveTab('inventory')} className={`px-12 py-4 rounded-[28px] font-black text-sm uppercase tracking-widest transition-all flex items-center gap-3 ${activeTab === 'inventory' ? 'bg-slate-900 text-white shadow-xl scale-105' : 'text-slate-400 hover:bg-white'}`}>
-              <Layers size={18}/> ניהול מלאי ו-DNA
+              <Layers size={18}/> ניהול מלאי וסריקת רשת
            </button>
         </div>
 
@@ -202,43 +193,29 @@ export default function DnaNeuralStudio() {
           {activeTab === 'lab' ? (
             <motion.div key="lab" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="space-y-8">
                
-               {/* Injection Box Area */}
                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   <div className="bg-white rounded-[45px] p-10 shadow-lg border border-slate-100 space-y-6">
                      <div className="flex items-center gap-4">
                         <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 shadow-inner"><ClipboardList size={24}/></div>
-                        <h3 className="font-black text-slate-800 uppercase italic text-xl">1. הזרקת רשימה מהשטח (WhatsApp)</h3>
+                        <h3 className="font-black text-slate-800 uppercase italic text-xl leading-none">1. הזרקת רשימה מהשטח (WhatsApp)</h3>
                      </div>
-                     <textarea 
-                        value={inputRaw} onChange={(e) => setInputRaw(e.target.value)}
-                        placeholder='הדבק כאן הודעה: "* 100 שקים בטון מוכן..."'
-                        className="w-full h-64 bg-slate-50 border-4 border-slate-100 rounded-[35px] p-8 font-bold text-slate-700 outline-none focus:border-blue-500/20 transition-all text-xl shadow-inner resize-none scrollbar-hide" 
-                     />
+                     <textarea value={inputRaw} onChange={(e) => setInputRaw(e.target.value)} placeholder='הדבק כאן הודעה מבר או מתחסין...' className="w-full h-64 bg-slate-50 border-4 border-slate-100 rounded-[35px] p-8 font-bold text-slate-700 outline-none focus:border-blue-500/20 transition-all text-xl shadow-inner resize-none scrollbar-hide" />
                   </div>
                   <div className="bg-slate-950 rounded-[45px] p-10 shadow-2xl space-y-6 text-white relative">
                      <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 blur-[80px] rounded-full" />
                      <div className="flex items-center gap-4 relative z-10">
                         <div className="w-12 h-12 bg-emerald-500/10 rounded-2xl flex items-center justify-center text-emerald-400 shadow-inner"><Database size={24}/></div>
-                        <h3 className="font-black uppercase italic text-xl">2. הצלבת תעודת משלוח (Comax)</h3>
+                        <h3 className="font-black uppercase italic text-xl leading-none">2. הצלבת תעודת משלוח (Comax)</h3>
                      </div>
-                     <textarea 
-                        value={outputRaw} onChange={(e) => setOutputRaw(e.target.value)}
-                        placeholder="הדבק שורות מהקומקס להצלבה אוטומטית..."
-                        className="w-full h-64 bg-white/5 border-4 border-white/10 rounded-[35px] p-8 font-bold text-blue-100 outline-none focus:border-emerald-500 transition-all text-xl shadow-inner resize-none scrollbar-hide relative z-10" 
-                     />
+                     <textarea value={outputRaw} onChange={(e) => setOutputRaw(e.target.value)} placeholder="הדבק שורות מהקומקס לסנכרון אוטומטי..." className="w-full h-64 bg-white/5 border-4 border-white/10 rounded-[35px] p-8 font-bold text-blue-100 outline-none focus:border-emerald-500 transition-all text-xl shadow-inner resize-none scrollbar-hide relative z-10" />
                   </div>
                </div>
 
-               <button 
-                  onClick={handleStartAnalysis}
-                  disabled={isAnalyzing || !inputRaw}
-                  className="w-full bg-blue-600 text-white py-10 rounded-[45px] font-black text-3xl uppercase italic tracking-widest shadow-2xl hover:bg-blue-500 active:scale-[0.98] transition-all flex items-center justify-center gap-8 border-b-[12px] border-blue-800"
-               >
+               <button onClick={handleStartAnalysis} disabled={isAnalyzing || !inputRaw} className="w-full bg-blue-600 text-white py-10 rounded-[45px] font-black text-3xl uppercase italic tracking-widest shadow-[0_30px_60px_rgba(37,99,235,0.3)] hover:bg-blue-500 active:scale-[0.98] transition-all flex items-center justify-center gap-8 border-b-[12px] border-blue-800">
                   {isAnalyzing ? <Loader2 className="animate-spin" size={48}/> : <ArrowLeftRight size={48} />}
-                  בצע פירוק והצלבה נוירולוגית 🦾
+                  בצע פירוק ואימון DNA 🦾
                </button>
 
-               {/* Matrix Result Section */}
                {matrix.length > 0 && (
                  <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-[70px] p-12 shadow-2xl border-4 border-blue-50 relative">
                     <div className="flex justify-between items-center mb-12">
@@ -251,33 +228,26 @@ export default function DnaNeuralStudio() {
                             <div className="flex items-center gap-8 flex-1">
                                <div className="bg-slate-900 text-white w-20 h-20 rounded-[30px] flex items-center justify-center font-black text-3xl italic shadow-2xl shrink-0">x{item.qty}</div>
                                <div className="text-right">
-                                  <p className="text-[11px] font-black text-slate-400 uppercase italic mb-2 tracking-widest leading-none">שפת הלקוח:</p>
+                                  <p className="text-[11px] font-black text-slate-400 uppercase italic mb-2 tracking-widest leading-none">קלט שטח:</p>
                                   <h4 className="text-2xl font-black text-slate-900 leading-tight">"{item.raw}"</h4>
                                </div>
                             </div>
                             <ArrowLeftRight className={item.status !== 'needs_training' ? 'text-blue-500' : 'text-slate-200'} size={44} />
                             <div className="flex-[2] flex items-center gap-8 bg-white p-6 rounded-[45px] border border-slate-100 shadow-sm w-full relative group">
                                <div className={`w-24 h-24 rounded-[30px] overflow-hidden bg-slate-50 flex items-center justify-center relative shadow-inner shrink-0 border-4 border-white ${!item.product && 'bg-rose-50'}`}>
-                                  {item.product?.image_url ? (
-                                    <img src={item.product.image_url} className="w-full h-full object-cover" onError={(e:any) => e.target.src = ''} />
-                                  ) : <PackageSearch size={44} className="text-slate-200" />}
+                                  {item.product?.image_url ? <img src={item.product.image_url} className="w-full h-full object-cover" onError={(e:any) => e.target.src = ''} /> : <PackageSearch size={44} className="text-slate-200" />}
                                </div>
                                <div className="text-right flex-1">
-                                  <p className={`font-black text-2xl ${item.product ? 'text-slate-900' : 'text-rose-500 italic underline decoration-dotted'}`}>
-                                     {item.product ? item.product.product_name : 'דרושה שליפה מהמלאי'}
-                                  </p>
-                                  {item.product && <p className="text-[11px] font-bold text-blue-600 uppercase mt-2 tracking-widest italic">SKU: {item.product.sku} | trained asset</p>}
+                                  <p className={`font-black text-2xl ${item.product ? 'text-slate-900' : 'text-rose-500 italic underline decoration-dotted'}`}>{item.product ? item.product.product_name : 'דרושה שליפה מהמלאי'}</p>
+                                  {item.product && <p className="text-[11px] font-bold text-blue-600 uppercase mt-2 tracking-widest italic">SKU: {item.product.sku}</p>}
                                </div>
                                <div className="flex gap-4">
                                   {item.status === 'needs_training' ? (
                                     <button onClick={() => { setSelectingIdx(idx); setActiveTab('inventory'); }} className="px-10 py-5 bg-slate-950 text-white rounded-[30px] font-black text-xs uppercase shadow-xl hover:bg-blue-600 transition-all flex items-center gap-3"><MousePointer2 size={20}/> שליפה</button>
                                   ) : item.status === 'matched' ? (
-                                    <button onClick={() => handleInjectDNA(idx, item.product)} className="px-12 py-5 bg-emerald-500 text-white rounded-[30px] font-black text-xs uppercase shadow-xl hover:bg-emerald-600 transition-all active:scale-95 border-b-4 border-emerald-700">אמן DNA 🧠</button>
+                                    <button onClick={() => injectDnaSync(idx, item.product)} className="px-12 py-5 bg-emerald-500 text-white rounded-[30px] font-black text-xs uppercase shadow-xl hover:bg-emerald-600 transition-all active:scale-95 border-b-4 border-emerald-700">אמן DNA 🧠</button>
                                   ) : (
-                                    <div className="flex items-center gap-3 text-emerald-600 px-8">
-                                       <span className="font-black uppercase text-xs tracking-widest italic">Synced</span>
-                                       <ShieldCheck size={56} />
-                                    </div>
+                                    <ShieldCheck className="text-emerald-500 ml-8" size={56} />
                                   )}
                                </div>
                             </div>
@@ -294,17 +264,13 @@ export default function DnaNeuralStudio() {
                   <div className="flex items-center gap-6">
                      <HardDrive size={56} className="text-blue-600" />
                      <div>
-                        <h2 className="text-4xl font-black italic text-slate-900 uppercase tracking-tighter leading-none">DNA Inventory Studio</h2>
+                        <h2 className="text-4xl font-black italic text-slate-900 uppercase tracking-tighter leading-none">Inventory & DNA Studio</h2>
                         <p className="text-[11px] font-bold text-slate-400 mt-2 uppercase tracking-[0.5em]">Direct Database Master Access</p>
                      </div>
                   </div>
                   <div className="relative w-full md:w-[600px] group">
                     <Search className="absolute right-8 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={26} />
-                    <input 
-                      placeholder="חפש מק''ט, שם, מילת מפתח..." 
-                      value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} 
-                      className="w-full bg-white border-4 border-slate-100 pr-20 pl-10 py-6 rounded-[40px] font-black outline-none focus:border-blue-500/20 transition-all shadow-inner text-xl" 
-                    />
+                    <input placeholder="חפש מק''ט, שם, מילת מפתח או תגית..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-white border-4 border-slate-100 pr-20 pl-10 py-6 rounded-[40px] font-black outline-none focus:border-blue-500/20 transition-all shadow-inner text-xl" />
                   </div>
                </div>
 
@@ -314,7 +280,7 @@ export default function DnaNeuralStudio() {
                         <tr className="text-[12px] font-black text-slate-400 uppercase tracking-[0.4em] italic leading-none">
                            <th className="p-6">ויזואליה וזיהוי</th>
                            <th className="p-6">שם בקומקס</th>
-                           <th className="p-6 text-center">מצב DNA</th>
+                           <th className="p-6 text-center">סטטוס DNA</th>
                            <th className="p-6">מילון שטח (Keywords)</th>
                            <th className="p-6 text-left">ניהול</th>
                         </tr>
@@ -323,25 +289,20 @@ export default function DnaNeuralStudio() {
                         {filteredInventory.map((item) => {
                           const isBeingSelected = selectingIdx !== null;
                           return (
-                            <motion.tr 
-                              key={item.sku} 
-                              whileHover={isBeingSelected ? { scale: 1.015, x: -8 } : {}} 
-                              onClick={() => {
+                            <motion.tr key={item.sku} whileHover={isBeingSelected ? { scale: 1.015, x: -8 } : {}} onClick={() => {
                                  if (isBeingSelected) {
-                                    handleInjectDNA(selectingIdx!, item);
+                                    handleTrainDna(selectingIdx!, item);
                                     setSelectingIdx(null);
                                     setActiveTab('lab');
                                  }
-                              }} 
-                              className={`bg-slate-50 hover:bg-blue-50/50 transition-all group rounded-[50px] ${isBeingSelected ? 'cursor-pointer ring-[15px] ring-blue-500/20 border-blue-500 shadow-2xl' : ''}`}
-                            >
+                              }} className={`bg-slate-50 hover:bg-blue-50/50 transition-all group rounded-[50px] ${isBeingSelected ? 'cursor-pointer ring-[15px] ring-blue-500/20 border-blue-500 shadow-2xl' : ''}`}>
                                <td className="p-6 first:rounded-r-[55px]">
                                   <div className="flex items-center gap-10">
                                      <div className="w-28 h-28 rounded-[40px] overflow-hidden bg-white shadow-xl border-4 border-white group-hover:scale-110 transition-transform relative shrink-0">
                                         <img src={item.image_url} className="w-full h-full object-cover" onError={(e:any) => e.target.src = ''} />
                                      </div>
                                      <div>
-                                        <p className="bg-blue-600 text-white px-5 py-2 rounded-2xl text-[10px] font-black uppercase shadow-lg w-fit mb-4 tracking-widest italic">SKU {item.sku}</p>
+                                        <p className="bg-blue-600 text-white px-5 py-2 rounded-2xl text-[10px] font-black uppercase shadow-lg w-fit mb-4 tracking-widest italic leading-none">SKU {item.sku}</p>
                                         <p className="font-black text-xl text-slate-900 italic">₪{item.price || '--'}</p>
                                      </div>
                                   </div>
@@ -366,8 +327,8 @@ export default function DnaNeuralStudio() {
                                </td>
                                <td className="p-6 last:rounded-l-[55px] text-left">
                                   <div className="flex gap-4 justify-end opacity-0 group-hover:opacity-100 transition-all translate-x-8 group-hover:translate-x-0">
-                                     <button onClick={(e) => {e.stopPropagation(); setEditingItem(item);}} className="p-6 bg-white border-2 border-slate-100 rounded-[30px] hover:text-blue-600 transition-all shadow-md active:scale-90"><Edit3 size={32}/></button>
-                                     <button onClick={(e) => {e.stopPropagation(); deleteProduct(item.sku);}} className="p-6 bg-white border-2 border-slate-100 rounded-[30px] hover:text-rose-600 transition-all shadow-md active:scale-90"><Trash2 size={32}/></button>
+                                     <button onClick={(e) => {e.stopPropagation(); setEditingItem(item);}} className="p-6 bg-white border-2 border-slate-100 rounded-[30px] hover:text-blue-600 hover:border-blue-500 transition-all shadow-md active:scale-90"><Edit3 size={32}/></button>
+                                     <button onClick={(e) => {e.stopPropagation(); deleteProduct(item.sku);}} className="p-6 bg-white border-2 border-slate-100 rounded-[30px] hover:text-rose-600 hover:border-rose-500 transition-all shadow-md active:scale-90"><Trash2 size={32}/></button>
                                   </div>
                                </td>
                             </motion.tr>
@@ -400,21 +361,21 @@ export default function DnaNeuralStudio() {
                 <div className="p-20 grid grid-cols-1 md:grid-cols-2 gap-16 bg-slate-50/30 overflow-y-auto max-h-[60vh] scrollbar-hide text-right">
                    <div className="space-y-10">
                       <EditField label="שם מוצר רשמי" value={editingItem.product_name} onChange={(v:any) => setEditingItem({...editingItem, product_name: v})} />
-                      <EditField label="מק''ט (SKU)" value={editingItem.sku} disabled />
+                      <EditField label="מק''ט (SKU)" value={editingItem.sku} onChange={(v:any) => setEditingItem({...editingItem, sku: v})} />
                       <EditField label="מחירון" value={editingItem.price} type="number" onChange={(v:any) => setEditingItem({...editingItem, price: v})} />
                       <EditField label="מילון DNA (סלנג שטח)" value={editingItem.keywords} placeholder="הפרד בפסיקים: שומשום, סומסום, שומו..." onChange={(v:any) => setEditingItem({...editingItem, keywords: v})} />
                    </div>
                    <div className="space-y-10">
                       <EditField label="לינק תמונה ראשי" value={editingItem.image_url} onChange={(v:any) => setEditingItem({...editingItem, image_url: v})} />
                       <EditField label="שיטת יישום מומלצת" value={editingItem.application_method} onChange={(v:any) => setEditingItem({...editingItem, application_method: v})} />
-                      <EditField label="תיאור מפרט טכני מלא" value={editingItem.description} type="textarea" onChange={(v:any) => setEditingItem({...editingItem, description: v})} />
+                      <EditField label="תיאור DNA מלא" value={editingItem.description} type="textarea" onChange={(v:any) => setEditingItem({...editingItem, description: v})} />
                    </div>
                 </div>
                 <div className="p-16 border-t border-slate-100 bg-white flex justify-end gap-6 shadow-inner">
                    <button onClick={() => setEditingItem(null)} className="px-14 py-6 rounded-[35px] font-black text-slate-400 hover:text-slate-900 transition-all uppercase text-sm italic tracking-widest">ביטול X</button>
                    <button onClick={async () => {
                      const { error } = await supabase.from('inventory').upsert(editingItem);
-                     if (!error) { toast.success("המלאי עודכן בהצלחה! 🦾"); setEditingItem(null); fetchData(); }
+                     if (!error) { toast.success("המלאי עודכן! 🦾"); setEditingItem(null); fetchData(); }
                    }} className="px-24 py-7 bg-blue-600 text-white rounded-[40px] font-black text-xl uppercase italic tracking-[0.3em] shadow-2xl flex items-center gap-6 hover:bg-blue-700 transition-all border-b-[12px] border-blue-800"><Save size={32}/> שמור שינויים 🦾</button>
                 </div>
              </motion.div>
@@ -422,7 +383,7 @@ export default function DnaNeuralStudio() {
         )}
       </AnimatePresence>
 
-      {/* Manual Selection Overlay */}
+      {/* Manual Selection Target Overlay */}
       <AnimatePresence>
         {selectingIdx !== null && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[550] bg-blue-600/40 backdrop-blur-xl pointer-events-none flex items-center justify-center">
@@ -437,7 +398,7 @@ export default function DnaNeuralStudio() {
         )}
       </AnimatePresence>
 
-      <footer className="py-40 border-t border-slate-100 opacity-20 text-center uppercase text-[12px] font-black tracking-[3em] italic text-slate-900 leading-none">Saban OS Neural Alignment Engine V64.0</footer>
+      <footer className="py-40 border-t border-slate-100 opacity-20 text-center uppercase text-[12px] font-black tracking-[3em] italic text-slate-900 leading-none">Saban OS Neural Alignment Engine V66.0</footer>
       <style jsx global>{`.scrollbar-hide::-webkit-scrollbar { display: none; }`}</style>
     </div>
   );
@@ -459,7 +420,7 @@ function EditField({ label, value, type = "text", onChange, placeholder, disable
        {type === 'textarea' ? (
          <textarea onChange={(e) => onChange(e.target.value)} className="w-full bg-white border-4 border-slate-100 p-8 rounded-[45px] font-bold text-xl outline-none focus:border-blue-500/20 h-52 text-right shadow-inner leading-relaxed" defaultValue={value} placeholder={placeholder} />
        ) : (
-         <input disabled={disabled} type={type} onChange={(e) => onChange(e.target.value)} className="w-full bg-white border-4 border-slate-100 p-8 rounded-[40px] font-bold text-2xl outline-none focus:border-blue-500/20 text-right shadow-inner disabled:bg-slate-100 disabled:text-slate-300" defaultValue={value} placeholder={placeholder} />
+         <input disabled={disabled} type={type} onChange={(e) => onChange(e.target.value)} className="w-full bg-white border-4 border-slate-100 p-8 rounded-[40px] font-bold text-2xl outline-none focus:border-blue-500/20 text-right shadow-inner" defaultValue={value} placeholder={placeholder} />
        )}
     </div>
   );
