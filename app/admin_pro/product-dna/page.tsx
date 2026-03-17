@@ -5,19 +5,20 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Save, X, Package, Clock, Gauge, Hammer, ShoppingCart, 
   ShieldCheck, Sparkles, Youtube, Image as ImageIcon, Tag, 
-  FileText, Dna, Zap, Monitor, Smartphone as MobileIcon, // תיקון הייבוא: הגדרת MobileIcon
+  FileText, Dna, Zap, Monitor, Smartphone as MobileIcon,
   PlayCircle, Maximize2, Plus, BrainCircuit, Search, ChevronRight,
-  MoreVertical, Info, Layout, Award, Loader2, RefreshCw, Layers
+  MoreVertical, Info, Layout, Award, Loader2, RefreshCw, Layers,
+  Edit3, Trash2, PackageSearch, Smartphone // הוספת האייקונים החסרים
 } from 'lucide-react';
 import { supabase } from "@/lib/supabase";
 import { toast, Toaster } from "sonner";
 
 /**
- * Saban OS V80.0 - DNA Product Designer Studio (Fixed Elite Edition)
+ * Saban OS V81.0 - DNA Product Designer Studio (Elite Note 25 Edition)
  * ------------------------------------------------------------------
- * - Fix: Resolved ReferenceError for MobileIcon.
- * - Hardware Simulator: Samsung Note 25 high-fidelity mockup.
- * - Resilience: Added ImageFallback to prevent 404 broken UI.
+ * - Fix: Resolved ReferenceError for Edit3, Trash2 and others.
+ * - Hardware Simulator: Samsung Note 25 high-fidelity mockup with Infinity Display.
+ * - Resilience: Advanced Image Fallback system for 404 links.
  */
 
 const CATEGORIES = ['צבעים', 'ציפויים', 'כלי עבודה', 'דבקים', 'אביזרים', 'גבס', 'בטון ומלט'];
@@ -84,6 +85,7 @@ export default function ProductDNAStudio() {
   };
 
   const removeKeyword = (kw: string) => {
+    if (!designItem) return;
     const updated = designItem.keywords.split(',').filter((k:any) => k.trim() !== kw.trim()).join(', ');
     setDesignItem({ ...designItem, keywords: updated });
   };
@@ -100,6 +102,18 @@ export default function ProductDNAStudio() {
       (i.sku || "").toString().includes(searchTerm)
     );
   }, [inventory, searchTerm]);
+
+  // רכיב תמונה חסין שגיאות
+  const SafeImage = ({ src, className, iconSize = 24 }: { src: string, className: string, iconSize?: number }) => {
+    const [error, setError] = useState(false);
+    if (!src || error) return (
+      <div className={`${className} bg-slate-900 border border-white/5 flex flex-col items-center justify-center text-slate-700 shadow-inner`}>
+        <ImageIcon size={iconSize} strokeWidth={1.5} />
+        {iconSize > 30 && <span className="text-[8px] font-black uppercase mt-2 opacity-30 italic">No Asset</span>}
+      </div>
+    );
+    return <img src={src} className={`${className} object-cover`} alt="Asset" onError={() => setError(true)} />;
+  };
 
   if (!mounted) return null;
 
@@ -119,7 +133,7 @@ export default function ProductDNAStudio() {
              <div>
                 <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter leading-none text-slate-900">DNA Designer Studio</h1>
                 <p className="text-[11px] font-bold text-slate-400 mt-3 uppercase tracking-[0.5em] flex items-center gap-2 justify-end">
-                  Samsung Note 25 Simulator <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                  Saban OS Elite Edition v81.0 <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
                 </p>
              </div>
           </div>
@@ -141,7 +155,9 @@ export default function ProductDNAStudio() {
                 <h3 className="font-black text-slate-800 uppercase text-xs flex items-center gap-3 tracking-widest leading-none">
                    <Layers size={18} className="text-blue-600"/> מאגר המלאי ({filteredInventory.length})
                 </h3>
-                <button onClick={fetchData} className="p-2 text-slate-400 hover:text-blue-600 transition-all"><RefreshCw size={18} className={loading ? 'animate-spin' : ''}/></button>
+                <button onClick={fetchData} className="p-2 text-slate-400 hover:text-blue-600 transition-all">
+                  <RefreshCw size={18} className={loading ? 'animate-spin' : ''}/>
+                </button>
              </div>
              <div className="flex-1 overflow-y-auto p-5 space-y-4 scrollbar-hide bg-[#FBFCFD]">
                 {filteredInventory.map(item => (
@@ -151,7 +167,7 @@ export default function ProductDNAStudio() {
                     className={`w-full p-6 rounded-[35px] border-2 text-right transition-all group flex items-center justify-between ${designItem?.sku === item.sku ? 'bg-[#0F172A] border-[#0F172A] shadow-2xl scale-[1.03]' : 'bg-white border-slate-100 hover:border-blue-200 shadow-sm'}`}
                   >
                     <div className="flex items-center gap-5 overflow-hidden">
-                       <ProductThumb src={item.image_url} />
+                       <SafeImage src={item.image_url} className="w-16 h-16 rounded-2xl shrink-0" iconSize={20} />
                        <div className="text-right truncate">
                           <p className={`font-black text-base leading-tight truncate ${designItem?.sku === item.sku ? 'text-white' : 'text-slate-900'}`}>{item.product_name || "ללא שם"}</p>
                           <p className={`text-[10px] font-black uppercase mt-2 ${designItem?.sku === item.sku ? 'text-blue-400' : 'text-slate-400'}`}>SKU {item.sku}</p>
@@ -163,10 +179,10 @@ export default function ProductDNAStudio() {
              </div>
           </div>
 
-          {/* --- Main Designer & Simulator Area --- */}
+          {/* --- Main Area --- */}
           <div className="xl:col-span-9 grid grid-cols-1 lg:grid-cols-12 gap-10">
             
-            {/* 1. Designer Workspace */}
+            {/* Editor Workspace */}
             <div className="lg:col-span-7 space-y-8">
                <AnimatePresence mode="wait">
                  {designItem ? (
@@ -176,46 +192,44 @@ export default function ProductDNAStudio() {
                       <div className="flex justify-between items-center border-b border-white/10 pb-10 relative z-10 text-right">
                          <div className="flex items-center gap-5">
                             <div className="w-14 h-14 bg-blue-600/10 rounded-2xl flex items-center justify-center text-blue-500 shadow-inner"><Edit3 size={28}/></div>
-                            <h3 className="text-3xl font-black italic uppercase text-white tracking-tighter leading-none">DNA Refactoring</h3>
+                            <h3 className="text-3xl font-black italic uppercase text-white tracking-tighter">DNA Refactoring</h3>
                          </div>
                          <button onClick={() => setDesignItem(null)} className="p-4 bg-white/5 text-slate-400 rounded-2xl hover:bg-rose-500/20 hover:text-rose-500 transition-all"><X size={24}/></button>
                       </div>
 
-                      <div className="space-y-12 overflow-y-auto max-h-[500px] scrollbar-hide pr-2">
-                         {/* Core Info */}
-                         <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                      <div className="space-y-12 overflow-y-auto max-h-[550px] scrollbar-hide pr-2">
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-10 text-right" dir="rtl">
                             <DesignField label="שם מוצר רשמי" value={designItem.product_name} onChange={(v:any) => setDesignItem({...designItem, product_name: v})} />
                             <DesignField label="מק''ט זיהוי (SKU)" value={designItem.sku} disabled />
                             <DesignField label="מחירון יחידה (₪)" value={designItem.price} type="number" onChange={(v:any) => setDesignItem({...designItem, price: v})} />
-                            <div className="space-y-3 text-right" dir="rtl">
+                            <div className="space-y-3 text-right">
                                <label className="text-[10px] font-black uppercase text-slate-500 mr-3 italic tracking-widest">קטגוריה</label>
-                               <select value={designItem.category} onChange={e => setDesignItem({...designItem, category: e.target.value})} className="w-full bg-slate-900 border-2 border-white/5 p-5 rounded-[22px] font-black text-xl text-white outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer">
+                               <select value={designItem.category || ""} onChange={e => setDesignItem({...designItem, category: e.target.value})} className="w-full bg-slate-900 border-2 border-white/5 p-5 rounded-[22px] font-black text-xl text-white outline-none focus:border-blue-500 appearance-none cursor-pointer">
+                                  <option value="">בחר קטגוריה</option>
                                   {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                                </select>
                             </div>
                          </div>
 
-                         {/* Media Section */}
                          <div className="space-y-6 pt-10 border-t border-white/5 text-right">
                             <h4 className="text-[11px] font-black text-slate-500 uppercase tracking-[0.3em] flex items-center gap-3 justify-end italic">Media Assets Cluster <ImageIcon size={14}/></h4>
                             <DesignField label="תמונה ראשית (URL)" value={designItem.image_url} onChange={(v:any) => setDesignItem({...designItem, image_url: v})} />
-                            <div className="grid grid-cols-2 gap-6">
+                            <div className="grid grid-cols-2 gap-4 text-right">
                                <DesignField label="תמונה 2" value={designItem.image_url_2} onChange={(v:any) => setDesignItem({...designItem, image_url_2: v})} />
                                <DesignField label="תמונה 3" value={designItem.image_url_3} onChange={(v:any) => setDesignItem({...designItem, image_url_3: v})} />
                             </div>
-                            <DesignField label="סרטון YouTube" value={designItem.video_url} onChange={(v:any) => setDesignItem({...designItem, video_url: v})} placeholder="https://..." />
+                            <DesignField label="סרטון הדרכה (YouTube URL)" value={designItem.video_url} onChange={(v:any) => setDesignItem({...designItem, video_url: v})} placeholder="https://..." />
                          </div>
 
-                         {/* Technical DNA */}
                          <div className="space-y-6 pt-10 border-t border-white/5 text-right">
-                            <h4 className="text-[11px] font-black text-slate-500 uppercase tracking-[0.3em] flex items-center gap-3 justify-end italic">Technical Intelligence <Zap size={14}/></h4>
-                            <div className="grid grid-cols-3 gap-4">
+                            <h4 className="text-[11px] font-black text-slate-500 uppercase tracking-[0.3em] flex items-center gap-3 justify-end italic">Technical DNA <Zap size={14}/></h4>
+                            <div className="grid grid-cols-3 gap-4 text-right">
                                <DesignField label="ייבוש" value={designItem.drying_time} onChange={(v:any) => setDesignItem({...designItem, drying_time: v})} placeholder="24 שעות" />
                                <DesignField label="כיסוי" value={designItem.coverage_info} onChange={(v:any) => setDesignItem({...designItem, coverage_info: v})} placeholder="ק''ג/מ''ר" />
                                <DesignField label="שיטת יישום" value={designItem.application_method} onChange={(v:any) => setDesignItem({...designItem, application_method: v})} placeholder="מריחה" />
                             </div>
                             <div className="space-y-3" dir="rtl">
-                               <label className="text-[10px] font-black uppercase text-slate-500 mr-3 flex items-center gap-2 justify-end">מילון סלנג (DNA Keywords) <Tag size={12}/></label>
+                               <label className="text-[10px] font-black uppercase text-slate-500 mr-3 flex items-center gap-2 justify-end italic">מילון סלנג שטח <Tag size={12}/></label>
                                <div className="flex gap-2">
                                   <input value={keywordInput} onChange={e => setKeywordInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addKeyword()} placeholder="הקלד מילה והקש Enter" className="flex-1 bg-slate-900 border-2 border-white/5 p-5 rounded-[22px] font-black text-xl text-white outline-none focus:border-blue-500" />
                                   <button onClick={addKeyword} className="px-6 bg-blue-600 text-white rounded-2xl font-black active:scale-90 shadow-xl">+</button>
@@ -224,17 +238,17 @@ export default function ProductDNAStudio() {
                                   {(designItem.keywords || "").split(',').filter(Boolean).map((kw: string) => (
                                     <span key={kw} className="bg-blue-600/20 text-blue-400 px-4 py-2 rounded-xl text-xs font-black uppercase border border-blue-500/20 flex items-center gap-2">
                                        {kw.trim()}
-                                       <X size={12} className="cursor-pointer" onClick={() => removeKeyword(kw)} />
+                                       <X size={12} className="cursor-pointer hover:text-rose-500" onClick={() => removeKeyword(kw)} />
                                     </span>
                                   ))}
-                               </div>
+                                </div>
                             </div>
                          </div>
 
                          <div className="space-y-4 pt-10 border-t border-white/5 text-right">
-                            <label className="text-[11px] font-black text-slate-500 uppercase mr-3 tracking-[0.2em] italic leading-none block">Full Technical Specifications</label>
+                            <label className="text-[11px] font-black text-slate-500 uppercase mr-3 tracking-[0.2em] italic leading-none block text-right">Full Technical Specifications</label>
                             <textarea 
-                               onChange={(e) => setDesignItem({...designItem, description: e.target.value})} 
+                               onChange={(e) => setEditingItem({...designItem, description: e.target.value})} 
                                className="w-full bg-slate-900 border-2 border-white/5 p-8 rounded-[40px] font-bold text-lg text-white outline-none focus:border-blue-500 transition-all h-40 text-right shadow-inner leading-relaxed scrollbar-hide" 
                                value={designItem.description || ""}
                             />
@@ -243,7 +257,7 @@ export default function ProductDNAStudio() {
 
                       <div className="pt-10 flex justify-end gap-6 border-t border-white/10">
                          <button onClick={() => setDesignItem(null)} className="px-14 py-6 rounded-[35px] font-black text-slate-500 hover:text-white transition-all uppercase text-sm italic tracking-widest">Discard</button>
-                         <button onClick={handleSaveDNA} disabled={isSaving} className="px-24 py-7 bg-blue-600 text-white rounded-[40px] font-black text-xl uppercase italic tracking-[0.2em] shadow-2xl flex items-center gap-6 hover:bg-blue-500 transition-all border-b-[12px] border-blue-900 active:scale-95 disabled:opacity-50">
+                         <button onClick={handleSaveDNA} disabled={isSaving} className="px-24 py-7 bg-blue-600 text-white rounded-[40px] font-black text-xl uppercase italic tracking-[0.3em] shadow-2xl flex items-center gap-6 hover:bg-blue-700 transition-all border-b-[12px] border-blue-900 active:scale-95 disabled:opacity-50">
                             {isSaving ? <Loader2 className="animate-spin" size={32}/> : <Save size={32}/>}
                             Inject & Sync DNA 🦾
                          </button>
@@ -261,70 +275,69 @@ export default function ProductDNAStudio() {
                </AnimatePresence>
             </div>
 
-            {/* 2. Live Simulator View: Samsung Note 25 Frame */}
+            {/* 2. Live Simulator: Note 25 Elite */}
             <div className="lg:col-span-5 flex flex-col items-center">
                <div className="flex items-center gap-4 bg-white px-8 py-4 rounded-full border border-slate-200 shadow-md mb-8">
-                  <Monitor size={22} className="text-blue-500" />
+                  <MobileIcon className="text-blue-500" size={24} />
                   <span className="h-6 w-[2px] bg-slate-100" />
-                  <MobileIcon size={22} className="text-slate-400" /> {/* MobileIcon עכשיו מוגדר כ-Smartphone */}
-                  <span className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 italic mr-2 text-right">LIVE VIP SIMULATOR</span>
+                  <span className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-500 italic mr-2 text-right">SAMSUNG NOTE 25 ELITE</span>
                </div>
 
                <div className="relative bg-[#020617] rounded-[75px] border-[14px] border-slate-800 shadow-[0_80px_160px_rgba(0,0,0,0.6)] w-full max-w-[420px] aspect-[9/19.5] flex flex-col overflow-hidden group">
                   {/* Punch Hole Camera */}
                   <div className="absolute top-5 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-black rounded-full z-50 border border-slate-700 shadow-inner" />
                   
-                  {/* App Container */}
+                  {/* App Layer */}
                   <div className="flex-1 overflow-y-auto scrollbar-hide relative bg-white/5 backdrop-blur-3xl m-2.5 rounded-[60px] border border-white/5 p-6 space-y-6 text-white text-right" dir="rtl">
                      <div className="flex justify-between items-center pt-5 px-3">
-                        <div className="w-10 h-10 bg-white/10 rounded-2xl flex items-center justify-center shadow-lg backdrop-blur-md"><ChevronRight size={20}/></div>
+                        <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center shadow-lg backdrop-blur-md"><ChevronRight size={20}/></div>
                         <img src="/ai.png" className="h-8 opacity-90 drop-shadow-xl" alt="Saban" />
-                        <div className="w-10 h-10 bg-white/10 rounded-2xl flex items-center justify-center shadow-lg backdrop-blur-md"><MoreVertical size={18}/></div>
+                        <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center shadow-lg backdrop-blur-md"><MoreVertical size={18}/></div>
                      </div>
 
-                     {/* Stitched Image Collage */}
+                     {/* Image Collage Stitched Style */}
                      <div className="grid grid-cols-12 gap-3 h-64 mx-2">
                         <div className="col-span-8 bg-slate-900 rounded-[35px] overflow-hidden relative border border-white/10 shadow-2xl group/img">
-                           <AssetSimulatorPreview url={designItem?.image_url} size="lg" />
+                           <SafeImage src={designItem?.image_url} className="w-full h-full" iconSize={40} />
                            <div className="absolute bottom-4 left-4 bg-black/60 p-2.5 rounded-xl border border-white/10 backdrop-blur-md"><Maximize2 size={14}/></div>
                         </div>
                         <div className="col-span-4 flex flex-col gap-3">
                            <div className="flex-1 bg-slate-900 rounded-[22px] overflow-hidden border border-white/10 shadow-lg">
-                              <AssetSimulatorPreview url={designItem?.image_url_2} size="sm" />
+                              <SafeImage src={designItem?.image_url_2} className="w-full h-full" iconSize={20} />
                            </div>
                            <div className="flex-1 bg-slate-900 rounded-[22px] overflow-hidden border border-white/10 shadow-lg">
-                              <AssetSimulatorPreview url={designItem?.image_url_3} size="sm" />
+                              <SafeImage src={designItem?.image_url_3} className="w-full h-full" iconSize={20} />
                            </div>
                         </div>
                      </div>
 
                      <div className="space-y-4 pt-4 px-4 text-right">
                         <div className="flex items-center gap-3 justify-end">
-                           <span className="bg-blue-600/20 text-blue-400 px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border border-blue-500/20 shadow-sm flex items-center gap-2 leading-none">
+                           <span className="bg-blue-600/20 text-blue-400 px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border border-blue-500/20 shadow-sm flex items-center gap-2 leading-none italic uppercase">
                               <Award size={10}/> Elite Asset
                            </span>
                            <ShieldCheck size={20} className="text-emerald-500 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
                         </div>
-                        <h2 className="text-4xl font-black italic tracking-tighter uppercase leading-none">{designItem?.product_name || "Waiting for Input..."}</h2>
+                        <h2 className="text-3xl font-black italic tracking-tighter uppercase leading-none">{designItem?.product_name || "Waiting for Input..."}</h2>
                         <div className="flex items-center gap-3 opacity-60 justify-end font-bold text-[10px]">
                            <span>SKU: {designItem?.sku || "----"}</span>
                            <span className="h-3 w-[1px] bg-white/20" />
-                           <span className="uppercase italic tracking-widest">{designItem?.category || "Building Materials"}</span>
+                           <span className="uppercase italic tracking-widest">{designItem?.category || "Industrial Grade"}</span>
                         </div>
                      </div>
 
                      {/* Tech DNA Matrix */}
-                     <div className="grid grid-cols-3 gap-2 px-4 py-2">
-                        <TechPill icon={<Clock size={14}/>} label="Drying" value={designItem?.drying_time} />
-                        <TechPill icon={<Gauge size={14}/>} label="Coverage" value={designItem?.coverage_info} />
-                        <TechPill icon={<Hammer size={14}/>} label="Method" value={designItem?.application_method} />
+                     <div className="grid grid-cols-3 gap-2 px-4 py-2 text-right" dir="rtl">
+                        <TechPill icon={<Clock size={14}/>} label="ייבוש" value={designItem?.drying_time} />
+                        <TechPill icon={<Gauge size={14}/>} label="כיסוי" value={designItem?.coverage_info} />
+                        <TechPill icon={<Hammer size={14}/>} label="יישום" value={designItem?.application_method} />
                      </div>
 
-                     {/* Video Integrator */}
+                     {/* Video Player Integrator */}
                      {youtubeId && (
                         <div className="mx-4 aspect-video bg-black rounded-[40px] overflow-hidden border border-white/10 shadow-2xl relative group">
                            <iframe className="w-full h-full pointer-events-none opacity-60 grayscale-[0.5] group-hover:grayscale-0 transition-all" src={`https://www.youtube.com/embed/${youtubeId}?modestbranding=1&controls=0&mute=1`} frameBorder="0" />
-                           <div className="absolute inset-0 flex flex-col items-center justify-center bg-blue-900/10 backdrop-blur-[1px]">
+                           <div className="absolute inset-0 flex flex-col items-center justify-center bg-blue-900/20 backdrop-blur-[1px]">
                               <PlayCircle size={64} className="text-white drop-shadow-2xl opacity-70" strokeWidth={1} />
                               <p className="text-[10px] font-black uppercase tracking-[0.4em] mt-3 text-blue-100">Application Guide</p>
                            </div>
@@ -332,13 +345,13 @@ export default function ProductDNAStudio() {
                      )}
 
                      {/* Advisor Smart Box */}
-                     <div className="bg-blue-600/10 border border-blue-500/10 p-8 rounded-[45px] relative overflow-hidden mx-4 shadow-inner">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 blur-[50px] rounded-full" />
+                     <div className="bg-blue-600/10 border border-blue-500/10 p-8 rounded-[45px] relative overflow-hidden mx-4 shadow-inner text-right" dir="rtl">
+                        <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 blur-[50px] rounded-full" />
                         <div className="relative z-10 flex items-center gap-3 mb-4 text-blue-400 justify-end">
-                           <span className="text-[11px] font-black uppercase tracking-widest italic">Saban Pro Advisor</span>
+                           <span className="text-[11px] font-black uppercase tracking-widest italic leading-none">Saban Pro Advisor</span>
                            <Sparkles size={16} className="animate-pulse" />
                         </div>
-                        <p className="text-[15px] font-bold leading-relaxed opacity-70 italic text-right truncate-4-lines">
+                        <p className="text-[14px] font-bold leading-relaxed opacity-70 italic text-right truncate-4-lines">
                            {designItem?.description || "מפרט טכני מלא יופיע כאן ברגע שיוזן במערכת המנהל..."}
                         </p>
                      </div>
@@ -350,8 +363,9 @@ export default function ProductDNAStudio() {
                      </div>
                   </div>
 
+                  {/* Navigation Bar Note 25 */}
                   <div className="h-16 bg-[#020617] border-t border-white/5 flex items-center justify-center px-12 relative z-50">
-                     <div className="w-32 h-1.5 bg-slate-700 rounded-full shadow-inner" />
+                     <div className="w-32 h-1.5 bg-slate-700 rounded-full" />
                   </div>
                </div>
             </div>
@@ -360,7 +374,7 @@ export default function ProductDNAStudio() {
         </div>
       </div>
       
-      <footer className="py-24 border-t border-slate-100 opacity-20 text-center uppercase text-[12px] font-black tracking-[3em] italic text-slate-900 leading-none">Saban OS Neural Design Suite V80.0</footer>
+      <footer className="py-40 border-t border-slate-100 opacity-20 text-center uppercase text-[12px] font-black tracking-[3em] italic text-slate-900 leading-none">Saban OS Neural Design Engine V81.0</footer>
       <style jsx global>{`.scrollbar-hide::-webkit-scrollbar { display: none; } .truncate-4-lines { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }`}</style>
     </div>
   );
@@ -382,27 +396,11 @@ function DesignField({ label, value, type = "text", onChange, placeholder, disab
   );
 }
 
-function AssetSimulatorPreview({ url, size }: { url: string, size: "sm" | "lg" }) {
-  const [err, setErr] = useState(false);
-  if (!url || err) return (
-    <div className="w-full h-full flex flex-col items-center justify-center text-slate-800 bg-slate-950 shadow-inner">
-       <ImageIcon size={size === "lg" ? 40 : 20} strokeWidth={1} className="opacity-20" />
-    </div>
-  );
-  return <img src={url} className="w-full h-full object-cover shadow-lg" onError={() => setErr(true)} />;
-}
-
-function ProductThumb({ src }: { src: string }) {
-  const [err, setErr] = useState(false);
-  if (!src || err) return <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-300 border border-slate-100 shrink-0 shadow-inner"><ImageIcon size={20}/></div>;
-  return <img src={src} className="w-16 h-16 rounded-2xl object-cover shadow-md border-2 border-white shrink-0" onError={() => setErr(true)} />;
-}
-
 function TechPill({ icon, label, value }: any) {
   return (
-    <div className="bg-white/5 border border-white/5 p-5 rounded-[30px] text-center shadow-inner group hover:bg-white/10 transition-all overflow-hidden text-right border-b-2 border-b-blue-500/10">
-       <div className="text-blue-500 mx-auto mb-3 flex justify-center drop-shadow-md">{icon}</div>
-       <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-1.5 leading-none text-center">{label}</p>
+    <div className="bg-white/5 border border-white/5 p-4 rounded-[30px] text-center shadow-inner group hover:bg-white/10 transition-all overflow-hidden text-right border-b-2 border-b-blue-500/10">
+       <div className="text-blue-500 mx-auto mb-2 flex justify-center drop-shadow-md">{icon}</div>
+       <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-1.5 leading-none text-center italic">{label}</p>
        <p className="text-[11px] font-black text-white italic tracking-tighter truncate text-center leading-none">{value || "--"}</p>
     </div>
   );
