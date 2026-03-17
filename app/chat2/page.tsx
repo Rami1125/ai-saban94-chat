@@ -56,7 +56,7 @@ export default function SabanChatPage() {
 
     try {
       // שליחה ל-API החכם שלנו (זה שכולל את הדילוג בין מודלים וספר החוקים)
-      const response = await fetch("/api/ai/consult", {
+      const response = await fetch("/api/pro_brain", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
