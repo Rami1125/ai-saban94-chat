@@ -9,17 +9,18 @@ import {
   Search, Package, Image as ImageIcon, Plus, X, 
   AlertCircle, Eye, HardDrive, MousePointer2, BrainCircuit,
   Tag, ChevronRight, CheckCircle, ListPlus, Smartphone, Layers,
-  Layout, Monitor, Smartphone as MobileIcon, Gauge, Clock, Hammer
+  Layout, Monitor, Smartphone as MobileIcon, Gauge, Clock, Hammer,
+  ShoppingCart // הוספת הייבוא החסר שגרם לשגיאה
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast, Toaster } from "sonner";
 
 /**
- * Saban OS V68.0 - Neural Mapping Studio with Live Simulator
+ * Saban OS V69.0 - Neural Mapping Studio with Elite Simulator
  * --------------------------------------------------------
- * - Feature: Dynamic Row Editing for Trained Assets.
- * - Tool: Integrated VIP View Simulator inside the editor.
- * - Context: Specifically optimized for Gypsum / VERO assets (e.g. SKU 76208).
+ * - Fix: Added missing 'ShoppingCart' import.
+ * - Feature: Direct Dynamic Edit button on each Matrix Row.
+ * - Tool: Real-time VIP App Simulator for visual confirmation.
  */
 
 export default function DnaNeuralStudio() {
@@ -57,6 +58,7 @@ export default function DnaNeuralStudio() {
     }
   };
 
+  // --- מנוע הניתוח וההצלבה הנוירולוגי ---
   const handleStartAnalysis = () => {
     if (!inputRaw) return toast.error("הזרק רשימה מהשטח לניתוח");
     setIsAnalyzing(true);
@@ -67,7 +69,8 @@ export default function DnaNeuralStudio() {
         const parts = line.split('\t');
         return {
           sku: parts[2]?.trim() || line.match(/\d{5,}/)?.[0],
-          name: parts[1]?.trim() || line
+          name: parts[1]?.trim() || line,
+          qty: parts[0]?.trim() || "1"
         };
       }).filter(s => s.sku);
 
@@ -84,7 +87,7 @@ export default function DnaNeuralStudio() {
           raw: line,
           product: finalProduct || null,
           status: finalProduct ? 'matched' : 'needs_training',
-          qty: line.match(/\d+/)?.[0] || "1"
+          qty: deliveryMatch?.qty || line.match(/\d+/)?.[0] || "1"
         };
       });
 
@@ -134,7 +137,7 @@ export default function DnaNeuralStudio() {
              <div>
                 <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter leading-none text-slate-900">Neural Alignment Lab</h1>
                 <p className="text-[11px] font-bold text-slate-400 mt-3 uppercase tracking-[0.5em] flex items-center gap-2 justify-end">
-                  Precision Training v68.0 <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                  Precision Training v69.0 <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
                 </p>
              </div>
           </div>
@@ -199,7 +202,7 @@ export default function DnaNeuralStudio() {
                                </div>
                             </div>
                             <ArrowLeftRight className={item.status !== 'needs_training' ? 'text-blue-500' : 'text-slate-200'} size={44} />
-                            <div className="flex-[2.5] flex items-center gap-8 bg-white p-6 rounded-[45px] border border-slate-100 shadow-sm w-full relative group">
+                            <div className="flex-[3] flex items-center gap-8 bg-white p-6 rounded-[45px] border border-slate-100 shadow-sm w-full relative group">
                                <div className={`w-24 h-24 rounded-[30px] overflow-hidden bg-slate-50 flex items-center justify-center relative shadow-inner shrink-0 border-4 border-white ${!item.product && 'bg-rose-50'}`}>
                                   {item.product?.image_url ? <img src={item.product.image_url} className="w-full h-full object-cover" /> : <PackageSearch size={44} className="text-slate-200" />}
                                </div>
@@ -220,8 +223,11 @@ export default function DnaNeuralStudio() {
                                     <button onClick={() => { setSelectingIdx(idx); setActiveTab('inventory'); }} className="px-10 py-5 bg-slate-950 text-white rounded-[30px] font-black text-xs uppercase shadow-xl hover:bg-blue-600 transition-all flex items-center gap-3"><MousePointer2 size={20}/> שליפה</button>
                                   ) : (
                                     <div className="flex items-center gap-3">
-                                       <button onClick={() => setEditingItem(item.product)} className="p-5 bg-blue-50 text-blue-600 rounded-[28px] hover:bg-blue-600 hover:text-white transition-all shadow-sm active:scale-90 border border-blue-100">
-                                          <Edit3 size={24}/>
+                                       <button 
+                                          onClick={() => setEditingItem(item.product)} 
+                                          className="flex items-center gap-3 px-8 py-5 bg-blue-600 text-white rounded-[28px] hover:bg-blue-700 transition-all shadow-xl active:scale-90 font-black text-[10px] uppercase italic tracking-widest"
+                                       >
+                                          עריכה וסימולציה <Edit3 size={18}/>
                                        </button>
                                        {item.status === 'matched' && (
                                          <button onClick={() => handleTrainDna(idx, item.product)} className="px-10 py-5 bg-emerald-500 text-white rounded-[30px] font-black text-xs uppercase shadow-xl border-b-4 border-emerald-700">אמן DNA</button>
@@ -441,7 +447,7 @@ export default function DnaNeuralStudio() {
                          {/* Simulator Footer Button */}
                          <div className="p-8 bg-[#020617] border-t border-white/5">
                             <div className="w-full bg-white text-slate-900 py-5 rounded-[25px] font-black text-[10px] uppercase tracking-[0.4em] flex items-center justify-center gap-3 italic">
-                               ADD TO COMMAND <ShoppingCart size={18}/>
+                               ADD TO COMMAND <ShoppingCart size={18} className="text-blue-600" />
                             </div>
                          </div>
                       </div>
@@ -468,7 +474,7 @@ export default function DnaNeuralStudio() {
         )}
       </AnimatePresence>
 
-      <footer className="py-40 border-t border-slate-100 opacity-20 text-center uppercase text-[12px] font-black tracking-[3em] italic text-slate-900 leading-none">Saban OS Neural Alignment Engine V68.0</footer>
+      <footer className="py-40 border-t border-slate-100 opacity-20 text-center uppercase text-[12px] font-black tracking-[3em] italic text-slate-900 leading-none">Saban OS Neural Alignment Engine V69.0</footer>
       <style jsx global>{`.scrollbar-hide::-webkit-scrollbar { display: none; }`}</style>
     </div>
   );
