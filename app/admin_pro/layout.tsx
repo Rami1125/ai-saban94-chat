@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, Zap, Users, Scale, ShieldAlert, 
   Monitor, ShieldCheck, ShoppingBag, PlusCircle, Smartphone,
-  MessageSquare
+  MessageSquare, Dna
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Toaster } from "sonner";
