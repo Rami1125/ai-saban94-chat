@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from "@/lib/supabase";
 import { 
-  Zap, Save, X, Image as ImageIcon, Video, Smartphone, 
-  Layers, Tag, BrainCircuit, Monitor, Smartphone as MobileIcon, 
+  Zap, Save, X, Image as ImageIcon, Video, 
+  Layers, Tag, BrainCircuit, Monitor, 
   Gauge, Clock, Hammer, ShoppingCart, ChevronRight, 
   ShieldCheck, ArrowUpRight, Search, Loader2, Plus, 
   RefreshCw, Info, Maximize2, Trash2, Edit3, Sparkles, 
@@ -13,21 +13,11 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast, Toaster } from "sonner";
 
-/**
- * Saban OS V73.1 - DNA Product Designer Studio (Samsung Note 25 Edition)
- * -------------------------------------------
- * - Workspace: Side-by-side Editor & Live Simulator.
- * - Fix: Added missing 'Sparkles' import.
- * - Design: Ultra-rounded 5xl, Slate-950, Executive Glass.
- */
-
 export default function ProductDNAStudio() {
   const [mounted, setMounted] = useState(false);
   const [inventory, setInventory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  
-  // State for the item currently being designed
   const [designItem, setDesignItem] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -36,341 +26,206 @@ export default function ProductDNAStudio() {
     fetchData();
   }, []);
 
-  const fetchData = async () => {
-    setLoading(true);
+  async function fetchData() {
     try {
-      const { data, error } = await supabase.from('inventory').select('*').order('product_name');
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('inventory')
+        .select('*')
+        .order('product_name', { ascending: true });
+
       if (error) throw error;
       setInventory(data || []);
-    } catch (e: any) {
-      toast.error("סנכרון מלאי נכשל");
+    } catch (error: any) {
+      toast.error("שגיאה בטעינת נתונים: " + error.message);
     } finally {
       setLoading(false);
     }
+  }
+
+  // פונקציה לניקוי נתונים לפני שליחה למניעת שגיאות 400
+  const sanitizePayload = (item: any) => {
+    const { price, ...rest } = item; // הסרת המחיר כפי שביקשת
+    return {
+      ...rest,
+      product_name: rest.product_name || 'מוצר חדש',
+      stock_quantity: Number(rest.stock_quantity) || 0,
+      category: rest.category || 'כללי',
+      sku: String(rest.sku || ''),
+      updated_at: new Date().toISOString()
+    };
   };
 
-  const handleSaveDNA = async () => {
-    if (!designItem?.sku) return toast.error("חובה להזין מק\"ט");
-    setIsSaving(true);
-    const toastId = toast.loading("מזריק עדכון DNA למערכת...");
+  const handleSave = async () => {
+    if (!designItem) return;
     
+    setIsSaving(true);
     try {
-      const { error } = await supabase.from('inventory').upsert({
-        ...designItem,
-        last_trained: new Date().toISOString()
-      });
+      const payload = sanitizePayload(designItem);
+      
+      const { error } = await supabase
+        .from('inventory')
+        .upsert(payload, { onConflict: 'sku' });
 
       if (error) throw error;
-      toast.success("המוצר עודכן וסונכרן לשטח! 🦾", { id: toastId });
+
+      toast.success("המוצר נשמר בהצלחה בטבלת המלאי");
       fetchData();
-    } catch (e: any) {
-      toast.error("שגיאה בעדכון: " + e.message, { id: toastId });
+    } catch (error: any) {
+      console.error("Save error:", error);
+      toast.error("שגיאת שמירה: ודא שכל השדות תקינים");
     } finally {
       setIsSaving(false);
     }
   };
 
   const filteredInventory = useMemo(() => {
-    return inventory.filter(i => 
-      (i.product_name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (i.sku || "").toString().includes(searchTerm)
+    return inventory.filter(item => 
+      item.product_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.sku?.includes(searchTerm)
     );
   }, [inventory, searchTerm]);
-
-  // Helper for YouTube ID
-  const getYoutubeId = (url: string) => {
-    if (!url) return null;
-    const match = url.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/);
-    return (match && match[2].length === 11) ? match[2] : null;
-  };
 
   if (!mounted) return null;
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-10 font-sans text-right" dir="rtl">
-      <Toaster position="top-center" richColors theme="dark" />
-
-      <div className="max-w-[1800px] mx-auto space-y-8">
-        
-        {/* --- Header --- */}
-        <div className="flex flex-col lg:flex-row justify-between items-center gap-8 bg-white p-10 rounded-[60px] border border-slate-100 shadow-xl relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-64 h-full bg-blue-600/5 -skew-x-12 translate-x-16 group-hover:translate-x-8 transition-transform duration-1000" />
-          <div className="flex items-center gap-10 relative z-10">
-             <div className="w-24 h-24 bg-slate-950 text-blue-500 rounded-[40px] flex items-center justify-center shadow-2xl ring-8 ring-slate-50">
-                <BrainCircuit size={48} />
-             </div>
-             <div>
-                <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter leading-none text-slate-900">Product Designer</h1>
-                <p className="text-[11px] font-bold text-slate-400 mt-3 uppercase tracking-[0.5em] flex items-center gap-2 justify-end text-right">
-                  Saban OS Elite Studio V73.1 <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                </p>
-             </div>
-          </div>
-          <div className="flex gap-4 w-full lg:w-auto relative z-10">
-             <div className="relative flex-1 lg:w-96 group">
-                <Search className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors" size={24} />
-                <input 
-                  placeholder="חפש מוצר לעיצוב..." 
-                  value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full bg-slate-50 border-none pr-16 pl-8 py-5 rounded-[30px] font-black outline-none focus:ring-4 ring-blue-500/10 transition-all shadow-inner text-lg text-right" 
-                />
-             </div>
-             <button onClick={() => setDesignItem({ sku: '', product_name: '', price: 0 })} className="bg-blue-600 text-white px-10 py-5 rounded-[30px] font-black shadow-xl flex items-center gap-4 hover:bg-blue-700 active:scale-95 transition-all border-b-8 border-blue-800 uppercase italic tracking-widest shrink-0">
-                <Plus size={24}/> מוצר חדש
-             </button>
-          </div>
+    <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8 font-sans" dir="rtl">
+      <Toaster position="top-center" richColors />
+      
+      {/* Header */}
+      <div className="max-w-7xl mx-auto mb-8 flex justify-between items-center">
+        <div>
+          <h1 className="text-4xl font-black tracking-tighter bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+            SABAN DNA STUDIO
+          </h1>
+          <p className="text-slate-400 text-sm mt-1">ניהול מלאי ועיצוב מוצר V73.1</p>
         </div>
-
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-10">
-          
-          {/* --- Sidebar: Inventory --- */}
-          <div className="xl:col-span-3 bg-white rounded-[55px] border border-slate-200 shadow-xl overflow-hidden flex flex-col h-[900px]">
-             <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                <h3 className="font-black text-slate-800 uppercase text-xs flex items-center gap-3 tracking-widest leading-none">
-                   <Layers size={18} className="text-blue-600"/> מאגר המלאי ({filteredInventory.length})
-                </h3>
-                <button onClick={fetchData} className="p-2 text-slate-400 hover:text-blue-600 transition-all"><RefreshCw size={18}/></button>
-             </div>
-             <div className="flex-1 overflow-y-auto p-5 space-y-4 scrollbar-hide bg-[#FBFCFD]">
-                {filteredInventory.map(item => (
-                  <button 
-                    key={item.sku}
-                    onClick={() => setDesignItem(item)}
-                    className={`w-full p-6 rounded-[35px] border-2 text-right transition-all group flex items-center justify-between ${designItem?.sku === item.sku ? 'bg-[#0F172A] border-[#0F172A] shadow-2xl scale-[1.03]' : 'bg-white border-slate-100 hover:border-blue-200 shadow-sm'}`}
-                  >
-                    <div className="flex items-center gap-5 overflow-hidden">
-                       <ProductThumb src={item.image_url} />
-                       <div className="text-right truncate">
-                          <p className={`font-black text-base leading-tight truncate ${designItem?.sku === item.sku ? 'text-white' : 'text-slate-900'}`}>{item.product_name || "ללא שם"}</p>
-                          <p className={`text-[10px] font-black uppercase mt-2 ${designItem?.sku === item.sku ? 'text-blue-400' : 'text-slate-400'}`}>SKU {item.sku}</p>
-                       </div>
-                    </div>
-                    <ChevronRight size={20} className={designItem?.sku === item.sku ? 'text-blue-500 translate-x-1' : 'text-slate-200'} />
-                  </button>
-                ))}
-             </div>
+        
+        <div className="flex gap-4">
+          <div className="relative">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
+            <input 
+              type="text"
+              placeholder="חיפוש מהיר..."
+              className="bg-slate-900 border border-slate-800 rounded-2xl pr-10 pl-4 py-2 text-sm focus:ring-2 ring-blue-500 outline-none w-64 transition-all"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
-
-          {/* --- Main Area --- */}
-          <div className="xl:col-span-9 grid grid-cols-1 lg:grid-cols-12 gap-10">
-            
-            {/* Editor Workspace */}
-            <div className="lg:col-span-7 space-y-8">
-               <AnimatePresence mode="wait">
-                 {designItem ? (
-                   <motion.div key="editor" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="bg-white rounded-[60px] p-10 md:p-14 shadow-2xl border border-slate-200 space-y-12 relative overflow-hidden">
-                      <div className="absolute top-0 left-0 w-32 h-32 bg-blue-600/5 blur-[60px] rounded-full" />
-                      
-                      <div className="flex justify-between items-center border-b border-slate-100 pb-10 relative z-10">
-                         <div className="flex items-center gap-5">
-                            <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 shadow-inner"><Edit3 size={28}/></div>
-                            <h3 className="text-3xl font-black italic uppercase text-slate-900 tracking-tighter">DNA Refactoring</h3>
-                         </div>
-                         <button onClick={() => setDesignItem(null)} className="p-4 bg-slate-50 text-slate-400 rounded-2xl hover:bg-rose-50 hover:text-rose-500 transition-all"><X size={24}/></button>
-                      </div>
-
-                      <div className="space-y-10">
-                         {/* Core Fields */}
-                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            <DesignField label="שם מוצר בקומקס" value={designItem.product_name} onChange={(v:any) => setDesignItem({...designItem, product_name: v})} />
-                            <DesignField label="מק''ט זיהוי (SKU)" value={designItem.sku} disabled />
-                            <DesignField label="מחירון יחידה (₪)" value={designItem.price} type="number" onChange={(v:any) => setDesignItem({...designItem, price: v})} />
-                            <DesignField label="קטגוריה" value={designItem.category} onChange={(v:any) => setDesignItem({...designItem, category: v})} />
-                         </div>
-
-                         {/* Media Assets */}
-                         <div className="space-y-6 pt-10 border-t border-slate-50">
-                            <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em] flex items-center gap-3 justify-end italic">Media Assets Matrix <ImageIcon size={14}/></h4>
-                            <DesignField label="לינק תמונה ראשית" value={designItem.image_url} onChange={(v:any) => setDesignItem({...designItem, image_url: v})} />
-                            <div className="grid grid-cols-2 gap-4">
-                               <DesignField label="תמונה 2" value={designItem.image_url_2} onChange={(v:any) => setDesignItem({...designItem, image_url_2: v})} />
-                               <DesignField label="תמונה 3" value={designItem.image_url_3} onChange={(v:any) => setDesignItem({...designItem, image_url_3: v})} />
-                            </div>
-                            <DesignField label="לינק סרטון יוטיוב" value={designItem.video_url} onChange={(v:any) => setDesignItem({...designItem, video_url: v})} placeholder="https://youtube.com/..." />
-                         </div>
-
-                         {/* Tech DNA */}
-                         <div className="space-y-6 pt-10 border-t border-slate-50">
-                            <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em] flex items-center gap-3 justify-end italic">Technical DNA <Zap size={14}/></h4>
-                            <div className="grid grid-cols-3 gap-4">
-                               <DesignField label="ייבוש" value={designItem.drying_time} onChange={(v:any) => setDesignItem({...designItem, drying_time: v})} placeholder="24 שעות" />
-                               <DesignField label="כיסוי" value={designItem.coverage_info} onChange={(v:any) => setDesignItem({...designItem, coverage_info: v})} placeholder="ק''ג למ''ר" />
-                               <DesignField label="שיטת יישום" value={designItem.application_method} onChange={(v:any) => setDesignItem({...designItem, application_method: v})} placeholder="מאלג'" />
-                            </div>
-                            <DesignField label="מילון DNA (סלנג)" value={designItem.keywords} onChange={(v:any) => setDesignItem({...designItem, keywords: v})} placeholder="בורג, ורו, פחפח..." />
-                         </div>
-
-                         <div className="space-y-4 pt-10 border-t border-slate-50">
-                            <label className="text-[11px] font-black text-slate-400 uppercase mr-3 tracking-[0.2em] italic">תיאור מפרט טכני מלא</label>
-                            <textarea 
-                               onChange={(e) => setDesignItem({...designItem, description: e.target.value})} 
-                               className="w-full bg-slate-50 border-2 border-slate-100 p-8 rounded-[40px] font-bold text-lg outline-none focus:border-blue-500 focus:bg-white transition-all h-48 text-right shadow-inner leading-relaxed scrollbar-hide" 
-                               value={designItem.description || ""}
-                            />
-                         </div>
-                      </div>
-
-                      <div className="pt-10 flex justify-end gap-6 border-t border-slate-100">
-                         <button onClick={() => setDesignItem(null)} className="px-14 py-6 rounded-[30px] font-black text-slate-400 hover:text-slate-900 transition-all uppercase text-sm italic tracking-widest">ביטול X</button>
-                         <button 
-                            onClick={handleSaveDNA} 
-                            disabled={isSaving}
-                            className="px-24 py-7 bg-blue-600 text-white rounded-[40px] font-black text-xl uppercase italic tracking-[0.2em] shadow-2xl flex items-center gap-6 hover:bg-blue-700 transition-all border-b-[12px] border-blue-900 active:scale-95 disabled:opacity-50"
-                         >
-                            {isSaving ? <Loader2 className="animate-spin" size={32}/> : <Save size={32}/>}
-                            הזרק וסנכרן 🦾
-                         </button>
-                      </div>
-                   </motion.div>
-                 ) : (
-                   <div className="h-[900px] bg-white rounded-[70px] border-4 border-dashed border-slate-100 flex flex-col items-center justify-center text-center p-20 shadow-inner group">
-                      <div className="w-36 h-36 bg-slate-50 rounded-[50px] flex items-center justify-center text-slate-200 mb-10 border-4 border-white shadow-xl group-hover:scale-110 transition-transform duration-500">
-                         <Layers size={80} strokeWidth={1} />
-                      </div>
-                      <h3 className="text-4xl font-black text-slate-900 italic uppercase mb-6 tracking-tighter text-right">Ready for Design</h3>
-                      <p className="text-slate-400 max-w-md font-bold text-base leading-relaxed uppercase tracking-widest italic opacity-60 text-right">
-                        בחר מוצר מהרשימה מצד ימין כדי להתחיל את תהליך הזרקת ה-DNA. כל שינוי ישתקף בסימולטור ה-VIP בזמן אמת.
-                      </p>
-                   </div>
-                 )}
-               </AnimatePresence>
-            </div>
-
-            {/* --- Live Simulator View: Samsung Note 25 --- */}
-            <div className="lg:col-span-5 flex flex-col items-center">
-               <div className="flex items-center gap-4 bg-white px-8 py-4 rounded-full border border-slate-200 shadow-md mb-8">
-                  <MobileIcon className="text-blue-500" size={24} />
-                  <span className="h-6 w-[2px] bg-slate-100" />
-                  <span className="text-xs font-black uppercase tracking-[0.4em] text-slate-500 italic mr-2">SAMSUNG NOTE 25 SIMULATOR</span>
-               </div>
-
-               <div className="relative bg-[#020617] rounded-[75px] border-[14px] border-slate-800 shadow-[0_80px_160px_rgba(0,0,0,0.6)] w-full max-w-[420px] aspect-[9/19.5] flex flex-col overflow-hidden group">
-                  {/* Notch */}
-                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-8 bg-slate-800 rounded-b-[25px] z-50 flex items-center justify-center">
-                     <div className="w-12 h-1.5 bg-slate-700 rounded-full" />
-                  </div>
-                  
-                  {/* App Container */}
-                  <div className="flex-1 overflow-y-auto scrollbar-hide relative bg-white/5 backdrop-blur-3xl m-3 rounded-[55px] border border-white/5 p-6 space-y-6 text-white text-right" dir="rtl">
-                     <div className="flex justify-between items-center pt-4">
-                        <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center"><ChevronRight size={20}/></div>
-                        <img src="/ai.png" className="h-8 opacity-90" />
-                     </div>
-
-                     {/* Media Stitched Collage */}
-                     <div className="grid grid-cols-12 gap-2 h-56">
-                        <div className="col-span-8 bg-slate-900 rounded-[30px] overflow-hidden border border-white/10 relative shadow-2xl">
-                           <AssetPreview url={designItem?.image_url} />
-                        </div>
-                        <div className="col-span-4 flex flex-col gap-2">
-                           <div className="flex-1 bg-slate-900 rounded-[20px] overflow-hidden border border-white/10"><AssetPreview url={designItem?.image_url_2} /></div>
-                           <div className="flex-1 bg-slate-900 rounded-[20px] overflow-hidden border border-white/10"><AssetPreview url={designItem?.image_url_3} /></div>
-                        </div>
-                     </div>
-
-                     <div className="space-y-4 pt-4 text-right">
-                        <div className="flex items-center gap-3 justify-end">
-                           <span className="bg-blue-600/20 text-blue-400 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border border-blue-500/20">VIP Asset</span>
-                           <ShieldCheck size={18} className="text-emerald-500" />
-                        </div>
-                        <h2 className="text-3xl font-black italic tracking-tighter uppercase leading-none text-right">{designItem?.product_name || "Design Mode..."}</h2>
-                        <div className="flex items-center gap-3 opacity-60 justify-end">
-                           <span className="text-[10px] font-bold">SKU: {designItem?.sku || "----"}</span>
-                           <span className="h-3 w-[1px] bg-white/20" />
-                           <span className="text-[10px] font-bold uppercase tracking-widest italic">{designItem?.category || "Building Materials"}</span>
-                        </div>
-                     </div>
-
-                     {/* Stats Grid */}
-                     <div className="grid grid-cols-3 gap-2 py-4">
-                        <SmallStat icon={<Clock size={12}/>} label="Drying" value={designItem?.drying_time} />
-                        <SmallStat icon={<Gauge size={12}/>} label="Coverage" value={designItem?.coverage_info} />
-                        <SmallStat icon={<Hammer size={12}/>} label="Method" value={designItem?.application_method} />
-                     </div>
-
-                     {/* Advisor Box */}
-                     <div className="bg-blue-600/10 border border-blue-500/10 p-6 rounded-[35px] relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 blur-[40px] rounded-full" />
-                        <div className="flex items-center gap-3 mb-3 text-blue-400 justify-end">
-                           <span className="text-[10px] font-black uppercase tracking-widest italic">Saban Pro Advisor</span>
-                           <Sparkles size={16} />
-                        </div>
-                        <p className="text-[14px] font-bold leading-relaxed opacity-70 italic text-right truncate-4-lines">
-                           {designItem?.description || "ממתין להזנת מפרט טכני מלא ע''י מנהל המערכת..."}
-                        </p>
-                     </div>
-
-                     <div className="pt-6">
-                        <div className="w-full bg-white text-slate-900 py-6 rounded-[35px] font-black text-[12px] uppercase tracking-[0.4em] flex items-center justify-center gap-4 italic shadow-2xl">
-                           ADD TO COMMAND <ShoppingCart size={22} className="text-blue-600" />
-                        </div>
-                     </div>
-                  </div>
-
-                  <div className="h-16 bg-[#020617] border-t border-white/5 flex items-center justify-center px-12 relative z-50">
-                     <div className="w-32 h-1.5 bg-slate-700 rounded-full" />
-                  </div>
-               </div>
-            </div>
-
-          </div>
+          <button 
+            onClick={() => setDesignItem({ sku: Date.now().toString(), product_name: '', stock_quantity: 0 })}
+            className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-2xl flex items-center gap-2 transition-all font-bold"
+          >
+            <Plus size={18} /> מוצר חדש
+          </button>
         </div>
       </div>
-      
-      <footer className="py-24 border-t border-slate-100 opacity-20 text-center uppercase text-[12px] font-black tracking-[3em] italic text-slate-900 leading-none">Saban OS Neural Alignment Engine V73.1</footer>
-      <style jsx global>{`.scrollbar-hide::-webkit-scrollbar { display: none; } .truncate-4-lines { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }`}</style>
-    </div>
-  );
-}
 
-// --- Helpers ---
+      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Inventory List */}
+        <div className="lg:col-span-4 space-y-4 max-h-[75vh] overflow-y-auto pr-2 custom-scrollbar">
+          {loading ? (
+            <div className="flex justify-center p-12"><Loader2 className="animate-spin text-blue-500" /></div>
+          ) : (
+            filteredInventory.map(item => (
+              <motion.div 
+                key={item.sku}
+                layoutId={item.sku}
+                onClick={() => setDesignItem(item)}
+                className={`p-4 rounded-3xl cursor-pointer border transition-all ${
+                  designItem?.sku === item.sku 
+                    ? 'bg-blue-600/20 border-blue-500/50 shadow-lg shadow-blue-500/10' 
+                    : 'bg-slate-900/50 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="font-bold text-slate-100">{item.product_name || 'ללא שם'}</h3>
+                    <p className="text-xs text-slate-500 mt-1">מק"ט: {item.sku}</p>
+                  </div>
+                  <div className="bg-slate-800 px-2 py-1 rounded-lg text-[10px] font-bold">
+                    מלאי: {item.stock_quantity}
+                  </div>
+                </div>
+              </motion.div>
+            ))
+          )}
+        </div>
 
-function StatCard({ label, value, icon, color = "text-slate-900" }: any) {
-  return (
-    <div className="bg-white border border-slate-100 px-10 py-8 rounded-[45px] shadow-xl flex flex-col items-center min-w-[200px] border-b-8 border-b-slate-50">
-       <div className="flex items-center gap-3 text-[11px] font-black text-slate-400 uppercase mb-2 tracking-[0.2em] italic leading-none justify-center">{icon} {label}</div>
-       <span className={`text-5xl font-black italic tracking-tighter leading-none mt-2 ${color}`}>{value}</span>
-    </div>
-  );
-}
+        {/* Editor Side */}
+        <div className="lg:col-span-8">
+          <AnimatePresence mode="wait">
+            {designItem ? (
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-[40px] p-8 relative overflow-hidden"
+              >
+                <div className="flex justify-between items-center mb-8">
+                  <h2 className="text-2xl font-bold flex items-center gap-3">
+                    <Edit3 className="text-blue-400" /> עריכת מוצר
+                  </h2>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={handleSave}
+                      disabled={isSaving}
+                      className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-6 py-2 rounded-2xl flex items-center gap-2 transition-all disabled:opacity-50"
+                    ) : (
+                      <Save size={18} /> שמירה
+                    )}
+                    </button>
+                    <button onClick={() => setDesignItem(null)} className="p-2 hover:bg-slate-800 rounded-xl transition-colors">
+                      <X size={20} />
+                    </button>
+                  </div>
+                </div>
 
-function DesignField({ label, value, type = "text", onChange, placeholder, disabled }: any) {
-  return (
-    <div className="space-y-3 text-right" dir="rtl">
-       <label className="text-[11px] font-black text-slate-400 uppercase mr-3 tracking-[0.2em] italic leading-none block text-right">{label}</label>
-       <input 
-          disabled={disabled} type={type} 
-          onChange={(e) => onChange(e.target.value)} 
-          className="w-full bg-slate-50 border-2 border-slate-100 p-5 rounded-[22px] font-black text-xl outline-none focus:border-blue-500 focus:bg-white transition-all text-right shadow-inner disabled:bg-slate-100 disabled:text-slate-300 italic" 
-          value={value || ""} placeholder={placeholder} 
-       />
-    </div>
-  );
-}
-
-function AssetPreview({ url }: { url: string }) {
-  const [err, setErr] = useState(false);
-  if (!url || err) return (
-    <div className="w-full h-full flex flex-col items-center justify-center text-slate-800 bg-slate-950 shadow-inner">
-       <ImageIcon size={32} strokeWidth={1} />
-       <p className="text-[8px] font-black uppercase mt-2 tracking-widest opacity-30 italic leading-none text-center">NO ASSET</p>
-    </div>
-  );
-  return <img src={url} className="w-full h-full object-cover grayscale-[0.2] hover:grayscale-0 transition-all duration-500" onError={() => setErr(true)} />;
-}
-
-function ProductThumb({ src }: { src: string }) {
-  const [err, setErr] = useState(false);
-  if (!src || err) return <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-300 border border-slate-100 shrink-0"><ImageIcon size={20}/></div>;
-  return <img src={src} className="w-16 h-16 rounded-2xl object-cover shadow-md border-2 border-white shrink-0" onError={() => setErr(true)} />;
-}
-
-function SmallStat({ icon, label, value }: any) {
-  return (
-    <div className="bg-white/5 border border-white/5 p-4 rounded-[25px] text-center shadow-inner group hover:bg-white/10 transition-all">
-       <div className="text-blue-500 mx-auto mb-2 opacity-60 flex justify-center">{icon}</div>
-       <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-1 leading-none">{label}</p>
-       <p className="text-[10px] font-black text-white italic tracking-tighter truncate">{value || "--"}</p>
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">שם המוצר</label>
+                    <input 
+                      className="w-full bg-slate-950/50 border border-slate-800 p-4 rounded-2xl outline-none focus:border-blue-500 transition-all"
+                      value={designItem.product_name}
+                      onChange={(e) => setDesignItem({...designItem, product_name: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">מק"ט (SKU)</label>
+                    <input 
+                      className="w-full bg-slate-950/50 border border-slate-800 p-4 rounded-2xl outline-none focus:border-blue-500 transition-all"
+                      value={designItem.sku}
+                      onChange={(e) => setDesignItem({...designItem, sku: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">קטגוריה</label>
+                    <input 
+                      className="w-full bg-slate-950/50 border border-slate-800 p-4 rounded-2xl outline-none focus:border-blue-500 transition-all"
+                      value={designItem.category}
+                      onChange={(e) => setDesignItem({...designItem, category: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">כמות במלאי</label>
+                    <input 
+                      type="number"
+                      className="w-full bg-slate-950/50 border border-slate-800 p-4 rounded-2xl outline-none focus:border-blue-500 transition-all"
+                      value={designItem.stock_quantity}
+                      onChange={(e) => setDesignItem({...designItem, stock_quantity: e.target.value})}
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            ) : (
+              <div className="h-[50vh] flex flex-col items-center justify-center border-2 border-dashed border-slate-800 rounded-[40px] text-slate-600">
+                <BrainCircuit size={48} className="mb-4 opacity-20" />
+                <p className="font-bold">בחר מוצר מהרשימה כדי להתחיל לעצב</p>
+              </div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
     </div>
   );
 }
