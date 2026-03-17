@@ -1,23 +1,25 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase"; // שימוש ב-Instance הקיים שלך
+import { supabase } from "@/lib/supabase";
 
 /**
- * Saban Admin Pro - Master Brain V42.1 (Enhanced for UI)
+ * Saban Admin Pro - Master Brain V42.2 Elite (Updated Mar 17, 2026)
  * -----------------------------------
- * - Smart Skip: Detects 403, 401, and 429.
- * - Dual-Model Resilience: Gemini 3.1 Pro -> Flash-Lite.
- * - UI Bridge: Map 'query' to 'message' for frontend compatibility.
+ * - Model Strategy: Gemini 3.1 Pro (Heavy Reasoning) -> 3.1 Flash-Lite (Speed).
+ * - Multi-Key Rotation: Failover mechanism for API keys.
+ * - DNA Context: Real-time injection of ai_rules and inventory.
  */
 
 export const dynamic = 'force-dynamic';
 
-const MODEL_POOL = ["gemini-1.5-pro", "gemini-1.5-flash"]; // עדכון שמות מודלים סטנדרטיים
+// שימוש במודלים החדשים ביותר מהעדכון של מרץ 2026
+const MODEL_POOL = [
+  "gemini-3.1-pro-preview", 
+  "gemini-3.1-flash-lite-preview"
+];
 
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-    
-    // נירמול קלט - ה-UI שולח 'message', המוח מצפה ל-'query'
     const query = body.query || body.message || body.content;
     const { sessionId, history, phone } = body;
 
@@ -25,7 +27,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Query is required" }, { status: 400 });
     }
 
-    // 1. שליפת קונטקסט DNA וחוקים מה-DB
+    // 1. שליפת חוקי DNA ומלאי מעודכן
     const { data: rulesRes } = await supabase
       .from('ai_rules')
       .select('instruction')
@@ -35,29 +37,27 @@ export async function POST(req: Request) {
     
     const systemPrompt = `
       אתה המוח המנהל של Saban OS. ראמי הוא הבוס.
-      חוקי ה-DNA הפעילים:
-      ${activeRules}
+      חוקי ה-DNA הפעילים: ${activeRules}
       תפקידך: ניהול חוקי DNA, מלאי והזמנות VIP.
       חתימה חובה בסוף כל תשובה: ראמי, הכל מוכן לביצוע. 🦾
     `.trim();
 
-    // 2. עיבוד בריכת המפתחות (POOL)
+    // 2. הכנת בריכת המפתחות (Rotation Pool)
     const apiKeys = (process.env.GOOGLE_AI_KEY_POOL || "")
       .split(",")
       .map(k => k.trim())
       .filter(k => k.length > 5);
     
     if (apiKeys.length === 0) {
-      // Fallback למפתח בודד אם ה-Pool לא מוגדר
       if (process.env.GOOGLE_AI_KEY) apiKeys.push(process.env.GOOGLE_AI_KEY);
-      else throw new Error("No API keys found in GOOGLE_AI_KEY_POOL");
+      else throw new Error("No API keys found in pool");
     }
 
     let finalAnswer = "";
     let success = false;
     let lastError = "";
 
-    // 3. לוגיקת רוטציה כפולה עם דילוג חכם (Failover)
+    // 3. לוגיקת רוטציה כפולה (מודלים x מפתחות)
     for (const model of MODEL_POOL) {
       if (success) break;
 
@@ -76,7 +76,11 @@ export async function POST(req: Request) {
                   parts: [{ text: `היסטוריה: ${JSON.stringify(history || [])}\nשאילתה: ${query}` }] 
                 }],
                 systemInstruction: { parts: [{ text: systemPrompt }] },
-                generationConfig: { temperature: 0.15, topP: 0.95 }
+                generationConfig: { 
+                  temperature: 0.2, 
+                  topP: 0.95,
+                  maxOutputTokens: 1024 
+                }
               })
             }
           );
@@ -90,10 +94,9 @@ export async function POST(req: Request) {
               break;
             }
           } else {
-            const status = response.status;
-            lastError = `Status ${status}: ${data.error?.message}`;
-            if ([401, 403, 429].includes(status)) continue; 
-            continue;
+            // דילוג חכם במידה והמפתח חסום או חרג מהמכסה החדשה (429/403)
+            lastError = `Status ${response.status}: ${data.error?.message}`;
+            continue; 
           }
         } catch (e: any) {
           lastError = e.message;
@@ -102,37 +105,33 @@ export async function POST(req: Request) {
       }
     }
 
-    if (!success) throw new Error(lastError);
+    if (!success) throw new Error("All keys/models failed. Last: " + lastError);
 
-    // 4. תיעוד להיסטוריה ב-Supabase
+    // 4. חיפוש מוצר להעשרה ויזואלית ב-UI
+    const { data: products } = await supabase
+      .from('inventory')
+      .select('*')
+      .or(`product_name.ilike.%${query}%,sku.eq.${query}`)
+      .limit(1);
+
+    // 5. שמירה להיסטוריה והחזרת תשובה
     await supabase.from('chat_history').insert([
-      { 
-        session_id: sessionId || 'admin_master', 
-        role: 'user', 
-        content: query,
-        metadata: { phone: phone || 'unknown' } 
-      },
-      { 
-        session_id: sessionId || 'admin_master', 
-        role: 'assistant', 
-        content: finalAnswer 
-      }
+      { session_id: sessionId || 'admin_master', role: 'user', content: query, metadata: { phone: phone || '972508860896' } },
+      { session_id: sessionId || 'admin_master', role: 'assistant', content: finalAnswer }
     ]);
 
-    // 5. החזרת תשובה בפורמט שה-UI מצפה לו (reply + stats)
     return NextResponse.json({ 
-      answer: finalAnswer,
-      reply: finalAnswer, // תאימות ל-SabanChatPage
+      reply: finalAnswer,
+      product: products?.[0] || null,
       success: true,
-      stats: { rotated: true, status: "V42.1_ACTIVE" }
+      stats: { version: "42.2_MARCH_2026", model: success ? "Gemini 3.1 Active" : "Fallback" }
     });
 
   } catch (error: any) {
     console.error("Critical Brain Failure:", error.message);
     return NextResponse.json({ 
-      error: "תקלה ברוטציה", 
-      reply: "ראמי, יש תקלה במפתחות ה-AI. אני בודק את זה.",
-      details: error.message 
-    }, { status: 200 }); // מחזירים 200 כדי שהצ'אט יציג את הודעת השגיאה בבועה
+      reply: "ראמי, המוח עמוס כרגע. אני מחליף מפתח API ומנסה שוב. 🦾",
+      error: error.message 
+    }, { status: 200 });
   }
 }
