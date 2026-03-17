@@ -43,9 +43,8 @@ export default function ProductDNAStudio() {
     }
   }
 
-  // פונקציה לניקוי נתונים לפני שליחה למניעת שגיאות 400
   const sanitizePayload = (item: any) => {
-    const { price, ...rest } = item; // הסרת המחיר כפי שביקשת
+    const { price, ...rest } = item;
     return {
       ...rest,
       product_name: rest.product_name || 'מוצר חדש',
@@ -58,17 +57,14 @@ export default function ProductDNAStudio() {
 
   const handleSave = async () => {
     if (!designItem) return;
-    
     setIsSaving(true);
     try {
       const payload = sanitizePayload(designItem);
-      
       const { error } = await supabase
         .from('inventory')
         .upsert(payload, { onConflict: 'sku' });
 
       if (error) throw error;
-
       toast.success("המוצר נשמר בהצלחה בטבלת המלאי");
       fetchData();
     } catch (error: any) {
@@ -92,7 +88,6 @@ export default function ProductDNAStudio() {
     <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8 font-sans" dir="rtl">
       <Toaster position="top-center" richColors />
       
-      {/* Header */}
       <div className="max-w-7xl mx-auto mb-8 flex justify-between items-center">
         <div>
           <h1 className="text-4xl font-black tracking-tighter bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
@@ -122,7 +117,6 @@ export default function ProductDNAStudio() {
       </div>
 
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Inventory List */}
         <div className="lg:col-span-4 space-y-4 max-h-[75vh] overflow-y-auto pr-2 custom-scrollbar">
           {loading ? (
             <div className="flex justify-center p-12"><Loader2 className="animate-spin text-blue-500" /></div>
@@ -152,7 +146,6 @@ export default function ProductDNAStudio() {
           )}
         </div>
 
-        {/* Editor Side */}
         <div className="lg:col-span-8">
           <AnimatePresence mode="wait">
             {designItem ? (
@@ -171,9 +164,8 @@ export default function ProductDNAStudio() {
                       onClick={handleSave}
                       disabled={isSaving}
                       className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-6 py-2 rounded-2xl flex items-center gap-2 transition-all disabled:opacity-50"
-                    ) : (
-                      <Save size={18} /> שמירה
-                    )}
+                    >
+                      {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Save size={18} /> שמירה</>}
                     </button>
                     <button onClick={() => setDesignItem(null)} className="p-2 hover:bg-slate-800 rounded-xl transition-colors">
                       <X size={20} />
@@ -185,24 +177,24 @@ export default function ProductDNAStudio() {
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">שם המוצר</label>
                     <input 
-                      className="w-full bg-slate-950/50 border border-slate-800 p-4 rounded-2xl outline-none focus:border-blue-500 transition-all"
-                      value={designItem.product_name}
+                      className="w-full bg-slate-950/50 border border-slate-800 p-4 rounded-2xl outline-none focus:border-blue-500 transition-all text-white"
+                      value={designItem.product_name || ''}
                       onChange={(e) => setDesignItem({...designItem, product_name: e.target.value})}
                     />
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">מק"ט (SKU)</label>
                     <input 
-                      className="w-full bg-slate-950/50 border border-slate-800 p-4 rounded-2xl outline-none focus:border-blue-500 transition-all"
-                      value={designItem.sku}
+                      className="w-full bg-slate-950/50 border border-slate-800 p-4 rounded-2xl outline-none focus:border-blue-500 transition-all text-white"
+                      value={designItem.sku || ''}
                       onChange={(e) => setDesignItem({...designItem, sku: e.target.value})}
                     />
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">קטגוריה</label>
                     <input 
-                      className="w-full bg-slate-950/50 border border-slate-800 p-4 rounded-2xl outline-none focus:border-blue-500 transition-all"
-                      value={designItem.category}
+                      className="w-full bg-slate-950/50 border border-slate-800 p-4 rounded-2xl outline-none focus:border-blue-500 transition-all text-white"
+                      value={designItem.category || ''}
                       onChange={(e) => setDesignItem({...designItem, category: e.target.value})}
                     />
                   </div>
@@ -210,8 +202,8 @@ export default function ProductDNAStudio() {
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">כמות במלאי</label>
                     <input 
                       type="number"
-                      className="w-full bg-slate-950/50 border border-slate-800 p-4 rounded-2xl outline-none focus:border-blue-500 transition-all"
-                      value={designItem.stock_quantity}
+                      className="w-full bg-slate-950/50 border border-slate-800 p-4 rounded-2xl outline-none focus:border-blue-500 transition-all text-white"
+                      value={designItem.stock_quantity || 0}
                       onChange={(e) => setDesignItem({...designItem, stock_quantity: e.target.value})}
                     />
                   </div>
