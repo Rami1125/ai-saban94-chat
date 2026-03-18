@@ -13,7 +13,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-const MODELS = ["gemini-2.0-flash-exp", "gemini-1.5-pro"];
+const MODELS = ["gemini-3.1-pro-preview", "gemini-3.1-flash-lite-preview"];
 
 export async function POST(req: Request) {
   try {
