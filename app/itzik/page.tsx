@@ -12,7 +12,7 @@ import {
 import { toast, Toaster } from "sonner";
 
 // תמונה של איציק מהמאגר המקומי
-const ITZIK_IMAGE = "https://i.postimg.cc/44pMM9fH/itzik.jpg"; 
+const ITZIK_IMAGE = ""; 
 
 export default function ItzikBranchInterface() {
   const [mode, setMode] = useState<'HOME' | 'ORDER' | 'TRANSFER'>('HOME');
