@@ -1,69 +1,93 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { getSupabase } from "@/lib/supabase";
 
 /**
- * Saban OS V55.0 - Brain with SQL Cart Memory
+ * Saban OS V46.1 - Precision Master Brain
  * -------------------------------------------
- * - Context: Pulls current shopping_carts state before generating response.
- * - Logic: Seamlessly connects User Device ID to Database records.
+ * Fix: Forced clean tag output for Elite Cards.
+ * Context: VIP Profile + Real-time Inventory lookup.
  */
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // שימוש ב-Service Role לעקיפת הגבלות
-);
+export const dynamic = 'force-dynamic';
 
-const MODELS = ["gemini-1.5-pro", "gemini-1.5-flash"];
+const MODELS = ["gemini-3.1-pro-preview", "gemini-3.1-flash-lite-preview"];
 
 export async function POST(req: Request) {
   try {
-    const { sessionId, query, history, customerId } = await req.json();
+    const supabase = getSupabase();
+    const { sessionId, query, history, customerId } = await req.json().catch(() => ({}));
 
-    // 1. שליפת קונטקסט משולש: פרופיל + מלאי + סל קניות נוכחי
-    const [profileRes, inventoryRes, cartRes] = await Promise.all([
+    if (!query) return NextResponse.json({ error: "Missing query" }, { status: 400 });
+
+    // 1. שליפת קונטקסט (לקוח, חוקים, מלאי)
+    const [profileRes, rulesRes, inventoryRes] = await Promise.all([
       supabase.from('vip_profiles').select('*').eq('id', customerId).maybeSingle(),
-      supabase.from('inventory').select('*').or(`product_name.ilike.%${query}%,sku.ilike.%${query}%`).limit(3),
-      supabase.from('shopping_carts').select('*').eq('user_id', customerId)
+      supabase.from('ai_rules').select('*').eq('is_active', true),
+      supabase.from('inventory').select('*').or(`product_name.ilike.%${query}%,sku.ilike.%${query}%`).limit(3)
     ]);
 
-    const cartContext = cartRes.data?.map(item => `${item.product_name} (כמות: ${item.quantity})`).join(", ") || "ריק";
+    const profile = profileRes.data;
+    const rules = rulesRes.data?.map(r => r.instruction).join("\n") || "";
+    const inventory = inventoryRes.data || [];
 
     const systemPrompt = `
       אתה המוח הלוגיסטי של ח. סבן. המנהל: ראמי הבוס.
-      זהות לקוח: ${profileRes.data?.full_name || 'VIP Client'}.
       
-      מצב סל קניות נוכחי של הלקוח: ${cartContext}.
+      ### זהות לקוח VIP:
+      - שם: ${profile?.full_name || 'לקוח'} | פרויקט: ${profile?.main_project || 'כללי'}
 
-      חוקי הזרקה (DNA):
-      1. אם הלקוח שואל על מוצר במלאי, השתמש בתגיות:
-         [GALLERY: url1, url2]
-         [QUICK_ADD:SKU]
-      2. אם המוצר כבר בסל, ציין זאת בחום ("אחי, כבר דאגנו לך לזה בסל...").
-      3. פנה תמיד בגובה העיניים, מקצועי וחברי.
-      חתימה: חבר תודה על הפניה, ח.סבן חומרי בנין. 🦾
+      ### נתוני מלאי אמת:
+      ${JSON.stringify(inventory)}
+
+      ### חוקי ביצוע Elite (חובה):
+      בכל פעם שאתה מציע מוצר שקיים במלאי, חובה להתחיל את התגובה במבנה התגיות הבא ללא רווחים מיותרים:
+      [GALLERY: image_url, image_url_2, image_url_3]
+      [QUICK_ADD:SKU]
+
+      ${rules}
+
+      ### דגשים:
+      - אם חסר נתון טכני, רשום "--". 
+      - פנה ללקוח בשמו (למשל: "בר אחי").
+      - חתימה: ראמי, הכל מוכן לביצוע. 🦾
     `.trim();
 
-    // רוטציית מפתחות וביצוע פנייה ל-AI
-    const apiKeys = (process.env.GOOGLE_AI_KEY_POOL || "").split(",");
-    let finalAnswer = "מצטער אחי, יש נתק קטן ב-DNA. נסה שוב.";
+    const apiKeys = (process.env.GOOGLE_AI_KEY_POOL || "").split(",").map(k => k.trim()).filter(k => k.length > 5);
+    let finalAnswer = "";
+    let success = false;
 
-    for (const key of apiKeys) {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODELS[0]}:generateContent?key=${key.trim()}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: query }] }],
-          systemInstruction: { parts: [{ text: systemPrompt }] }
-        })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        finalAnswer = data.candidates[0].content.parts[0].text;
-        break;
+    for (const model of MODELS) {
+      if (success) break;
+      for (const key of apiKeys) {
+        if (success) break;
+        try {
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ role: "user", parts: [{ text: `היסטוריה: ${JSON.stringify(history || [])}\nשאילתה: ${query}` }] }],
+              systemInstruction: { parts: [{ text: systemPrompt }] },
+              generationConfig: { temperature: 0.1 }
+            })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            finalAnswer = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (finalAnswer) { success = true; break; }
+          }
+        } catch (e) { continue; }
       }
     }
 
-    return NextResponse.json({ answer: finalAnswer });
+    if (!success) throw new Error("Brain Link Failure");
+
+    // תיעוד לחדר הבקרה
+    await supabase.from('chat_history').insert([
+      { session_id: customerId || 'guest', role: 'user', content: query },
+      { session_id: customerId || 'guest', role: 'assistant', content: finalAnswer }
+    ]);
+
+    return NextResponse.json({ answer: finalAnswer, success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
