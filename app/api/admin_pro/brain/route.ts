@@ -1,76 +1,70 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@supabase/supabase-js";
 
-export const dynamic = 'force-dynamic';
+/**
+ * Saban OS V55.0 - Brain with SQL Cart Memory
+ * -------------------------------------------
+ * - Context: Pulls current shopping_carts state before generating response.
+ * - Logic: Seamlessly connects User Device ID to Database records.
+ */
 
-const MODEL_POOL = ["gemini-1.5-pro", "gemini-1.5-flash"];
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY! // שימוש ב-Service Role לעקיפת הגבלות
+);
+
+const MODELS = ["gemini-1.5-pro", "gemini-1.5-flash"];
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json().catch(() => ({}));
-    const query = body.query || body.message || body.content;
-    const { sessionId, history, phone } = body;
+    const { sessionId, query, history, customerId } = await req.json();
 
-    if (!query) return NextResponse.json({ error: "No query" }, { status: 400 });
-
-    // 1. שליפת DNA: חוקים + מלאי + סל נוכחי של המשתמש
-    const [{ data: rules }, { data: cartItems }] = await Promise.all([
-      supabase.from('ai_rules').select('instruction').eq('is_active', true),
-      supabase.from('shopping_carts').select('*').eq('user_id', sessionId)
+    // 1. שליפת קונטקסט משולש: פרופיל + מלאי + סל קניות נוכחי
+    const [profileRes, inventoryRes, cartRes] = await Promise.all([
+      supabase.from('vip_profiles').select('*').eq('id', customerId).maybeSingle(),
+      supabase.from('inventory').select('*').or(`product_name.ilike.%${query}%,sku.ilike.%${query}%`).limit(3),
+      supabase.from('shopping_carts').select('*').eq('user_id', customerId)
     ]);
 
-    const dna = rules?.map(r => r.instruction).join("\n") || "";
-    const cartContext = cartItems?.length 
-      ? `הסל הנוכחי של הלקוח: ${cartItems.map(i => `${i.product_name} (כמות: ${i.quantity})`).join(', ')}`
-      : "הסל כרגע ריק.";
+    const cartContext = cartRes.data?.map(item => `${item.product_name} (כמות: ${item.quantity})`).join(", ") || "ריק";
 
-    // 2. בניית פרומפט מערכת - הבוס הוא ראמי
     const systemPrompt = `
-      אתה המוח המנהל של Saban OS. ראמי הוא הבוס.
-      חוקי DNA: ${dna}
-      ${cartContext}
-      הנחיות: ענה בעברית קצרה ומקצועית. אם הלקוח שואל על מוצר, עודד אותו להוסיף לסל.
-      חתימה חובה: ראמי, הכל מוכן לביצוע. 🦾
+      אתה המוח הלוגיסטי של ח. סבן. המנהל: ראמי הבוס.
+      זהות לקוח: ${profileRes.data?.full_name || 'VIP Client'}.
+      
+      מצב סל קניות נוכחי של הלקוח: ${cartContext}.
+
+      חוקי הזרקה (DNA):
+      1. אם הלקוח שואל על מוצר במלאי, השתמש בתגיות:
+         [GALLERY: url1, url2]
+         [QUICK_ADD:SKU]
+      2. אם המוצר כבר בסל, ציין זאת בחום ("אחי, כבר דאגנו לך לזה בסל...").
+      3. פנה תמיד בגובה העיניים, מקצועי וחברי.
+      חתימה: חבר תודה על הפניה, ח.סבן חומרי בנין. 🦾
     `.trim();
 
-    // 3. רוטציה וביצוע (Failover Keys)
-    const apiKeys = (process.env.GOOGLE_AI_KEY_POOL || "").split(",").map(k => k.trim()).filter(k => k.length > 5);
-    let finalAnswer = "";
-    let success = false;
+    // רוטציית מפתחות וביצוע פנייה ל-AI
+    const apiKeys = (process.env.GOOGLE_AI_KEY_POOL || "").split(",");
+    let finalAnswer = "מצטער אחי, יש נתק קטן ב-DNA. נסה שוב.";
 
-    for (const model of MODEL_POOL) {
-      if (success) break;
-      for (const apiKey of apiKeys) {
-        try {
-          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ role: "user", parts: [{ text: `היסטוריה: ${JSON.stringify(history || [])}\nשאלה: ${query}` }] }],
-              systemInstruction: { parts: [{ text: systemPrompt }] },
-              generationConfig: { temperature: 0.15 }
-            })
-          });
-          const data = await res.json();
-          if (res.ok) {
-            finalAnswer = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            success = true; break;
-          }
-        } catch (e) { continue; }
+    for (const key of apiKeys) {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODELS[0]}:generateContent?key=${key.trim()}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: query }] }],
+          systemInstruction: { parts: [{ text: systemPrompt }] }
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        finalAnswer = data.candidates[0].content.parts[0].text;
+        break;
       }
     }
 
-    // 4. חיפוש מוצר לזיהוי כרטיס ויזואלי
-    const { data: product } = await supabase.from('inventory').select('*').or(`product_name.ilike.%${query}%,sku.eq.${query}`).limit(1).maybeSingle();
-
-    return NextResponse.json({ 
-      answer: finalAnswer, 
-      reply: finalAnswer, 
-      product: product,
-      success: true 
-    });
-
+    return NextResponse.json({ answer: finalAnswer });
   } catch (error: any) {
-    return NextResponse.json({ reply: "ראמי, יש תקלה ברוטציה. אני בודק מפתחות. 🦾" }, { status: 200 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
