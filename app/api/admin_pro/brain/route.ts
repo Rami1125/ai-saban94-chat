@@ -1,122 +1,94 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 
 /**
- * Saban OS - Master Brain V42.3 DNA-Connected
- * -----------------------------------
- * - DNA Injection: שואב חוקים מ-ai_rules ומנחיות הבוס.
- * - Key Rotation: רוטציה בין מפתחות ב-POOL למניעת חסימות.
- * - Model Failover: Gemini 3.1 Pro -> 3.1 Flash-Lite.
+ * Saban OS V46.1 - Precision Master Brain
+ * -------------------------------------------
+ * Fix: Forced clean tag output for Elite Cards.
+ * Context: VIP Profile + Real-time Inventory lookup.
  */
 
 export const dynamic = 'force-dynamic';
 
-const MODEL_POOL = [
-  "gemini-3.1-pro-preview", 
-  "gemini-3.1-flash-lite-preview"
-];
+const MODELS = ["gemini-3.1-pro-preview", "gemini-3.1-flash-lite-preview"];
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json().catch(() => ({}));
-    const query = body.query || body.message || body.content;
-    const { sessionId, history, phone } = body;
+    const supabase = getSupabase();
+    const { sessionId, query, history, customerId } = await req.json().catch(() => ({}));
 
-    if (!query) {
-      return NextResponse.json({ error: "Query is required" }, { status: 400 });
-    }
+    if (!query) return NextResponse.json({ error: "Missing query" }, { status: 400 });
 
-    // 1. שליפת ה-DNA (חוקים) והמלאי מה-DB
-    const [{ data: rules }, { data: inventory }] = await Promise.all([
-      supabase.from('ai_rules').select('instruction').eq('is_active', true),
-      supabase.from('inventory').select('product_name, sku, price, stock_quantity').limit(5)
+    // 1. שליפת קונטקסט (לקוח, חוקים, מלאי)
+    const [profileRes, rulesRes, inventoryRes] = await Promise.all([
+      supabase.from('vip_profiles').select('*').eq('id', customerId).maybeSingle(),
+      supabase.from('ai_rules').select('*').eq('is_active', true),
+      supabase.from('inventory').select('*').or(`product_name.ilike.%${query}%,sku.ilike.%${query}%`).limit(3)
     ]);
 
-    const dnaInstructions = rules?.map(r => r.instruction).join("\n") || "אין חוקים פעילים.";
-    const inventorySample = inventory?.map(i => `${i.product_name} (מק"ט: ${i.sku}) - מחיר: ${i.price}`).join(", ") || "";
-    
-    // 2. בניית ה-System Prompt לפי ה-DNA של סבן
+    const profile = profileRes.data;
+    const rules = rulesRes.data?.map(r => r.instruction).join("\n") || "";
+    const inventory = inventoryRes.data || [];
+
     const systemPrompt = `
-      אתה המוח המנהל של Saban OS. ראמי הוא הבוס.
+      אתה המוח הלוגיסטי של ח. סבן. המנהל: ראמי הבוס.
       
-      חוקי ה-DNA המחייבים שלך:
-      ${dnaInstructions}
-      
-      מידע על המלאי הנוכחי (דגימה):
-      ${inventorySample}
-      
-      הנחיות מענה:
-      - השב בעברית מקצועית, תמציתית וישירה.
-      - אם לקוח שואל על מחיר, בדוק במלאי המצורף.
-      - תמיד סיים בחתימה: אנחנו כאן לרשותך תמיד ח.סבן חומרי בנין. 🦾
+      ### זהות לקוח VIP:
+      - שם: ${profile?.full_name || 'לקוח'} | פרויקט: ${profile?.main_project || 'כללי'}
+
+      ### נתוני מלאי אמת:
+      ${JSON.stringify(inventory)}
+
+      ### חוקי ביצוע Elite (חובה):
+      בכל פעם שאתה מציע מוצר שקיים במלאי, חובה להתחיל את התגובה במבנה התגיות הבא ללא רווחים מיותרים:
+      [GALLERY: image_url, image_url_2, image_url_3]
+      [QUICK_ADD:SKU]
+
+      ${rules}
+
+      ### דגשים:
+      - אם חסר נתון טכני, רשום "--". 
+      - פנה ללקוח בשמו (למשל: "בר אחי").
+      - חתימה: ראמי, הכל מוכן לביצוע. 🦾
     `.trim();
 
-    // 3. ניהול בריכת המפתחות (API Key Pool)
-    const apiKeys = (process.env.GOOGLE_AI_KEY_POOL || "")
-      .split(",")
-      .map(k => k.trim())
-      .filter(k => k.length > 5);
-    
-    if (apiKeys.length === 0 && process.env.GOOGLE_AI_KEY) apiKeys.push(process.env.GOOGLE_AI_KEY);
-    if (apiKeys.length === 0) throw new Error("No API keys found");
-
+    const apiKeys = (process.env.GOOGLE_AI_KEY_POOL || "").split(",").map(k => k.trim()).filter(k => k.length > 5);
     let finalAnswer = "";
     let success = false;
-    let lastError = "";
 
-    // 4. רוטציה חכמה בין מודלים ומפתחות
-    for (const model of MODEL_POOL) {
+    for (const model of MODELS) {
       if (success) break;
-      for (const apiKey of apiKeys) {
+      for (const key of apiKeys) {
         if (success) break;
         try {
-          const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                contents: [{ 
-                  role: "user", 
-                  parts: [{ text: `היסטוריה: ${JSON.stringify(history || [])}\nשאילתה: ${query}` }] 
-                }],
-                systemInstruction: { parts: [{ text: systemPrompt }] },
-                generationConfig: { temperature: 0.15, topP: 0.95 }
-              })
-            }
-          );
-
-          const data = await response.json();
-          if (response.ok) {
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ role: "user", parts: [{ text: `היסטוריה: ${JSON.stringify(history || [])}\nשאילתה: ${query}` }] }],
+              systemInstruction: { parts: [{ text: systemPrompt }] },
+              generationConfig: { temperature: 0.1 }
+            })
+          });
+          if (res.ok) {
+            const data = await res.json();
             finalAnswer = data.candidates?.[0]?.content?.parts?.[0]?.text;
             if (finalAnswer) { success = true; break; }
-          } else {
-            lastError = data.error?.message || "Unknown error";
-            continue; // עובר למפתח הבא
           }
-        } catch (e: any) {
-          lastError = e.message;
-          continue;
-        }
+        } catch (e) { continue; }
       }
     }
 
-    if (!success) throw new Error(`Rotation failed: ${lastError}`);
+    if (!success) throw new Error("Brain Link Failure");
 
-    // 5. שמירת השיחה להיסטוריה
+    // תיעוד לחדר הבקרה
     await supabase.from('chat_history').insert([
-      { session_id: sessionId || 'web_chat', role: 'user', content: query, metadata: { phone: phone || 'unknown' } },
-      { session_id: sessionId || 'web_chat', role: 'assistant', content: finalAnswer }
+      { session_id: customerId || 'guest', role: 'user', content: query },
+      { session_id: customerId || 'guest', role: 'assistant', content: finalAnswer }
     ]);
 
-    return NextResponse.json({ 
-      reply: finalAnswer,
-      success: true,
-      stats: { version: "42.3_DNA", model: "Gemini 3.1" }
-    });
-
+    return NextResponse.json({ answer: finalAnswer, success: true });
   } catch (error: any) {
-    console.error("🔥 DNA Brain Error:", error.message);
-    return NextResponse.json({ reply: "ראמי, יש תקלה בחיבור ל-DNA. אני בודק את מפתחות ה-API. 🦾" }, { status: 200 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
