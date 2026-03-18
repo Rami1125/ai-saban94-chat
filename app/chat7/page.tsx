@@ -1,251 +1,212 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Send, Bot, Sun, Moon, Trash2, ShoppingCart, 
-  Loader2, Sparkles, X, ShoppingBag, ChevronLeft
-} from "lucide-react";
+  Send, Zap, Loader2, User, ShieldCheck, 
+  ShoppingCart, Image as ImageIcon, ChevronRight,
+  X, Play, Clock, Hammer, Calculator, Smartphone, 
+  Award, PlayCircle, ShieldAlert, CheckCircle2,
+  Maximize2, Share2, Layers
+} from 'lucide-react';
+import { supabase } from "@/lib/supabase"; 
 import { toast, Toaster } from "sonner";
-import ProductCard from "@/components/chat/ProductCard";
+import { motion, AnimatePresence } from 'framer-motion';
 
-export default function SabanEliteChat() {
-  const [messages, setMessages] = useState<any[]>([]);
-  const [input, setInput] = useState("");
-  const [isThinking, setIsThinking] = useState(false);
-  const [thinkingText, setThinkingText] = useState("");
-  const [cart, setCart] = useState<any[]>([]);
-  const [isCartOpen, setIsCartOpen] = useState(false);
-  const [show360, setShow360] = useState(true);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+/**
+ * Saban OS V27.1 - Stitched Elite (Logic Fix)
+ * -------------------------------------------
+ * Fix: Robust regex for GALLERY/QUICK_ADD detection.
+ * Feature: Auto-hiding raw tags even if parsing fails.
+ */
 
-  // 1. ברכת שלום לפי זמן ביום + חוק התחלת שיחה
-  useEffect(() => {
-    const hour = new Date().getHours();
-    let greeting = hour < 12 ? "בוקר טוב ראמי" : hour < 18 ? "צהריים טובים ראמי" : "ערב טוב ראמי";
-    
-    setTimeout(() => {
-      const initialMsg = {
-        id: "init",
-        role: "assistant",
-        content: `${greeting}! הכל מוכן לביצוע. 🦾\nאיך אני יכול לעזור לך היום? נוכל להתייעץ על פרויקט חדש או פשוט להתחיל הזמנת מוצרים מהירה.`,
-      };
-      setMessages([initialMsg]);
-    }, 1500);
+const LOGO_PATH = "/ai.png";
 
-    // סגירת פופ-אפ 360 אחרי 4 שניות
-    setTimeout(() => setShow360(false), 4000);
-  }, []);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isThinking]);
-
-  // 2. לוגיקת שליחה עם אפקט "חושב" אנושי
-  const handleSend = async () => {
-    if (!input.trim() || isThinking) return;
-
-    const userMsg = { id: Date.now().toString(), role: "user", content: input };
-    setMessages(prev => [...prev, userMsg]);
-    setInput("");
-    
-    // הגדרת משפט חשיבה רלוונטי
-    const isProductQuery = input.includes("כמה") || input.includes("מוצר") || input.includes("מק\"ט");
-    setThinkingText(isProductQuery ? "מעבד נתוני מוצר מהמחסן..." : "חושב על התשובה המדויקת עבורך...");
-    
-    setIsThinking(true);
-
-    try {
-      // השהייה מלאכותית של 2 שניות לתחושה אנושית
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      const response = await fetch("/api/admin_pro/brain", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: input, history: messages })
-      });
-
-      const data = await response.json();
-      
-      const assistantMsg = { 
-        id: (Date.now() + 1).toString(), 
-        role: "assistant", 
-        content: data.reply,
-        product: data.product 
-      };
-      
-      setMessages(prev => [...prev, assistantMsg]);
-    } catch (error) {
-      toast.error("תקלה בחיבור למוח");
-    } finally {
-      setIsThinking(false);
-    }
-  };
-
-  const addToCart = (product: any, qty: number) => {
-    setCart(prev => {
-      const existing = prev.find(item => item.sku === product.sku);
-      if (existing) {
-        return prev.map(item => item.sku === product.sku ? { ...item, qty: item.qty + qty } : item);
-      }
-      return [...prev, { ...product, qty }];
-    });
-    toast.success(`${product.product_name} נוסף לסל`);
-  };
+const StitchedEliteCard = ({ name, sku, urls, drying, coverage, method, onAdd }: any) => {
+  const mainImg = urls[0];
+  const sideImgs = urls.slice(1, 4);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans overflow-hidden flex flex-col" dir="rtl">
-      <Toaster position="top-center" richColors />
+    <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
+      className="my-10 bg-[#020617] rounded-[55px] overflow-hidden border border-white/5 shadow-[0_50px_100px_rgba(0,0,0,0.6)] w-full max-w-[480px] mx-auto group ring-1 ring-white/10"
+    >
+      <div className="flex items-center justify-between px-10 py-6 border-b border-white/5 bg-white/[0.02]">
+         <div className="flex items-center gap-3">
+            <Layers size={18} className="text-blue-500" />
+            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500 italic">Saban Asset ID: {sku || 'N/A'}</span>
+         </div>
+         <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+      </div>
 
-      {/* 360 Animation Popup */}
-      <AnimatePresence>
-        {show360 && (
-          <motion.div 
-            initial={{ scale: 0, rotate: -180 }}
-            animate={{ scale: 1, rotate: 0 }}
-            exit={{ scale: 0, opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-white/80 backdrop-blur-md"
-          >
-            <div className="text-center">
-              <motion.div 
-                animate={{ rotateY: 360 }} 
-                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                className="text-7xl mb-4"
-              >
-                🦾
-              </motion.div>
-              <h2 className="text-3xl font-black tracking-tighter text-blue-600 italic">SABAN OS 360°</h2>
-              <p className="text-slate-400 font-bold uppercase tracking-widest text-xs mt-2">Elite Intelligence Active</p>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Header עדין */}
-      <header className="h-20 bg-white/70 backdrop-blur-xl border-b border-slate-200 sticky top-0 z-50 flex items-center justify-between px-6">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center border border-blue-100 shadow-sm">
-             <Bot size={28} className="text-blue-600" />
+      <div className="p-8">
+        <div className="grid grid-cols-12 gap-3 h-[320px]">
+          <div className="col-span-8 bg-slate-900 rounded-[35px] overflow-hidden relative border border-white/10">
+            {mainImg ? <img src={mainImg} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-slate-800"><ImageIcon size={48}/></div>}
           </div>
-          <div>
-            <h1 className="font-black text-lg tracking-tight leading-none">SABAN AI</h1>
-            <span className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest">Online Training v90</span>
+          <div className="col-span-4 flex flex-col gap-3">
+             {sideImgs.map((img: string, idx: number) => (
+               <div key={idx} className="flex-1 bg-slate-900 rounded-[22px] overflow-hidden border border-white/10"><img src={img} className="w-full h-full object-cover grayscale" /></div>
+             ))}
+             {sideImgs.length < 2 && <div className="flex-1 bg-slate-900/50 rounded-[22px] border border-dashed border-white/5 flex items-center justify-center text-slate-800"><ImageIcon size={14}/></div>}
           </div>
-        </div>
-
-        <button 
-          onClick={() => setIsCartOpen(true)}
-          className="relative p-3 bg-slate-100 rounded-2xl hover:bg-slate-200 transition-all"
-        >
-          <ShoppingBag size={22} className="text-slate-700" />
-          {cart.length > 0 && (
-            <span className="absolute -top-1 -left-1 bg-blue-600 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
-              {cart.reduce((acc, curr) => acc + curr.qty, 0)}
-            </span>
-          )}
-        </button>
-      </header>
-
-      {/* אזור הצ'אט */}
-      <main className="flex-1 overflow-y-auto p-4 space-y-6 pb-40 max-w-3xl mx-auto w-full">
-        <AnimatePresence>
-          {messages.map((msg) => (
-            <motion.div 
-              key={msg.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className={`flex ${msg.role === 'user' ? 'justify-start' : 'justify-end'}`}
-            >
-              <div className={`max-w-[90%] p-4 rounded-[24px] shadow-sm ${
-                msg.role === 'user' 
-                ? 'bg-blue-600 text-white rounded-br-none' 
-                : 'bg-white border border-slate-200 text-slate-700 rounded-bl-none'
-              }`}>
-                <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                {msg.product && (
-                  <div className="mt-4">
-                    <ProductCard product={msg.product} onAddToCart={addToCart} />
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-
-        {isThinking && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-end items-center gap-3">
-             <span className="text-[10px] font-bold text-slate-400 italic uppercase">{thinkingText}</span>
-             <div className="flex gap-1">
-                <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce"></span>
-                <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:0.2s]"></span>
-                <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:0.4s]"></span>
-             </div>
-          </motion.div>
-        )}
-        <div ref={messagesEndRef} />
-      </main>
-
-      {/* Input Field מעוצב כחלק מהאפליקציה */}
-      <div className="fixed bottom-0 w-full p-4 bg-white/80 backdrop-blur-xl border-t border-slate-100">
-        <div className="max-w-3xl mx-auto flex gap-3 items-center">
-          <div className="flex-1 relative">
-            <input 
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              placeholder="כתוב הודעה או בקש מוצר..."
-              className="w-full bg-slate-100 border-none rounded-2xl p-4 pr-12 text-sm focus:ring-2 ring-blue-500 outline-none"
-            />
-            <Sparkles className="absolute right-4 top-1/2 -translate-y-1/2 text-blue-400 w-4 h-4" />
-          </div>
-          <button 
-            onClick={handleSend}
-            disabled={isThinking}
-            className="bg-blue-600 text-white p-4 rounded-2xl shadow-lg shadow-blue-200 active:scale-95 transition-all"
-          >
-            {isThinking ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
-          </button>
         </div>
       </div>
 
-      {/* Drawer של סל הקניות */}
-      <AnimatePresence>
-        {isCartOpen && (
-          <>
-            <motion.div 
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setIsCartOpen(false)}
-              className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[101]" 
-            />
-            <motion.div 
-              initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
-              className="fixed left-0 top-0 h-full w-80 bg-white shadow-2xl z-[102] p-6 flex flex-col"
-            >
-              <div className="flex justify-between items-center mb-8">
-                <h2 className="text-xl font-black">הסל שלי</h2>
-                <button onClick={() => setIsCartOpen(false)}><X /></button>
-              </div>
-              
-              <div className="flex-1 overflow-y-auto space-y-4">
-                {cart.map(item => (
-                  <div key={item.sku} className="flex gap-3 items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <img src={item.image_url} className="w-12 h-12 rounded-lg object-cover" />
-                    <div className="flex-1">
-                      <p className="text-xs font-bold truncate w-32">{item.product_name}</p>
-                      <p className="text-[10px] text-slate-400">כמות: {item.qty} • {item.price * item.qty} ₪</p>
-                    </div>
-                  </div>
-                ))}
-                {cart.length === 0 && <p className="text-center text-slate-400 mt-20">הסל ריק כרגע</p>}
-              </div>
+      <div className="px-10 pb-12 space-y-8 text-right" dir="rtl">
+        <div className="space-y-4">
+           <div className="flex items-center gap-3 justify-end">
+              <span className="bg-blue-600/10 text-blue-400 px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border border-blue-500/20 shadow-sm">Elite Series</span>
+              <ShieldCheck size={18} className="text-emerald-500" />
+           </div>
+           <h3 className="text-4xl font-black text-white italic tracking-tighter uppercase leading-none">{name || "מוצר Elite"}</h3>
+        </div>
 
-              <button className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black shadow-xl mt-4">
-                שלח הזמנה לווצאפ
-              </button>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+        <div className="grid grid-cols-3 gap-3">
+           <TechnicalPill icon={<Clock size={16}/>} label="Drying" value={drying} />
+           <TechnicalPill icon={<Calculator size={16}/>} label="Coverage" value={coverage} />
+           <TechnicalPill icon={<Hammer size={16}/>} label="Method" value={method} />
+        </div>
+
+        <button onClick={() => onAdd(sku)} className="w-full bg-white text-slate-950 py-8 rounded-[45px] font-black text-[13px] uppercase tracking-[0.5em] shadow-2xl flex items-center justify-center gap-6 border-b-8 border-slate-200 active:scale-95 italic">
+           הוסף להזמנה <ShoppingCart size={28} className="text-blue-600" />
+        </button>
+      </div>
+    </motion.div>
+  );
+};
+
+function TechnicalPill({ icon, label, value }: any) {
+  return (
+    <div className="bg-white/[0.03] border border-white/5 p-5 rounded-[30px] text-center">
+       <div className="text-blue-500 mx-auto mb-3 flex justify-center">{icon}</div>
+       <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">{label}</p>
+       <p className="text-sm font-black text-white italic">{value || "--"}</p>
+    </div>
+  );
+}
+
+function SmartMessageRenderer({ text, onAdd }: any) {
+  if (!text) return null;
+
+  // חילוץ נתונים חסין
+  const galleryMatch = text.match(/\[GALLERY:\s*([^\]]+)\]/i);
+  const urls = galleryMatch ? galleryMatch[1].split(',').map(u => u.trim()).filter(u => u.length > 5) : [];
+
+  const skuMatch = text.match(/\[QUICK_ADD:\s*([^\]]+)\]/i);
+  const sku = skuMatch ? skuMatch[1] : null;
+
+  const drying = text.match(/ייבוש[:*]*\s*(.*?)(\n|$)/i)?.[1] || "--";
+  const coverage = text.match(/כיסוי[:*]*\s*(.*?)(\n|$)/i)?.[1] || "--";
+  const method = text.match(/יישום[:*]*\s*(.*?)(\n|$)/i)?.[1] || "--";
+
+  const cleanText = text
+    .replace(/\[GALLERY:[\s\S]*?\]/gi, '')
+    .replace(/\[QUICK_ADD:[\s\S]*?\]/gi, '')
+    .replace(/\[VIDEO:[\s\S]*?\]/gi, '')
+    .trim();
+
+  const lines = cleanText.split('\n');
+  const title = lines.find(l => l.includes('###'))?.replace('###', '').trim();
+
+  return (
+    <div className="space-y-6">
+      {(urls.length > 0 || sku) && (
+        <StitchedEliteCard 
+          name={title || "מוצר מבית ח. סבן"} 
+          sku={sku} 
+          urls={urls} 
+          drying={drying}
+          coverage={coverage}
+          method={method}
+          onAdd={onAdd}
+        />
+      )}
+      <div className="space-y-6">
+        {lines.map((line, i) => {
+          if (!line.trim() || line.includes('ייבוש') || line.includes('כיסוי')) return null;
+          if (line.startsWith('###')) return <h3 key={i} className="text-2xl font-black text-white italic border-r-8 border-blue-600 pr-6 my-10 uppercase tracking-tight">{line.replace('###', '')}</h3>;
+          return <p key={i} className="text-[20px] md:text-[22px] leading-relaxed font-bold text-white/95 text-right">{line}</p>;
+        })}
+      </div>
+    </div>
+  );
+}
+
+export default function MasterChatPage() {
+  const [messages, setMessages] = useState<any[]>([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setMessages([{ 
+      role: 'assistant', 
+      content: `### המוח הלוגיסטי V27.1 🦾\nשלום ראמי אחי, אנחנו בפורמט **Stitched Elite**. המערכת מוכנה להזרים כרטיסי מוצר מעוצבים לביצוע מושלם.` 
+    }]);
+  }, []);
+
+  useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
+
+  const handleAction = (sku: string) => {
+    toast.success(`המוצר #${sku} הופנה לסל הביצוע 🦾`);
+  };
+
+  const handleSend = async () => {
+    if (!input.trim() || loading) return;
+    const q = input; setInput("");
+    setMessages(prev => [...prev, { role: 'user', content: q }]);
+    setLoading(true);
+
+    try {
+      const res = await fetch('/api/admin_pro/brain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: q, history: messages.slice(-5) })
+      });
+      const data = await res.json();
+      setMessages(prev => [...prev, { role: 'assistant', content: data.answer }]);
+    } catch (e) { toast.error("DNA Link Interrupted"); } finally { setLoading(false); }
+  };
+
+  return (
+    <div className="flex h-screen bg-[#F8FAFC] text-slate-900 font-sans overflow-hidden" dir="rtl">
+      <Toaster position="top-center" richColors theme="light" />
+      <main className="flex-1 flex flex-col relative bg-white max-w-5xl mx-auto shadow-2xl border-x border-slate-100">
+        <header className="h-24 border-b border-slate-100 flex items-center justify-between px-10 bg-white/95 backdrop-blur-md sticky top-0 z-50 shadow-sm">
+           <div className="flex items-center gap-5">
+              <div className="w-14 h-14 bg-[#020617] rounded-3xl flex items-center justify-center text-blue-500 shadow-2xl border-2 border-white ring-8 ring-slate-50"><Zap size={28} fill="currentColor" /></div>
+              <div className="text-right">
+                 <h2 className="text-xl font-black italic uppercase tracking-tighter text-slate-900 leading-none">Saban AI OS</h2>
+                 <p className="text-[10px] text-emerald-500 font-black uppercase tracking-[0.3em] mt-2 flex items-center gap-2"><div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" /> Stitched Elite Fix</p>
+              </div>
+           </div>
+           <img src={LOGO_PATH} alt="Saban" className="h-10 object-contain" />
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-6 md:p-14 space-y-16 pb-48 scrollbar-hide bg-[#FBFCFD]">
+          <AnimatePresence>
+            {messages.map((m, i) => (
+              <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} key={i} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
+                <div className={`max-w-[95%] p-10 md:p-14 rounded-[65px] shadow-sm border ${m.role === 'user' ? 'bg-white border-slate-200 text-slate-900 shadow-xl rounded-tl-none ring-[20px] ring-slate-50' : 'bg-[#020617] text-white border-white/5 shadow-2xl rounded-tr-none'}`}>
+                  <div className={`flex items-center gap-4 mb-10 opacity-30 ${m.role === 'user' ? 'text-slate-500' : 'text-blue-300'}`}>
+                     <span className="text-[10px] font-black uppercase tracking-[0.5em] italic">{m.role === 'user' ? 'CLIENT REQUEST' : 'OS INTELLIGENCE'}</span>
+                  </div>
+                  <SmartMessageRenderer text={m.content} onAdd={handleAction} />
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+          {loading && <div className="flex justify-end pr-10"><div className="bg-[#020617] px-10 py-6 rounded-[40px] flex items-center gap-6 shadow-2xl border border-white/5 animate-pulse"><Loader2 className="animate-spin text-blue-500" size={24} /><span className="text-xs font-black text-blue-400 uppercase italic tracking-[0.3em]">Processing DNA...</span></div></div>}
+          <div ref={scrollRef} />
+        </div>
+
+        <footer className="p-8 absolute bottom-0 w-full z-20 bg-gradient-to-t from-white via-white pt-24">
+          <div className="max-w-4xl mx-auto bg-white border-2 border-slate-100 p-4 rounded-[65px] shadow-2xl flex items-center gap-5 ring-[20px] ring-slate-50/50 backdrop-blur-3xl focus-within:ring-blue-100/50 transition-all">
+            <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} placeholder="ראמי, מה נזרים לביצוע עכשיו?" className="flex-1 bg-transparent px-8 py-6 outline-none font-black text-2xl text-right text-slate-900" />
+            <button onClick={handleSend} className="w-20 h-20 bg-[#020617] rounded-full flex items-center justify-center text-white active:scale-90 transition-all shadow-2xl hover:bg-blue-700"><Send size={34} /></button>
+          </div>
+        </footer>
+      </main>
+      <style jsx global>{`.scrollbar-hide::-webkit-scrollbar { display: none; }`}</style>
     </div>
   );
 }
