@@ -1,94 +1,76 @@
 import { NextResponse } from "next/server";
-import { getSupabase } from "@/lib/supabase";
-
-/**
- * Saban OS V46.1 - Precision Master Brain
- * -------------------------------------------
- * Fix: Forced clean tag output for Elite Cards.
- * Context: VIP Profile + Real-time Inventory lookup.
- */
+import { supabase } from "@/lib/supabase";
 
 export const dynamic = 'force-dynamic';
 
-const MODELS = ["gemini-3.1-pro-preview", "gemini-3.1-flash-lite-preview"];
+const MODEL_POOL = ["gemini-1.5-pro", "gemini-1.5-flash"];
 
 export async function POST(req: Request) {
   try {
-    const supabase = getSupabase();
-    const { sessionId, query, history, customerId } = await req.json().catch(() => ({}));
+    const body = await req.json().catch(() => ({}));
+    const query = body.query || body.message || body.content;
+    const { sessionId, history, phone } = body;
 
-    if (!query) return NextResponse.json({ error: "Missing query" }, { status: 400 });
+    if (!query) return NextResponse.json({ error: "No query" }, { status: 400 });
 
-    // 1. שליפת קונטקסט (לקוח, חוקים, מלאי)
-    const [profileRes, rulesRes, inventoryRes] = await Promise.all([
-      supabase.from('vip_profiles').select('*').eq('id', customerId).maybeSingle(),
-      supabase.from('ai_rules').select('*').eq('is_active', true),
-      supabase.from('inventory').select('*').or(`product_name.ilike.%${query}%,sku.ilike.%${query}%`).limit(3)
+    // 1. שליפת DNA: חוקים + מלאי + סל נוכחי של המשתמש
+    const [{ data: rules }, { data: cartItems }] = await Promise.all([
+      supabase.from('ai_rules').select('instruction').eq('is_active', true),
+      supabase.from('shopping_carts').select('*').eq('user_id', sessionId)
     ]);
 
-    const profile = profileRes.data;
-    const rules = rulesRes.data?.map(r => r.instruction).join("\n") || "";
-    const inventory = inventoryRes.data || [];
+    const dna = rules?.map(r => r.instruction).join("\n") || "";
+    const cartContext = cartItems?.length 
+      ? `הסל הנוכחי של הלקוח: ${cartItems.map(i => `${i.product_name} (כמות: ${i.quantity})`).join(', ')}`
+      : "הסל כרגע ריק.";
 
+    // 2. בניית פרומפט מערכת - הבוס הוא ראמי
     const systemPrompt = `
-      אתה המוח הלוגיסטי של ח. סבן. המנהל: ראמי הבוס.
-      
-      ### זהות לקוח VIP:
-      - שם: ${profile?.full_name || 'לקוח'} | פרויקט: ${profile?.main_project || 'כללי'}
-
-      ### נתוני מלאי אמת:
-      ${JSON.stringify(inventory)}
-
-      ### חוקי ביצוע Elite (חובה):
-      בכל פעם שאתה מציע מוצר שקיים במלאי, חובה להתחיל את התגובה במבנה התגיות הבא ללא רווחים מיותרים:
-      [GALLERY: image_url, image_url_2, image_url_3]
-      [QUICK_ADD:SKU]
-
-      ${rules}
-
-      ### דגשים:
-      - אם חסר נתון טכני, רשום "--". 
-      - פנה ללקוח בשמו (למשל: "בר אחי").
-      - חתימה: ראמי, הכל מוכן לביצוע. 🦾
+      אתה המוח המנהל של Saban OS. ראמי הוא הבוס.
+      חוקי DNA: ${dna}
+      ${cartContext}
+      הנחיות: ענה בעברית קצרה ומקצועית. אם הלקוח שואל על מוצר, עודד אותו להוסיף לסל.
+      חתימה חובה: ראמי, הכל מוכן לביצוע. 🦾
     `.trim();
 
+    // 3. רוטציה וביצוע (Failover Keys)
     const apiKeys = (process.env.GOOGLE_AI_KEY_POOL || "").split(",").map(k => k.trim()).filter(k => k.length > 5);
     let finalAnswer = "";
     let success = false;
 
-    for (const model of MODELS) {
+    for (const model of MODEL_POOL) {
       if (success) break;
-      for (const key of apiKeys) {
-        if (success) break;
+      for (const apiKey of apiKeys) {
         try {
-          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              contents: [{ role: "user", parts: [{ text: `היסטוריה: ${JSON.stringify(history || [])}\nשאילתה: ${query}` }] }],
+              contents: [{ role: "user", parts: [{ text: `היסטוריה: ${JSON.stringify(history || [])}\nשאלה: ${query}` }] }],
               systemInstruction: { parts: [{ text: systemPrompt }] },
-              generationConfig: { temperature: 0.1 }
+              generationConfig: { temperature: 0.15 }
             })
           });
+          const data = await res.json();
           if (res.ok) {
-            const data = await res.json();
             finalAnswer = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (finalAnswer) { success = true; break; }
+            success = true; break;
           }
         } catch (e) { continue; }
       }
     }
 
-    if (!success) throw new Error("Brain Link Failure");
+    // 4. חיפוש מוצר לזיהוי כרטיס ויזואלי
+    const { data: product } = await supabase.from('inventory').select('*').or(`product_name.ilike.%${query}%,sku.eq.${query}`).limit(1).maybeSingle();
 
-    // תיעוד לחדר הבקרה
-    await supabase.from('chat_history').insert([
-      { session_id: customerId || 'guest', role: 'user', content: query },
-      { session_id: customerId || 'guest', role: 'assistant', content: finalAnswer }
-    ]);
+    return NextResponse.json({ 
+      answer: finalAnswer, 
+      reply: finalAnswer, 
+      product: product,
+      success: true 
+    });
 
-    return NextResponse.json({ answer: finalAnswer, success: true });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ reply: "ראמי, יש תקלה ברוטציה. אני בודק מפתחות. 🦾" }, { status: 200 });
   }
 }
