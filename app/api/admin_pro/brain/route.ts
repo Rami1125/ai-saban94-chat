@@ -2,50 +2,49 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 /**
- * Saban OS V55.0 - Master Brain (SQL Cart Integration)
+ * Saban OS V55.1 - Brain with SQL Cart Memory
  * -------------------------------------------
- * - Context: Pulls data from public.shopping_carts before generating response.
- * - Precision: Uses customerId as user_id for row isolation.
+ * - Context: Reliable SQL lookup for user_id.
+ * - Logic: Multi-Model rotation with error handling.
  */
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // שימוש ב-Service Role לעקיפת RLS בשרת
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-const MODELS = ["gemini-3.1-pro-preview", "gemini-3.1-flash-lite-preview"];
+const MODELS = ["gemini-2.0-flash-exp", "gemini-1.5-pro"];
 
 export async function POST(req: Request) {
   try {
     const { query, history, customerId } = await req.json();
 
-    // 1. שליפת קונטקסט: מלאי + סל קניות נוכחי מהטבלה החדשה
+    // 1. שליפת קונטקסט מלא: פרופיל + מלאי + סל קיים
     const [inventoryRes, cartRes, profileRes] = await Promise.all([
       supabase.from('inventory').select('*').or(`product_name.ilike.%${query}%,sku.ilike.%${query}%`).limit(3),
       supabase.from('shopping_carts').select('*').eq('user_id', customerId),
       supabase.from('vip_profiles').select('*').eq('id', customerId).maybeSingle()
     ]);
 
-    const cartContext = cartRes.data?.map(i => `${i.product_name} (x${i.quantity})`).join(", ") || "ריק";
+    const cartItems = cartRes.data?.map(i => `${i.product_name} (x${i.quantity})`).join(", ") || "ריק";
     const profile = profileRes.data;
 
     const systemPrompt = `
       אתה המוח הלוגיסטי של ח. סבן. המנהל: ראמי הבוס.
-      זהות לקוח: ${profile?.full_name || 'VIP Client'} | פרויקט: ${profile?.main_project || 'כללי'}
+      זהות לקוח: ${profile?.full_name || 'VIP Client'}.
+      פרויקט פעיל: ${profile?.main_project || 'כללי'}.
       
-      מצב סל קניות נוכחי ב-SQL: ${cartContext}.
+      מצב סל קניות נוכחי של הלקוח ב-Database: ${cartItems}.
 
       חוקי הזרקה (DNA):
-      1. אם הלקוח מבקש מוצר קיים, הזרק תגיות:
-         [GALLERY: url1, url2]
-         [QUICK_ADD:SKU]
-      2. אם פריט כבר בסל, ציין זאת בחום ("אחי, כבר שמרנו לך ${cartContext} בסל").
-      3. טון דיבור: מקצועי, חברי ("אחי"), חד.
-      חתימה:תודה, הכל מוכן לביצוע. 🦾
+      - הצעת מוצר: [GALLERY: url] [QUICK_ADD:SKU].
+      - אם הפריט כבר בסל: "אחי, כבר שמרנו לך ${cartItems} לביצוע...".
+      - טון: חברי ("אחי"), מקצועי, חד.
+      חתימה: ראמי, הכל מוכן לביצוע. 🦾
     `.trim();
 
     const apiKeys = (process.env.GOOGLE_AI_KEY_POOL || "").split(",").map(k => k.trim());
-    let finalAnswer = "מצטער אחי, יש נתק קטן ב-DNA. נסה שוב.";
+    let finalAnswer = "מצטער אחי, יש נתק קטן ב-DNA המערכת. נסה שוב.";
 
     for (const key of apiKeys) {
       if (!key) continue;
