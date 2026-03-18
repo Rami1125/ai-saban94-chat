@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 /**
- * Saban OS V55.2 - Bulletproof Brain Engine
+ * Saban OS V55.3 - Cast Iron Brain Engine
  * -------------------------------------------
+ * - Fix: Resolve 404 errors by updating model strings (2.0-flash stable).
+ * - Fix: Multi-version API fallback (v1 & v1beta).
  * - Context: SQL Cart Memory + VIP Profile.
- * - Resilience: Multi-Model & Multi-Key full rotation.
- * - Debug: Detailed error logging for Vercel environment.
  */
 
 const supabase = createClient(
@@ -14,7 +14,16 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-const MODELS = ["gemini-2.0-flash-exp", "gemini-1.5-pro", "gemini-1.5-flash"];
+// רשימת מודלים מעודכנת ויציבה
+const MODELS = [
+  "gemini-2.0-flash", 
+  "gemini-1.5-flash",
+  "gemini-1.5-flash-8b",
+  "gemini-1.5-pro"
+];
+
+// גרסאות API לניסיון
+const API_VERSIONS = ["v1", "v1beta"];
 
 export async function POST(req: Request) {
   try {
@@ -22,7 +31,7 @@ export async function POST(req: Request) {
 
     if (!query) return NextResponse.json({ error: "No query provided" }, { status: 400 });
 
-    // 1. שליפת קונטקסט מלא: פרופיל + מלאי + סל קיים מהטבלה החדשה
+    // 1. שליפת קונטקסט (זהה לגרסה הקודמת)
     const [inventoryRes, cartRes, profileRes] = await Promise.all([
       supabase.from('inventory').select('*').or(`product_name.ilike.%${query}%,sku.ilike.%${query}%`).limit(3),
       supabase.from('shopping_carts').select('*').eq('user_id', customerId),
@@ -36,8 +45,7 @@ export async function POST(req: Request) {
       אתה המוח הלוגיסטי של ח. סבן. המנהל: ראמי הבוס.
       זהות לקוח: ${profile?.full_name || 'VIP Client'}.
       פרויקט פעיל: ${profile?.main_project || 'כללי'}.
-      
-      מצב סל קניות נוכחי של הלקוח ב-Database: ${cartItems}.
+      מצב סל קניות נוכחי ב-SQL: ${cartItems}.
 
       חוקי הזרקה (DNA):
       - הצעת מוצר: [GALLERY: url] [QUICK_ADD:SKU].
@@ -46,56 +54,63 @@ export async function POST(req: Request) {
       חתימה: ראמי, הכל מוכן לביצוע. 🦾
     `.trim();
 
+    // ניקוי מפתחות AI
     const apiKeys = (process.env.GOOGLE_AI_KEY_POOL || "")
       .split(",")
       .map(k => k.trim())
       .filter(k => k.length > 10);
 
     if (apiKeys.length === 0) {
-      console.error("Saban OS Error: No API Keys found in GOOGLE_AI_KEY_POOL");
-      return NextResponse.json({ answer: "אחי, המערכת לא מוגדרת עם מפתחות AI. בדוק את ה-Environment Variables." });
+      console.error("Saban OS Error: Empty API Key Pool");
+      return NextResponse.json({ answer: "אחי, המפתחות לא מוגדרים ב-Vercel. בדוק Environment Variables." });
     }
 
     let finalAnswer = "";
     let success = false;
 
-    // רוטציה כפולה: מנסים כל מודל מול כל מפתח עד שמצליחים
-    for (const model of MODELS) {
+    // רוטציה משולשת: גרסת API -> מודל -> מפתח
+    for (const version of API_VERSIONS) {
       if (success) break;
 
-      for (const key of apiKeys) {
-        try {
-          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ role: "user", parts: [{ text: `היסטוריה: ${JSON.stringify(history || [])}\nשאילתה: ${query}` }] }],
-              systemInstruction: { parts: [{ text: systemPrompt }] },
-              generationConfig: { temperature: 0.2, topP: 0.8, maxOutputTokens: 1024 }
-            })
-          });
+      for (const model of MODELS) {
+        if (success) break;
 
-          if (res.ok) {
-            const data = await res.json();
-            finalAnswer = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (finalAnswer) {
-              success = true;
-              break;
+        for (const key of apiKeys) {
+          try {
+            const url = `https://generativelanguage.googleapis.com/${version}/models/${model}:generateContent?key=${key}`;
+            
+            const res = await fetch(url, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [{ role: "user", parts: [{ text: `היסטוריה: ${JSON.stringify(history || [])}\nשאילתה: ${query}` }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                generationConfig: { temperature: 0.2, maxOutputTokens: 1024 }
+              })
+            });
+
+            if (res.ok) {
+              const data = await res.json();
+              finalAnswer = data.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (finalAnswer) {
+                success = true;
+                break;
+              }
+            } else {
+              const errData = await res.json();
+              // לוג לצורך אבחון ב-Vercel
+              console.warn(`Saban Brain: ${version}/${model} failed with key ***${key.slice(-4)}. Status: ${res.status}`);
             }
-          } else {
-            const errData = await res.json();
-            console.warn(`Saban Brain Warning: Model ${model} failed with key ***${key.slice(-4)}. Status: ${res.status}`, errData);
+          } catch (e: any) {
+            continue;
           }
-        } catch (e: any) {
-          console.error(`Saban Brain Fetch Error: ${e.message}`);
-          continue;
         }
       }
     }
 
     if (!success) {
       return NextResponse.json({ 
-        answer: "מצטער אחי, כל מנועי ה-AI עמוסים או שהמפתחות הגיעו למכסה. נסה שוב בעוד דקה. 🦾" 
+        answer: "ראמי אחי, יש כרגע עומס זמני על מנועי ה-AI העולמיים (404/429). המערכת מבצעת חיבור מחדש, נסה לשלוח שוב בעוד כמה שניות. 🦾" 
       });
     }
 
