@@ -4,8 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from "@/lib/supabase";
 import { 
   Dna, Plus, Save, Trash2, Power, 
-  ChevronLeft, Sparkles, BrainCircuit, 
-  MessageSquare, ShieldCheck, Zap, Loader2, Edit3
+  Sparkles, BrainCircuit, PlayCircle,
+  Loader2, RefreshCw, AlertCircle, CheckCircle2,
+  Terminal, Edit3, MessageCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast, Toaster } from "sonner";
@@ -15,194 +16,224 @@ interface AIRule {
   instruction: string;
   is_active: boolean;
   category: string;
-  created_at: string;
 }
 
-export default function EliteDNAStudio() {
+export default function DNATrainingStudio() {
   const [rules, setRules] = useState<AIRule[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isAdding, setIsAdding] = useState(false);
-  const [newRule, setNewRule] = useState({ instruction: '', category: 'General' });
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  
+  // States לסימולטור
+  const [simQuery, setSimQuery] = useState("");
+  const [simResponse, setSimResponse] = useState("");
+  const [simRule, setSimRule] = useState("");
 
   useEffect(() => {
     fetchRules();
   }, []);
 
   async function fetchRules() {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('ai_rules')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setRules(data || []);
-    } catch (error: any) {
-      toast.error("שגיאה בטעינת ספר החוקים");
-    } finally {
-      setLoading(false);
-    }
+    setLoading(true);
+    const { data } = await supabase.from('ai_rules').select('*').order('created_at', { ascending: false });
+    setRules(data || []);
+    setLoading(false);
   }
 
-  const toggleRuleStatus = async (id: string, currentStatus: boolean) => {
+  // פונקציית סימולציה חיה מול ה-Brain
+  const runSimulation = async () => {
+    if (!simQuery) return toast.error("כתוב שאלה לבדיקה");
+    setIsSimulating(true);
     try {
-      const { error } = await supabase
-        .from('ai_rules')
-        .update({ is_active: !currentStatus })
-        .eq('id', id);
-
-      if (error) throw error;
-      toast.success(currentStatus ? "החוק הושבת" : "החוק הופעל בהצלחה");
-      fetchRules();
-    } catch (error: any) {
-      toast.error("עדכון הסטטוס נכשל");
+      const response = await fetch("/api/admin_pro/brain", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          message: simQuery,
+          // הזרקת החוק הזמני ישירות לסימולציה
+          history: [{ role: 'system', content: `חוק זמני לבדיקה: ${simRule}` }] 
+        }),
+      });
+      const data = await response.json();
+      setSimResponse(data.reply);
+    } catch (err) {
+      toast.error("סימולציה נכשלה");
+    } finally {
+      setIsSimulating(false);
     }
   };
 
-  const handleAddRule = async () => {
-    if (!newRule.instruction) return;
+  const saveRule = async (id?: string) => {
+    const payload = { instruction: simRule, category: 'General', is_active: true };
     try {
-      const { error } = await supabase
-        .from('ai_rules')
-        .insert([{ 
-          instruction: newRule.instruction, 
-          category: newRule.category,
-          is_active: true 
-        }]);
-
-      if (error) throw error;
-      toast.success("חוק DNA חדש נצרב במערכת");
-      setNewRule({ instruction: '', category: 'General' });
-      setIsAdding(false);
+      if (id) {
+        await supabase.from('ai_rules').update(payload).eq('id', id);
+        toast.success("החוק עודכן ב-DNA");
+      } else {
+        await supabase.from('ai_rules').insert([payload]);
+        toast.success("חוק חדש נצרב בהצלחה");
+      }
+      setSimRule("");
+      setEditingId(null);
       fetchRules();
-    } catch (error: any) {
-      toast.error("שגיאה בהוספת החוק");
+    } catch (err) {
+      toast.error("שגיאה בשמירה");
     }
   };
 
   const deleteRule = async (id: string) => {
-    if (!confirm("למחוק את החוק מה-DNA?")) return;
-    try {
-      const { error } = await supabase.from('ai_rules').delete().eq('id', id);
-      if (error) throw error;
-      toast.success("החוק הוסר לצמיתות");
-      fetchRules();
-    } catch (error: any) {
-      toast.error("מחיקה נכשלה");
-    }
+    if (!confirm("למחוק חוק זה?")) return;
+    await supabase.from('ai_rules').delete().eq('id', id);
+    fetchRules();
+    toast.success("נמחק");
   };
 
   return (
-    <div className="min-h-screen bg-[#020617] text-white p-4 md:p-8 font-sans pb-32" dir="rtl">
+    <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8 font-sans" dir="rtl">
       <Toaster position="top-center" richColors />
-      
+
       {/* Header */}
-      <div className="max-w-4xl mx-auto mb-10 flex justify-between items-end">
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <div className="bg-blue-600/20 p-2 rounded-lg">
-              <Dna className="text-blue-500" size={24} />
-            </div>
-            <span className="text-xs font-black tracking-widest text-blue-500 uppercase">Saban OS Training</span>
+      <div className="max-w-6xl mx-auto mb-8">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="bg-blue-600 p-2 rounded-xl ring-4 ring-blue-600/20">
+            <BrainCircuit size={28} />
           </div>
-          <h1 className="text-4xl font-black tracking-tighter">ספר החוקים <span className="text-blue-500">(DNA)</span></h1>
+          <h1 className="text-3xl font-black italic tracking-tighter">SABAN DNA STUDIO</h1>
         </div>
-        
-        <button 
-          onClick={() => setIsAdding(!isAdding)}
-          className="bg-blue-600 hover:bg-blue-500 text-white p-4 rounded-[22px] shadow-lg shadow-blue-500/20 transition-all"
-        >
-          {isAdding ? <ChevronLeft size={24} /> : <Plus size={24} />}
-        </button>
+        <p className="text-slate-400 text-sm italic">אימון וסימולציה בזמן אמת של חוקי המערכת</p>
       </div>
 
-      <main className="max-w-4xl mx-auto space-y-6">
-        {/* Form להוספת חוק */}
-        <AnimatePresence>
-          {isAdding && (
-            <motion.div 
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="bg-slate-900/50 backdrop-blur-xl border border-white/5 p-6 rounded-[32px] space-y-4"
-            >
-              <h2 className="text-lg font-bold flex items-center gap-2">
-                <Sparkles className="text-yellow-500" size={18} /> הזרקת הנחיה חדשה
-              </h2>
-              <textarea 
-                className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-sm outline-none focus:border-blue-500 transition-all min-h-[120px]"
-                placeholder="כתוב כאן איך המוח צריך להתנהג... (למשל: תמיד תציע מוצרים משלימים)"
-                value={newRule.instruction}
-                onChange={(e) => setNewRule({...newRule, instruction: e.target.value})}
-              />
-              <div className="flex gap-4">
-                <select 
-                  className="bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-xs"
-                  value={newRule.category}
-                  onChange={(e) => setNewRule({...newRule, category: e.target.value})}
-                >
-                  <option value="General">כללי</option>
-                  <option value="Sales">מכירות</option>
-                  <option value="Support">שירות</option>
-                  <option value="Logistic">לוגיסטיקה</option>
-                </select>
-                <button 
-                  onClick={handleAddRule}
-                  className="flex-1 bg-emerald-500 text-slate-950 font-black rounded-xl py-2 flex items-center justify-center gap-2"
-                >
-                  <Save size={18} /> שמור ב-DNA
-                </button>
+      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8">
+        
+        {/* צד שמאל: סימולטור אימון חצי שקוף */}
+        <section className="space-y-6">
+          <div className="bg-slate-900/50 border border-blue-500/30 rounded-[35px] p-6 backdrop-blur-md shadow-2xl">
+            <h2 className="text-xl font-bold flex items-center gap-2 mb-6">
+              <Sparkles className="text-blue-400" size={20} />
+              {editingId ? "עריכת חוק קיים" : "כתיבת חוק חדש"}
+            </h2>
+            
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-blue-500 mr-2 tracking-widest">תוכן החוק (DNA)</label>
+                <textarea 
+                  value={simRule}
+                  onChange={(e) => setSimRule(e.target.value)}
+                  className="w-full bg-black/50 border border-slate-800 rounded-2xl p-4 text-sm focus:border-blue-500 outline-none min-h-[120px] transition-all"
+                  placeholder="לדוגמה: בכל פעם שלקוח שואל על חצץ, תציע לו הנחה של 5% על הובלה."
+                />
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
-        {/* רשימת חוקים */}
-        <div className="grid gap-4">
-          {loading ? (
-            <div className="flex justify-center p-20"><Loader2 className="animate-spin text-blue-500" /></div>
-          ) : rules.map((rule) => (
-            <motion.div 
-              key={rule.id}
-              layout
-              className={`p-5 rounded-[30px] border transition-all ${
-                rule.is_active ? 'bg-slate-900/40 border-white/5' : 'bg-slate-950 border-white/5 opacity-50'
-              }`}
-            >
-              <div className="flex justify-between items-start mb-3">
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${rule.is_active ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                  <span className="text-[10px] font-bold uppercase opacity-40 tracking-tighter">
-                    {rule.category} • {new Date(rule.created_at).toLocaleDateString()}
-                  </span>
-                </div>
+              <div className="p-4 bg-blue-500/5 rounded-2xl border border-blue-500/10">
+                <h3 className="text-xs font-bold mb-3 flex items-center gap-2 text-blue-400 uppercase">
+                  <Terminal size={14} /> סימולטור מענה חי
+                </h3>
                 <div className="flex gap-2">
-                  <button onClick={() => toggleRuleStatus(rule.id, rule.is_active)} className="p-2 hover:bg-white/5 rounded-lg transition-colors">
-                    <Power size={16} className={rule.is_active ? "text-emerald-400" : "text-slate-500"} />
-                  </button>
-                  <button onClick={() => deleteRule(rule.id)} className="p-2 hover:bg-red-500/10 rounded-lg transition-colors text-red-400">
-                    <Trash2 size={16} />
+                  <input 
+                    value={simQuery}
+                    onChange={(e) => setSimQuery(e.target.value)}
+                    className="flex-1 bg-black/40 border border-slate-700 rounded-xl px-4 py-2 text-xs outline-none focus:border-emerald-500"
+                    placeholder="מה הלקוח שואל?"
+                  />
+                  <button 
+                    onClick={runSimulation}
+                    disabled={isSimulating}
+                    className="bg-emerald-600 hover:bg-emerald-500 p-2 rounded-xl transition-all"
+                  >
+                    {isSimulating ? <Loader2 size={18} className="animate-spin" /> : <PlayCircle size={18} />}
                   </button>
                 </div>
+                
+                <AnimatePresence>
+                  {simResponse && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 5 }} 
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mt-4 p-3 bg-black/60 rounded-xl border-r-2 border-emerald-500 text-xs leading-relaxed text-slate-300"
+                    >
+                      <MessageCircle size={12} className="mb-1 text-emerald-500" />
+                      {simResponse}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
-              <p className="text-sm leading-relaxed text-slate-200">{rule.instruction}</p>
-            </motion.div>
-          ))}
-        </div>
-      </main>
 
-      {/* Floating Stats - Bottom Mobile Navigation */}
-      <div className="fixed bottom-6 left-4 right-4 bg-blue-600 p-4 rounded-[28px] shadow-2xl flex justify-around items-center backdrop-blur-lg">
-        <div className="text-center">
-          <p className="text-[10px] font-bold opacity-70 uppercase leading-none">חוקים פעילים</p>
-          <p className="text-xl font-black">{rules.filter(r => r.is_active).length}</p>
-        </div>
-        <div className="h-8 w-px bg-white/20" />
-        <div className="flex flex-col items-center">
-           <BrainCircuit size={20} className="mb-1" />
-           <span className="text-[8px] font-black uppercase">Connected to V42.3</span>
-        </div>
+              <button 
+                onClick={() => saveRule(editingId || undefined)}
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-2xl shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 transition-all active:scale-95"
+              >
+                <Save size={20} />
+                {editingId ? "עדכן חוק ב-DNA" : "צרוב חוק חדש"}
+              </button>
+              {editingId && (
+                <button onClick={() => {setEditingId(null); setSimRule("");}} className="w-full text-xs text-slate-500 hover:text-white underline">ביטול עריכה</button>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* צד ימין: טבלת חוקים Elite */}
+        <section className="bg-slate-900/30 border border-slate-800 rounded-[35px] overflow-hidden flex flex-col shadow-inner">
+          <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+            <h2 className="text-lg font-black italic">ספר החוקים הפעיל</h2>
+            <RefreshCw size={16} className={`text-slate-500 cursor-pointer ${loading && 'animate-spin'}`} onClick={fetchRules} />
+          </div>
+          
+          <div className="flex-1 overflow-y-auto max-h-[600px] p-4 space-y-3 custom-scrollbar">
+            {rules.map((rule) => (
+              <motion.div 
+                key={rule.id}
+                layout
+                className={`p-4 rounded-2xl border transition-all ${editingId === rule.id ? 'bg-blue-600/10 border-blue-500' : 'bg-slate-900/40 border-slate-800'}`}
+              >
+                <div className="flex justify-between items-start gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className={`w-1.5 h-1.5 rounded-full ${rule.is_active ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">ID: {rule.id.slice(0, 5)}</span>
+                    </div>
+                    <p className="text-sm text-slate-200 leading-snug">{rule.instruction}</p>
+                  </div>
+                  
+                  <div className="flex flex-col gap-2">
+                    <button 
+                      onClick={() => {setEditingId(rule.id); setSimRule(rule.instruction);}}
+                      className="p-2 hover:bg-white/5 rounded-lg text-slate-400 hover:text-blue-400 transition-colors"
+                    >
+                      <Edit3 size={16} />
+                    </button>
+                    <button 
+                      onClick={() => deleteRule(rule.id)}
+                      className="p-2 hover:bg-red-500/10 rounded-lg text-slate-400 hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+
+            {rules.length === 0 && !loading && (
+              <div className="text-center py-20 text-slate-600">
+                <AlertCircle className="mx-auto mb-2 opacity-20" size={48} />
+                <p className="font-bold italic uppercase text-xs tracking-widest">DNA Empty</p>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+
+      {/* Footer Status */}
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-blue-600/90 backdrop-blur-md px-8 py-3 rounded-full shadow-2xl flex items-center gap-6 border border-white/10">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={14} className="text-emerald-300" />
+            <span className="text-[10px] font-black uppercase tracking-tighter">System Live</span>
+          </div>
+          <div className="w-px h-4 bg-white/20" />
+          <div className="flex items-center gap-2">
+            <Dna size={14} className="text-white animate-pulse" />
+            <span className="text-[10px] font-black uppercase tracking-tighter">{rules.length} Active Rules</span>
+          </div>
       </div>
     </div>
   );
