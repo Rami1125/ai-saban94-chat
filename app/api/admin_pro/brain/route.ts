@@ -109,7 +109,8 @@ export async function POST(req: Request) {
 
     if (!success) {
       return NextResponse.json({ 
-answer: "ראמי אחי, יש כרגע 'חסימת עורקים' במנועי ה-AI העולמיים. סרקתי את כל הנתיבים והם עמוסים. נסה לשלוח שוב בעוד 10 שניות, אני מאפס את המערכת. 🦾"      });
+answer: "ראמי אחי, יש כרגע 'חסימת עורקים' במנועי ה-AI העולמיים. סרקתי את כל הנתיבים והם עמוסים. נסה לשלוח שוב בעוד 10 שניות, אני מאפס את המערכת. 🦾"    
+      });
     }
 
     return NextResponse.json({ answer: finalAnswer });
