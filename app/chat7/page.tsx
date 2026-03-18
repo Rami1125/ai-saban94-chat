@@ -12,21 +12,21 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast, Toaster } from "sonner";
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { getFirestore, collection, onSnapshot, doc, setDoc } from 'firebase/firestore';
 import { getAuth, signInAnonymously } from 'firebase/auth';
 
 /**
- * Saban OS V50.0 - Unified VIP Chat (The Living Cart)
+ * Saban OS V51.0 - Unified VIP Chat (Hydration & Asset Fix)
  * --------------------------------------------------------
- * - Feature: Quantity Selection Modal (Elite UI).
- * - Feedback: Animated Cart Badge & Persistent Cloud Sync.
- * - Architecture: Direct Firebase injection per SKU.
+ * - Fix: Added 'mounted' state to resolve React Error #418.
+ * - Fix: Robust 'SafeImage' component for 404 handling.
+ * - Feature: Quantity Selection Modal + Animated Cart Badge.
  */
 
 const LOGO_PATH = "/ai.png";
 const appId = "saban-os-v1";
 
-// --- Firebase Initialization ---
+// --- Firebase Safe Initialization ---
 const initFirebase = () => {
   if (typeof window === 'undefined') return null;
   const configRaw = process.env.NEXT_PUBLIC_FIREBASE_CONFIG;
@@ -42,6 +42,7 @@ const fb = initFirebase();
 
 export default function UnifiedVipChat({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const [mounted, setMounted] = useState(false);
   const [client, setClient] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [input, setInput] = useState("");
@@ -55,14 +56,20 @@ export default function UnifiedVipChat({ params }: { params: Promise<{ id: strin
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // פתרון שגיאת Hydration #418
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+
     async function init() {
       const { data } = await supabase.from('vip_profiles').select('*').eq('id', id).maybeSingle();
       setClient(data);
 
       if (fb) {
         await signInAnonymously(fb.auth);
-        // המאזין לסל "מעיר" את הממשק
         onSnapshot(collection(fb.db, 'artifacts', appId, 'users', id, 'cart'), (s) => {
           setCartCount(s.size);
         });
@@ -74,11 +81,10 @@ export default function UnifiedVipChat({ params }: { params: Promise<{ id: strin
       }]);
     }
     init();
-  }, [id]);
+  }, [id, mounted]);
 
   useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
 
-  // פתיחת מודאל כמות
   const triggerOrder = async (sku: string) => {
     setLoading(true);
     const { data: p } = await supabase.from('inventory').select('*').eq('sku', sku).maybeSingle();
@@ -93,7 +99,6 @@ export default function UnifiedVipChat({ params }: { params: Promise<{ id: strin
     }
   };
 
-  // הזרקה לסל (Cloud Sync)
   const finalizeAddToStore = async () => {
     if (!fb || !id || !productToOrder) return;
     const toastId = toast.loading(`מעדכן סל לביצוע...`);
@@ -129,6 +134,12 @@ export default function UnifiedVipChat({ params }: { params: Promise<{ id: strin
     } catch (e) { toast.error("נתק ב-DNA המערכת"); } finally { setLoading(false); }
   };
 
+  if (!mounted) return (
+    <div className="h-screen bg-white flex items-center justify-center">
+       <Loader2 className="animate-spin text-blue-600" size={48} />
+    </div>
+  );
+
   return (
     <div className="flex h-screen bg-[#F8FAFC] text-slate-900 font-sans overflow-hidden" dir="rtl">
       <Toaster position="top-center" richColors theme="dark" />
@@ -137,7 +148,7 @@ export default function UnifiedVipChat({ params }: { params: Promise<{ id: strin
       <AnimatePresence>
         {isQtyModalOpen && productToOrder && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[300] bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-6">
-            <motion.div initial={{ scale: 0.9, y: 50 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 50 }} className="bg-white rounded-[55px] w-full max-w-lg overflow-hidden shadow-[0_50px_100px_rgba(0,0,0,0.5)] border border-white/10">
+            <motion.div initial={{ scale: 0.9, y: 50 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 50 }} className="bg-white rounded-[55px] w-full max-w-lg overflow-hidden shadow-2xl border border-white/10">
                <div className="bg-[#020617] p-10 text-white flex justify-between items-center relative overflow-hidden">
                   <div className="absolute top-0 right-0 w-40 h-40 bg-blue-600/10 blur-[80px] rounded-full" />
                   <div className="text-right z-10">
@@ -152,7 +163,7 @@ export default function UnifiedVipChat({ params }: { params: Promise<{ id: strin
                <div className="p-12 space-y-10 text-center">
                   <div className="flex items-center gap-6 justify-center">
                      <div className="w-24 h-24 rounded-3xl overflow-hidden border-4 border-slate-100 shadow-xl bg-slate-50">
-                        <img src={productToOrder.image_url} className="w-full h-full object-cover" />
+                        <SafeImage src={productToOrder.image_url} />
                      </div>
                      <div className="text-right">
                         <h4 className="text-2xl font-black text-slate-900 italic tracking-tight leading-none">{productToOrder.product_name}</h4>
@@ -254,11 +265,10 @@ export default function UnifiedVipChat({ params }: { params: Promise<{ id: strin
   );
 }
 
-// --- המפענח המקצועי V50.0 ---
+// --- המפענח המקצועי V51.0 ---
 function SmartMessageRenderer({ text, onAdd }: any) {
   if (!text) return null;
 
-  // חילוץ נתונים
   const galleryMatch = text.match(/\[GALLERY:\s*([^\]]+)\]/i);
   const urls = galleryMatch ? galleryMatch[1].split(',').map(u => u.trim()).filter(u => u.length > 5) : [];
 
@@ -272,30 +282,29 @@ function SmartMessageRenderer({ text, onAdd }: any) {
     .trim();
 
   const lines = cleanText.split('\n');
-  const title = lines.find(l => l.includes('###'))?.replace('###', '').trim();
 
   return (
     <div className="space-y-6">
       {urls.length > 0 && (
         <div className="my-6 grid grid-cols-12 gap-3 h-[280px]">
-           <div className="col-span-8 bg-slate-900 rounded-[35px] overflow-hidden border border-white/10 shadow-2xl">
-              <img src={urls[0]} className="w-full h-full object-cover" alt="Main" />
+           <div className="col-span-8 bg-slate-900 rounded-[35px] overflow-hidden border border-white/10 shadow-2xl relative">
+              <SafeImage src={urls[0]} />
            </div>
            <div className="col-span-4 flex flex-col gap-3">
               {urls.slice(1, 3).map((url, i) => (
-                <div key={i} className="flex-1 bg-slate-900 rounded-[22px] overflow-hidden border border-white/10 shadow-lg">
-                   <img src={url} className="w-full h-full object-cover grayscale opacity-60" alt="Thumb" />
+                <div key={i} className="flex-1 bg-slate-900 rounded-[22px] overflow-hidden border border-white/10 shadow-lg relative">
+                   <SafeImage src={url} isThumb />
                 </div>
               ))}
            </div>
         </div>
       )}
 
-      <div className="space-y-6">
+      <div className="space-y-6 text-right" dir="rtl">
         {lines.map((line, i) => {
           if (!line.trim()) return null;
           if (line.startsWith('###')) return <h3 key={i} className="text-3xl font-black text-white italic border-r-8 border-blue-600 pr-6 my-10 uppercase tracking-tighter leading-none">{line.replace('###', '')}</h3>;
-          return <p key={i} className="text-[20px] md:text-[22px] leading-relaxed font-bold text-white/95 text-right tracking-tight">{line}</p>;
+          return <p key={i} className="text-[20px] md:text-[22px] leading-relaxed font-bold text-white/95 tracking-tight">{line}</p>;
         })}
       </div>
 
@@ -310,5 +319,28 @@ function SmartMessageRenderer({ text, onAdd }: any) {
         </motion.button>
       )}
     </div>
+  );
+}
+
+// --- רכיב תמונה חסין שגיאות 404 ---
+function SafeImage({ src, isThumb = false }: { src: string, isThumb?: boolean }) {
+  const [error, setError] = useState(false);
+
+  if (!src || error) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 text-slate-600 p-4">
+        <ImageIcon size={isThumb ? 20 : 48} strokeWidth={1} />
+        {!isThumb && <span className="text-[10px] font-black uppercase mt-3 opacity-20 italic">Broken Asset</span>}
+      </div>
+    );
+  }
+
+  return (
+    <img 
+      src={src} 
+      className="w-full h-full object-cover transition-all duration-700 hover:scale-110" 
+      alt="Asset" 
+      onError={() => setError(true)} 
+    />
   );
 }
