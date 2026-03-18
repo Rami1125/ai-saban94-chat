@@ -12,20 +12,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast, Toaster } from "sonner";
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, doc, setDoc } from 'firebase/firestore';
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-
-/**
- * Saban OS V54.0 - Unified VIP Chat (Iron Link Edition)
- * --------------------------------------------------------
- * - Fix: Enforced Firebase Auth wait before injection (Rule 3).
- * - UX: Scaled down text for mobile performance.
- * - Interaction: Reinforced button z-index and touch handlers.
- */
+import { getAuth, signInAnonymously } from 'firebase/auth';
 
 const LOGO_PATH = "/ai.png";
 const appId = "saban-os-v1";
 
-// --- Firebase Config & Setup ---
 const getFirebase = () => {
   if (typeof window === 'undefined') return null;
   const configRaw = process.env.NEXT_PUBLIC_FIREBASE_CONFIG;
@@ -47,7 +38,6 @@ export default function UnifiedVipChat({ params }: { params: Promise<{ id: strin
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   
-  // Auth & Cart State
   const [user, setUser] = useState<any>(null);
   const [cartCount, setCartCount] = useState(0);
   const [isQtyModalOpen, setIsQtyModalOpen] = useState(false);
@@ -61,27 +51,21 @@ export default function UnifiedVipChat({ params }: { params: Promise<{ id: strin
 
   useEffect(() => {
     if (!mounted || !fb) return;
-    
     let unsubscribeCart: () => void;
 
     const initSession = async () => {
       try {
-        // 1. Auth First (Rule 3)
         setLastAction("Auth Connecting...");
         const cred = await signInAnonymously(fb.auth);
         setUser(cred.user);
         setLastAction("Auth Ready 🦾");
 
-        // 2. Fetch Client Info
         const { data } = await supabase.from('vip_profiles').select('*').eq('id', id).maybeSingle();
         setClient(data);
         
-        // 3. Cart Listener (Scoped to URL ID for Rami's sync)
         unsubscribeCart = onSnapshot(collection(fb.db, 'artifacts', appId, 'users', id, 'cart'), (s) => {
           setCartCount(s.size);
           setLastAction(`Cart: ${s.size} items`);
-        }, (err) => {
-          setLastAction("Sync Error");
         });
 
         setMessages([{ 
@@ -117,28 +101,26 @@ export default function UnifiedVipChat({ params }: { params: Promise<{ id: strin
     finally { setLoading(false); }
   };
 
+  // --- תיקון פונקציית ההוספה לסל ---
   const finalizeAddToStore = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
-    if (!fb || !id || !productToOrder || !user) {
-      setLastAction("Error: No Session/Auth");
+    if (!fb || !id || !productToOrder) {
       toast.error("ממתין לחיבור מאובטח...");
       return;
     }
 
-    setLastAction("Injecting DNA...");
     const toastId = toast.loading(`מעדכן סל לביצוע...`);
     
     try {
-      // אנחנו משתמשים ב-id מה-URL (מזהה הלקוח) כדי שראמי יראה את זה
       const ref = doc(fb.db, 'artifacts', appId, 'users', id, 'cart', productToOrder.sku);
       await setDoc(ref, {
         sku: productToOrder.sku,
         product_name: productToOrder.product_name,
         price: productToOrder.price || 0,
         qty: qty,
-        image_url: productToOrder.image_url,
+        image_url: productToOrder.image_url || null,
         added_at: new Date().toISOString()
       });
       
@@ -178,14 +160,18 @@ export default function UnifiedVipChat({ params }: { params: Promise<{ id: strin
     <div className="flex h-screen bg-[#F8FAFC] text-slate-900 font-sans overflow-hidden touch-manipulation" dir="rtl">
       <Toaster position="top-center" richColors theme="dark" />
       
-      {/* --- Quantity Selection Modal --- */}
+      {/* --- Quantity Selection Modal - REINFORCED --- */}
       <AnimatePresence>
         {isQtyModalOpen && productToOrder && (
           <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
-            className="fixed inset-0 z-[2000] bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-4"
+            className="fixed inset-0 z-[9999] bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-4"
           >
-            <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className="bg-white rounded-[35px] w-full max-w-sm overflow-hidden shadow-2xl border border-white/10">
+            <motion.div 
+              initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} 
+              className="bg-white rounded-[35px] w-full max-w-sm overflow-hidden shadow-2xl border border-white/10"
+              onClick={(e) => e.stopPropagation()}
+            >
                <div className="bg-[#020617] p-5 text-white flex justify-between items-center relative overflow-hidden">
                   <div className="text-right z-10">
                      <h3 className="text-base font-black italic uppercase tracking-tighter leading-none">כמות לביצוע</h3>
@@ -206,15 +192,15 @@ export default function UnifiedVipChat({ params }: { params: Promise<{ id: strin
                   </div>
 
                   <div className="flex items-center justify-center gap-6 py-4 bg-slate-50 rounded-2xl shadow-inner">
-                     <button onClick={() => setQty(Math.max(1, qty - 1))} className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-900 shadow-md border border-slate-200 active:scale-90"><Minus size={16}/></button>
+                     <button type="button" onClick={() => setQty(Math.max(1, qty - 1))} className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-slate-900 shadow-md border border-slate-200 active:scale-90"><Minus size={16}/></button>
                      <span className="text-4xl font-black italic text-slate-900 tracking-tighter w-14">{qty}</span>
-                     <button onClick={() => setQty(qty + 1)} className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white shadow-md active:scale-90"><Plus size={16}/></button>
+                     <button type="button" onClick={() => setQty(qty + 1)} className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white shadow-md active:scale-90"><Plus size={16}/></button>
                   </div>
 
                   <button 
                     type="button"
                     onClick={finalizeAddToStore}
-                    className="w-full bg-blue-600 text-white py-4 rounded-[22px] font-black text-sm uppercase italic tracking-widest shadow-xl flex items-center justify-center gap-3 border-b-4 border-blue-800 active:translate-y-1 transition-all cursor-pointer relative z-[2100]"
+                    className="w-full bg-blue-600 text-white py-4 rounded-[22px] font-black text-sm uppercase italic tracking-widest shadow-xl flex items-center justify-center gap-3 border-b-4 border-blue-800 active:translate-y-1 transition-all cursor-pointer relative z-[10000]"
                   >
                     אשר ושגר לסל 🦾
                   </button>
@@ -231,7 +217,7 @@ export default function UnifiedVipChat({ params }: { params: Promise<{ id: strin
               <div className="text-right">
                  <h2 className="text-[10px] font-black italic uppercase leading-none truncate max-w-[100px]">{client?.full_name || 'VIP Portal'}</h2>
                  <p className="text-[6px] text-emerald-500 font-black uppercase tracking-widest mt-0.5 flex items-center gap-1 italic">
-                    <div className="w-1 h-1 bg-emerald-500 rounded-full animate-pulse" /> Saban OS
+                   <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> Saban OS
                  </p>
               </div>
            </div>
@@ -262,7 +248,6 @@ export default function UnifiedVipChat({ params }: { params: Promise<{ id: strin
           <div ref={scrollRef} className="h-10" />
         </div>
 
-        {/* --- Bottom Diagnostic (Malshinon) --- */}
         <div className="absolute bottom-24 left-0 right-0 z-10 flex justify-center pointer-events-none">
            <div className="bg-slate-900/90 backdrop-blur-md px-3 py-1 rounded-full border border-white/10 flex items-center gap-2 shadow-2xl scale-[0.7] opacity-60">
               <Bug size={8} className="text-rose-400" />
@@ -312,17 +297,16 @@ function SmartMessageRenderer({ text, onAdd }: any) {
         {lines.map((line, i) => {
           if (!line.trim()) return null;
           if (line.startsWith('###')) return <h3 key={i} className="text-sm font-black text-white italic border-r-4 border-blue-600 pr-2 my-3 uppercase tracking-tight">{line.replace('###', '')}</h3>;
-          return <p key={i} className="text-xs md:text-sm leading-relaxed font-bold text-white/90">{line}</p>;
+          return <p key={i} className="text-xs md:text-sm leading-relaxed font-bold">{line}</p>;
         })}
       </div>
       {sku && (
-        <motion.button 
-          whileTap={{ scale: 0.97 }} 
-          onClick={(e) => { e.preventDefault(); onAdd(sku); }}
+        <button 
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onAdd(sku); }}
           className="w-full mt-3 bg-white text-slate-950 py-3.5 rounded-[20px] font-black text-[9px] uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 border-b-4 border-slate-200 cursor-pointer relative z-20"
         >
           הוסף להזמנה <ShoppingCart size={14} className="text-blue-600" />
-        </motion.button>
+        </button>
       )}
     </div>
   );
