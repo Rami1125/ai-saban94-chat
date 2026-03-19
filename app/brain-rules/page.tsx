@@ -95,6 +95,7 @@ export default function BrainRulesStudio() {
                 onChange={e => setNewRule({...newRule, category: e.target.value})}
                 className="h-14 rounded-2xl border-slate-100 bg-slate-50 font-bold px-4 outline-none">
                 <option value="logistics">לוגיסטיקה/סידור נהגים</option>
+                <option value="logistics">לוגיסטיקה ושיבוץ (AI Automation)</option>
                 <option value="urgent">מקרים דחופים</option>
                 <option value="customer_service">שירות לקוחות</option>
               </select>
