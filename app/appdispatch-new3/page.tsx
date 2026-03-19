@@ -101,7 +101,7 @@ export default function SabanOSMasterDispatch() {
         `${newOrder.customer_name} | ${newOrder.driver_name} | ${newOrder.scheduled_time}`
       );
 
-      const waMsg = `*📦 סדר יום SabanOS*\nלקוח: ${newOrder.customer_name}\nמספר: ${newOrder.order_id_comax}\nנהג: ${newOrder.driver_name}\nשעה: ${newOrder.scheduled_time}`;
+      const waMsg = `*📦 סדר יום *\nלקוח: ${newOrder.customer_name}\nמספר: ${newOrder.order_id_comax}\nנהג: ${newOrder.driver_name}\nשעה: ${newOrder.scheduled_time}`;
       window.open(`https://wa.me/?text=${encodeURIComponent(waMsg)}`, '_blank');
       
       setShowForm(false);
@@ -131,8 +131,8 @@ export default function SabanOSMasterDispatch() {
       {/* Header */}
       <div className="bg-[#0B2C63] text-white p-6 rounded-b-[2.5rem] shadow-2xl mb-6 border-b-4 border-blue-500/50 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-black italic text-white uppercase tracking-tighter">SABAN<span className="text-blue-400">OS</span></h1>
-          <p className="text-[10px] text-blue-200 font-bold uppercase tracking-widest">Logistic Control</p>
+          <h1 className="text-3xl font-black italic text-white uppercase tracking-tighter">ח.סבן<span className="text-blue-400">סידור</span></h1>
+          <p className="text-[10px] text-blue-200 font-bold uppercase tracking-widest"> סידור הזמנות</p>
         </div>
         <Button onClick={() => setShowForm(true)} className="bg-blue-600 hover:bg-blue-500 rounded-xl gap-2 font-black shadow-lg">
           <Plus size={20} /> הזמנה חדשה
