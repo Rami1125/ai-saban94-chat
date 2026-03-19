@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
-import { SabanBrainPro } from "@/lib/saban-brain-pro";
+import { SabanBrain } from "@/lib/saban-brain";
 import { getSupabase } from "@/lib/supabase";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
