@@ -1,4 +1,3 @@
-"use client";
 import type { Metadata, Viewport } from "next";
 import { Heebo } from "next/font/google";
 import "./globals.css";
@@ -10,7 +9,6 @@ import Script from "next/script";
 
 const heebo = Heebo({ subsets: ["hebrew"], variable: "--font-heebo" });
 
-// Metadata ו-Viewport נשארים ללא שינוי כפי שביקשת
 export const metadata: Metadata = {
   title: "סידור ח.סבן",
   description: "מערכת ניהול ולוגיסטיקה חכמה",
@@ -38,20 +36,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="he" dir="rtl">
       <head>
-        {/* מגן IndexedDB ו-OneSignal משופר */}
+        {/* מגן IndexedDB ו-OneSignal */}
         <script dangerouslySetInnerHTML={{ __html: `
           window.OneSignalDeferred = window.OneSignalDeferred || [];
-          // הגנה למקרה ש-IndexedDB חסום או לא נתמך
           try {
             if (!window.indexedDB) {
-              console.warn("OneSignal Warning: IndexedDB is not available. Some features might be limited.");
+              console.warn("OneSignal Warning: IndexedDB is not available.");
             }
           } catch (e) {
             console.error("Browser security blocked IndexedDB access.");
           }
         `}} />
         
-        {/* OneSignal SDK */}
         <Script 
           src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" 
           strategy="afterInteractive"
@@ -59,9 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Script id="onesignal-init" strategy="afterInteractive">
           {`
             window.OneSignalDeferred.push(async function(OneSignal) {
-              // בדיקה נוספת בתוך ה-Init למניעת קריסת ה-Store
               if (!window.indexedDB) return; 
-              
               try {
                 await OneSignal.init({
                   appId: "acc8a2bc-d54e-4261-b3d2-cc5c5f7b39d3",
@@ -85,15 +79,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </ChatActionsProvider>
         </BusinessConfigProvider>
 
-        {/* מערכת סאונד - הגנה מפני חסימת Autoplay של הדפדפן */}
+        {/* מערכת סאונד גלובלית */}
         <script dangerouslySetInnerHTML={{ __html: `
           window.playNotificationSound = () => {
             try {
               const AudioContextClass = window.AudioContext || window.webkitAudioContext;
               if (!AudioContextClass) return;
-              
               const ctx = new AudioContextClass();
-              
               const playTone = (freq, start, duration) => {
                 const osc = ctx.createOscillator();
                 const gain = ctx.createGain();
@@ -106,7 +98,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 osc.start(ctx.currentTime + start);
                 osc.stop(ctx.currentTime + start + duration);
               };
-
               if (ctx.state === 'suspended') {
                 ctx.resume().then(() => {
                   playTone(880, 0, 0.1);
