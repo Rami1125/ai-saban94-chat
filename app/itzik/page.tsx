@@ -25,7 +25,6 @@ export default function ItzikSmartApp() {
 
   useEffect(() => {
     fetchRequests();
-    // מאזין לשינויים בזמן אמת
     const channel = supabase.channel('itzik_live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'saban_requests' }, () => fetchRequests())
       .subscribe();
@@ -41,6 +40,7 @@ export default function ItzikSmartApp() {
     if (!form.docNum) return toast.error("חובה להזין מספר מסמך");
     setLoading(true);
 
+    // בניית האובייקט בדיוק לפי עמודות ה-SQL
     const payload = {
       request_type: mode === 'ORDER' ? 'הזמנה' : 'העברה',
       doc_number: form.docNum,
@@ -49,7 +49,7 @@ export default function ItzikSmartApp() {
       time_window: `${form.startTime} - ${form.endTime}`,
       from_branch: form.fromBranch,
       to_branch: form.toBranch,
-      customer_name: mode === 'ORDER' ? 'לקוח חנות' : `העברה סניף`,
+      customer_name: mode === 'ORDER' ? 'לקוח חנות' : 'העברה סניף',
       requester_name: 'איציק זהבי',
       status: 'pending'
     };
@@ -57,12 +57,12 @@ export default function ItzikSmartApp() {
     const { error } = await supabase.from('saban_requests').insert([payload]);
     
     if (!error) {
-      toast.success("בקשה נשלחה לסידור! 🚀");
+      toast.success("נשלח לסידור! 🚀");
       setMode('HOME');
       setForm({...form, docNum: '', notes: ''});
     } else {
-      console.error(error);
-      toast.error("שגיאה בשליחה. וודא שהרצת את ה-SQL");
+      console.error("Supabase Error:", error);
+      toast.error("שגיאה בשמירה. וודא שהרצת את ה-SQL ב-Supabase");
     }
     setLoading(false);
   };
@@ -71,10 +71,11 @@ export default function ItzikSmartApp() {
     <div className="max-w-md mx-auto min-h-screen bg-[#F8FAFC] p-4 pb-24 text-right font-sans" dir="rtl">
       <Toaster position="top-center" richColors />
       
+      {/* Header איציק */}
       <div className="flex justify-between items-center mb-8 pt-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-900">שלום איציק 👋</h1>
-          <p className="text-slate-500 font-bold italic">SabanOS - בקשות חנות</p>
+          <h1 className="text-2xl font-black text-slate-900 italic">שלום איציק 👋</h1>
+          <p className="text-slate-500 font-bold">SabanOS - בקשות חנות</p>
         </div>
         <div className="h-12 w-12 bg-white rounded-2xl shadow-sm border flex items-center justify-center relative">
           <Bell className="text-blue-600" size={20} />
@@ -82,15 +83,15 @@ export default function ItzikSmartApp() {
         </div>
       </div>
 
-      {mode === 'HOME' && (
+      {mode === 'HOME' ? (
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-4">
             <Card onClick={() => setMode('ORDER')} className="p-8 cursor-pointer bg-blue-600 text-white rounded-[2.5rem] shadow-xl border-none active:scale-95 transition-all">
-              <ShoppingCart size={40} className="mb-4 opacity-80" />
+              <ShoppingCart size={40} className="mb-4 opacity-80 text-white" />
               <div className="font-black text-2xl">הזמנה</div>
             </Card>
-            <Card onClick={() => setMode('TRANSFER')} className="p-8 cursor-pointer bg-white text-blue-600 rounded-[2.5rem] shadow-lg border-none active:scale-95 transition-all">
-              <ArrowLeftRight size={40} className="mb-4" />
+            <Card onClick={() => setMode('TRANSFER')} className="p-8 cursor-pointer bg-white text-blue-600 rounded-[2.5rem] shadow-lg border-none active:scale-95 transition-all text-right">
+              <ArrowLeftRight size={40} className="mb-4 text-blue-600" />
               <div className="font-black text-2xl">העברה</div>
             </Card>
           </div>
@@ -112,9 +113,7 @@ export default function ItzikSmartApp() {
             ))}
           </div>
         </div>
-      )}
-
-      {mode !== 'HOME' && (
+      ) : (
         <Card className="p-6 rounded-[2.5rem] border-none shadow-2xl bg-white animate-in slide-in-from-bottom-8">
           <div className="flex justify-between items-center mb-6">
             <h2 className="font-black text-2xl text-[#0B2C63]">{mode === 'ORDER' ? 'פרטי הזמנה' : 'פרטי העברה'}</h2>
@@ -122,6 +121,14 @@ export default function ItzikSmartApp() {
           </div>
           <div className="space-y-4">
             <Input value={form.docNum} onChange={e => setForm({...form, docNum: e.target.value})} placeholder="מספר מסמך (חשבונית/הזמנה)..." className="h-14 rounded-2xl bg-slate-50 border-none font-bold text-lg text-right" />
+            
+            {mode === 'TRANSFER' && (
+              <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-dashed">
+                 <span className="font-bold text-xs text-slate-500">{form.fromBranch} ⬅️ {form.toBranch}</span>
+                 <Button onClick={() => setForm({...form, fromBranch: form.toBranch, toBranch: form.fromBranch})} variant="ghost" className="h-8 w-8 p-0"><ArrowLeftRight size={14}/></Button>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3 text-right">
                 <div>
                     <label className="text-[10px] font-black text-slate-400 mr-2 uppercase">שעת התחלה</label>
