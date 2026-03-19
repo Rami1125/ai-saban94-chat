@@ -1,3 +1,4 @@
+"use client";
 import type { Metadata, Viewport } from "next";
 import { Heebo } from "next/font/google";
 import "./globals.css";
@@ -9,11 +10,11 @@ import Script from "next/script";
 
 const heebo = Heebo({ subsets: ["hebrew"], variable: "--font-heebo" });
 
+// Metadata ו-Viewport נשארים ללא שינוי כפי שביקשת
 export const metadata: Metadata = {
   title: "סידור ח.סבן",
   description: "מערכת ניהול ולוגיסטיקה חכמה",
   icons: {
-    // פותר שגיאת 404 ע"י שימוש באייקון שקוף במידה והקובץ חסר ב-public
     icon: 'data:image/x-icon;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wA=',
     apple: "/icon-192.png",
   },
@@ -37,13 +38,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="he" dir="rtl">
       <head>
-        {/* מגן IndexedDB ו-OneSignal */}
+        {/* מגן IndexedDB ו-OneSignal משופר */}
         <script dangerouslySetInnerHTML={{ __html: `
           window.OneSignalDeferred = window.OneSignalDeferred || [];
-          // הגנה למקרה ש-IndexedDB חסום (מצב אינקוגניטו)
+          // הגנה למקרה ש-IndexedDB חסום או לא נתמך
           try {
             if (!window.indexedDB) {
-              console.warn("OneSignal Warning: IndexedDB is not available.");
+              console.warn("OneSignal Warning: IndexedDB is not available. Some features might be limited.");
             }
           } catch (e) {
             console.error("Browser security blocked IndexedDB access.");
@@ -58,6 +59,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Script id="onesignal-init" strategy="afterInteractive">
           {`
             window.OneSignalDeferred.push(async function(OneSignal) {
+              // בדיקה נוספת בתוך ה-Init למניעת קריסת ה-Store
+              if (!window.indexedDB) return; 
+              
               try {
                 await OneSignal.init({
                   appId: "acc8a2bc-d54e-4261-b3d2-cc5c5f7b39d3",
@@ -90,7 +94,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               
               const ctx = new AudioContextClass();
               
-              // פונקציית צליל פנימית
               const playTone = (freq, start, duration) => {
                 const osc = ctx.createOscillator();
                 const gain = ctx.createGain();
@@ -104,7 +107,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 osc.stop(ctx.currentTime + start + duration);
               };
 
-              // דפדפנים דורשים אינטראקציה, אם ה-context ב-suspended, ננסה להפעיל
               if (ctx.state === 'suspended') {
                 ctx.resume().then(() => {
                   playTone(880, 0, 0.1);
