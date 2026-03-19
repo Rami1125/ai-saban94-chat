@@ -49,9 +49,14 @@ export default function SabanMasterDispatch() {
   const supabase = getSupabase();
 
   const fetchData = useCallback(async () => {
-    const { data } = await supabase.from('saban_master_dispatch').select('*').order('scheduled_time', { ascending: true });
-    setOrders(data || []);
-    setLoading(false);
+    try {
+      const { data } = await supabase.from('saban_master_dispatch').select('*').order('scheduled_time', { ascending: true });
+      setOrders(data || []);
+    } catch (err) {
+      console.error("Fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
   }, [supabase]);
 
   useEffect(() => {
@@ -61,6 +66,7 @@ export default function SabanMasterDispatch() {
   }, [fetchData, supabase]);
 
   const generateWAMessage = (order: any) => {
+    // בדיקת צד לקוח בטוחה למניעת Illegal constructor
     const isMobile = typeof navigator !== 'undefined' && /iPhone|Android/i.test(navigator.userAgent);
     const actionInfo = order.driver_name === 'פינוי פסולת' ? `\n♻️ *פעולה:* ${order.container_action}` : '';
     
@@ -105,22 +111,19 @@ export default function SabanMasterDispatch() {
 
       {/* Header */}
       <div className="bg-[#0B2C63] text-white p-6 rounded-b-[2.5rem] shadow-2xl mb-8 flex justify-between items-center relative z-50">
-        <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 bg-white/10 rounded-xl border-none text-white transition-all active:scale-90">
+        <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 bg-white/10 rounded-xl border-none text-white transition-all">
           {isMenuOpen ? <X size={28}/> : <Menu size={28}/>}
         </button>
         <div className="text-center">
             <h1 className="text-xl font-black italic tracking-tighter leading-tight text-white uppercase">ח.סבן</h1>
             <p className="text-[10px] font-bold text-blue-300 uppercase tracking-widest">חומרי בניין</p>
         </div>
-        <Button onClick={() => setShowForm(true)} className="bg-blue-600 rounded-xl font-black h-10 px-4 border-none shadow-lg text-white">חדש +</Button>
+        <Button onClick={() => { setEditingOrder(null); setShowForm(true); }} className="bg-blue-600 rounded-xl font-black h-10 px-4 border-none shadow-lg text-white">חדש +</Button>
         
         {isMenuOpen && (
           <div className="absolute top-24 right-6 left-6 bg-white rounded-[2rem] shadow-2xl p-4 border border-slate-100 animate-in slide-in-from-top-4">
              <button onClick={shareMorningReport} className="w-full flex items-center gap-3 p-5 hover:bg-slate-50 rounded-2xl text-[#0B2C63] font-black border-none text-right transition-colors">
                 <Share2 size={22} className="text-blue-600"/> שלח דוח בוקר לוואטסאפ
-             </button>
-             <button className="w-full flex items-center gap-3 p-5 hover:bg-slate-50 rounded-2xl text-[#0B2C63] font-black border-none text-right opacity-50">
-                <History size={22} className="text-orange-500"/> היסטוריית פעולות (מלשינון)
              </button>
           </div>
         )}
@@ -129,7 +132,6 @@ export default function SabanMasterDispatch() {
       <div className="max-w-[1800px] mx-auto px-4 grid grid-cols-1 lg:grid-cols-3 gap-8">
         {drivers.map((driver) => (
           <div key={driver.id} className="space-y-6">
-            {/* כרטיס נהג עם פס שעות אופקי */}
             <Card className="bg-white p-6 rounded-[2.5rem] shadow-xl border-none relative overflow-hidden">
                 <div className="flex items-center gap-4 mb-6">
                   <img src={driver.img} className="w-16 h-16 rounded-2xl object-cover shadow-lg border-2 border-white" />
@@ -143,7 +145,7 @@ export default function SabanMasterDispatch() {
                   {timeSlots.map(time => {
                     const hasOrder = orders.some(o => o.driver_name === driver.name && o.scheduled_time === time);
                     return (
-                      <div key={time} onClick={() => { setForm({...form, driver_name: driver.name, scheduled_time: time}); setShowForm(true); }}
+                      <div key={time} onClick={() => { setForm({...form, driver_name: driver.name, scheduled_time: time}); setEditingOrder(null); setShowForm(true); }}
                            className="flex flex-col items-center gap-2 cursor-pointer group">
                         <div className={`w-12 h-16 rounded-2xl border-2 flex items-center justify-center transition-all ${hasOrder ? 'bg-[#0B2C63] border-blue-400' : 'bg-slate-50 border-slate-100 hover:border-blue-300'}`}>
                           {hasOrder ? <Truck size={20} className="text-white animate-pulse" /> : <Clock size={16} className="text-slate-300" />}
@@ -155,10 +157,9 @@ export default function SabanMasterDispatch() {
                 </div>
             </Card>
 
-            {/* רשימת הזמנות בעיצוב UI עשיר */}
             <div className="space-y-4">
               {orders.filter(o => o.driver_name === driver.name).map((order) => (
-                <Card key={order.id} className="p-6 rounded-[2rem] bg-white shadow-lg border-none relative group overflow-hidden border-r-8 border-r-[#0B2C63]">
+                <Card key={order.id} className="p-6 rounded-[2rem] bg-white shadow-lg border-none relative group border-r-8 border-r-[#0B2C63]">
                     <div className="flex justify-between items-start mb-4">
                         <div className="flex items-center gap-4">
                             <div className="bg-[#0B2C63] text-white px-3 py-2 rounded-xl text-xs font-black italic shadow-inner">{order.scheduled_time}</div>
@@ -168,9 +169,9 @@ export default function SabanMasterDispatch() {
                             </div>
                         </div>
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                             <button onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(generateWAMessage(order))}`, '_blank')} className="p-2 bg-green-50 text-green-600 rounded-lg border-none"><RefreshCw size={16}/></button>
-                             <button onClick={() => { setEditingOrder(order); setForm(order); setShowForm(true); }} className="p-2 bg-blue-50 text-blue-600 rounded-lg border-none"><Edit2 size={16}/></button>
-                             <button onClick={() => { if(confirm('למחוק הזמנה?')) supabase.from('saban_master_dispatch').delete().eq('id', order.id).then(fetchData); }} className="p-2 bg-red-50 text-red-500 rounded-lg border-none"><Trash2 size={16}/></button>
+                             <button onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(generateWAMessage(order))}`, '_blank')} className="p-2 bg-green-50 text-green-600 rounded-lg border-none cursor-pointer"><RefreshCw size={16}/></button>
+                             <button onClick={() => { setEditingOrder(order); setForm(order); setShowForm(true); }} className="p-2 bg-blue-50 text-blue-600 rounded-lg border-none cursor-pointer"><Edit2 size={16}/></button>
+                             <button onClick={() => { if(confirm('למחוק הזמנה?')) supabase.from('saban_master_dispatch').delete().eq('id', order.id).then(fetchData); }} className="p-2 bg-red-50 text-red-500 rounded-lg border-none cursor-pointer"><Trash2 size={16}/></button>
                         </div>
                     </div>
 
@@ -187,7 +188,6 @@ export default function SabanMasterDispatch() {
         ))}
       </div>
 
-      {/* טופס יצירה/עריכה חכם */}
       {showForm && (
         <div className="fixed inset-0 bg-[#0B2C63]/95 backdrop-blur-md z-[100] flex items-center justify-center p-4">
           <Card className="bg-white w-full max-w-lg rounded-[3rem] p-10 space-y-6 shadow-2xl border-t-[12px] border-blue-600 animate-in zoom-in-95 border-none text-right">
@@ -244,7 +244,7 @@ export default function SabanMasterDispatch() {
                 </div>
             )}
 
-            <Button onClick={saveOrder} className="w-full h-18 bg-green-600 hover:bg-green-700 text-white rounded-[2rem] font-black text-xl shadow-xl transition-all border-none active:scale-95 shadow-green-200">
+            <Button onClick={saveOrder} className="w-full h-18 bg-green-600 hover:bg-green-700 text-white rounded-[2rem] font-black text-xl shadow-xl transition-all border-none active:scale-95 shadow-green-200 cursor-pointer">
               {editingOrder ? 'עדכן סידור עבודה ✍️' : 'שמור ושגר לוואטסאפ 🚀'}
             </Button>
           </Card>
