@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
   Truck, Plus, ChevronDown, Trash2, X, Send, 
-  Calendar, Clock, Warehouse, MapPin, Share2, UserCheck, HardHat, Recycle
+  Clock, Warehouse, MapPin, Share2, UserCheck, HardHat, Recycle, Menu, LayoutDashboard, History
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 
@@ -17,169 +17,129 @@ const drivers = [
 ];
 
 const teamMembers = ['ראמי', 'יואב', 'איציק'];
-const containerWarehouses = ['שארק (מחסן 30)', 'כראדי (מחסן 32)', 'שי שרון (מחסן 40)'];
-const containerActions = ['הצבה', 'החלפה', 'הוצאה'];
+const containerWarehouses = ['שארק (30)', 'כראדי (32)', 'שי שרון (40)'];
 
-const timeSlots = Array.from({ length: 21 }, (_, i) => {
-  const h = Math.floor(i / 2) + 6;
-  const m = i % 2 === 0 ? "00" : "30";
-  return `${h.toString().padStart(2, '0')}:${m}`;
-});
-
-export default function SabanOSFullDispatch() {
+export default function SabanOSMaster() {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   
   const [newOrder, setNewOrder] = useState({
     scheduled_date: new Date().toISOString().split('T')[0],
     scheduled_time: '07:00',
     customer_name: '',
-    address: '',
     warehouse_source: 'התלמיד',
     driver_name: 'חכמת',
     created_by: 'ראמי',
     order_id_comax: '',
-    delivery_type: 'מנוף 🏗️',
+    delivery_type: 'מנוף',
     container_action: 'הצבה'
   });
 
   const supabase = getSupabase();
 
   const fetchData = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('saban_dispatch')
-      .select('*')
-      .order('scheduled_time', { ascending: true });
-    
-    if (!error) setOrders(data || []);
+    const { data } = await supabase.from('saban_master_dispatch').select('*').order('scheduled_time', { ascending: true });
+    setOrders(data || []);
     setLoading(false);
   }, [supabase]);
 
   useEffect(() => {
     fetchData();
-    const channel = supabase.channel('dispatch_updates')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'saban_dispatch' }, fetchData)
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    const sub = supabase.channel('master_live').on('postgres_changes', { event: '*', schema: 'public', table: 'saban_master_dispatch' }, fetchData).subscribe();
+    return () => { supabase.removeChannel(sub); };
   }, [fetchData, supabase]);
 
-  const saveAndShare = async () => {
-    if (!newOrder.customer_name || !newOrder.order_id_comax) {
-      return toast.error("חובה להזין שם לקוח ומספר הזמנה");
+  const generateWAMessage = (order: any) => {
+    const isMobile = /iPhone|Android/i.test(navigator.userAgent);
+    
+    if (!isMobile) {
+      // הודעה מקצועית למחשב (ללא אימוג'י)
+      return `SabanOS - הזמנה חדשה\nלקוח: ${order.customer_name}\nמספר: ${order.order_id_comax}\nנהג: ${order.driver_name}\nשעה: ${order.scheduled_time}\nמחסן: ${order.warehouse_source}`;
     }
 
-    const payload = {
-      ...newOrder,
-      start_process_time: new Date().toISOString()
-    };
+    // הודעה מעוצבת לנייד (עם אימוג'י)
+    const emoji = order.driver_name === 'פינוי פסולת' ? '♻️' : '📦';
+    return `${emoji} *הזמנה חדשה - SabanOS*\n---------------------------\n👤 *לקוח:* ${order.customer_name}\n🆔 *מספר:* ${order.order_id_comax}\n🚛 *נהג:* ${order.driver_name}\n⏰ *שעה:* ${order.scheduled_time}\n🏭 *מחסן:* ${order.warehouse_source}\n---------------------------\n_נשלח מהנייד_`;
+  };
 
-    const { error } = await supabase.from('saban_dispatch').insert([payload]);
+  const saveOrder = async () => {
+    if (!newOrder.customer_name || !newOrder.order_id_comax) return toast.error("חסר נתונים");
 
+    const { error } = await supabase.from('saban_master_dispatch').insert([newOrder]);
     if (!error) {
-      toast.success("הזמנה נשמרה בסידור!");
-      
-      // שליחת התראה Push (אופציונלי)
-      fetch("https://onesignal.com/api/v1/notifications", {
-        method: "POST",
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-        body: JSON.stringify({
-          app_id: "acc8a2bc-d54e-4261-b3d2-cc5c5f7b39d3",
-          included_segments: ["All"],
-          headings: { "he": newOrder.driver_name === 'פינוי פסולת' ? "♻️ מכולה חדשה" : "📦 הזמנה חדשה" },
-          contents: { "he": `${newOrder.customer_name} | ${newOrder.driver_name}` }
-        })
-      }).catch(() => {});
-
-      // שיתוף לוואטסאפ
-      const msg = `*📦 SabanOS - הזמנה חדשה*\n` +
-                  `👤 *לקוח:* ${newOrder.customer_name}\n` +
-                  `🆔 *מספר:* ${newOrder.order_id_comax}\n` +
-                  `🚚 *נהג:* ${newOrder.driver_name}\n` +
-                  `📅 *תאריך:* ${newOrder.scheduled_date}\n` +
-                  `⏰ *שעה:* ${newOrder.scheduled_time}\n` +
-                  `🏭 *מחסן:* ${newOrder.warehouse_source}` +
-                  (newOrder.driver_name === 'פינוי פסולת' ? `\n♻️ *פעולה:* ${newOrder.container_action}` : '');
-
-      window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
-      
+      toast.success("נשמר בהצלחה!");
+      window.open(`https://wa.me/?text=${encodeURIComponent(generateWAMessage(newOrder))}`, '_blank');
       setShowForm(false);
-      setNewOrder({ ...newOrder, customer_name: '', address: '', order_id_comax: '' });
-    } else {
-      toast.error("שגיאה בשמירה: וודא שביצעת עדכון SQL לעמודות החדשות");
+      setNewOrder({ ...newOrder, customer_name: '', order_id_comax: '' });
     }
   };
 
-  if (loading) return <div className="h-screen flex items-center justify-center font-black animate-pulse text-[#0B2C63]">טוען SabanOS...</div>;
+  const shareMorningReport = () => {
+    const report = `☀️ *דוח בוקר SabanOS - ${new Date().toLocaleDateString('he-IL')}*\n` +
+      orders.map(o => `• ${o.scheduled_time} | ${o.customer_name} | ${o.driver_name}`).join('\n');
+    window.open(`https://wa.me/?text=${encodeURIComponent(report)}`, '_blank');
+  };
+
+  if (loading) return <div className="h-screen flex items-center justify-center font-black animate-pulse text-[#0B2C63]">SABAN OS...</div>;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans text-right" dir="rtl">
       <Toaster position="top-center" richColors />
 
-      {/* Header */}
-      <div className="bg-[#0B2C63] text-white p-6 rounded-b-[2.5rem] shadow-2xl mb-6 flex justify-between items-center border-b-4 border-blue-500/50">
-        <div>
-          <h1 className="text-3xl font-black italic">SABAN<span className="text-blue-400">OS</span></h1>
-          <p className="text-[10px] text-blue-200 font-bold uppercase tracking-widest">Dispatch Center</p>
-        </div>
-        <Button onClick={() => setShowForm(true)} className="bg-blue-600 hover:bg-blue-500 rounded-xl gap-2 font-black shadow-lg border-none h-12">
-          <Plus size={20} /> הזמנה חדשה
-        </Button>
+      {/* תפריט המבורגר מודרני */}
+      <div className="bg-[#0B2C63] text-white p-6 rounded-b-[2rem] shadow-2xl mb-6 flex justify-between items-center relative z-50">
+        <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 hover:bg-white/10 rounded-xl transition-colors">
+          {isMenuOpen ? <X size={28}/> : <Menu size={28}/>}
+        </button>
+        <h1 className="text-2xl font-black italic">SABAN<span className="text-blue-400">OS</span></h1>
+        <Button onClick={() => setShowForm(true)} className="bg-blue-600 rounded-xl font-black h-10 px-4">חדש +</Button>
+        
+        {isMenuOpen && (
+          <div className="absolute top-20 right-6 left-6 bg-white rounded-3xl shadow-2xl p-4 border border-slate-100 animate-in slide-in-from-top-4">
+             <button onClick={shareMorningReport} className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 rounded-2xl text-[#0B2C63] font-black border-b last:border-none">
+                <Share2 size={20} className="text-blue-600"/> שלח דוח בוקר לסידור
+             </button>
+             <button className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 rounded-2xl text-[#0B2C63] font-black border-b last:border-none">
+                <History size={20} className="text-orange-500"/> היסטוריית פעולות (מלשינון)
+             </button>
+          </div>
+        )}
       </div>
 
       <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-3 gap-6">
         {drivers.map((driver) => (
-          <div key={driver.name} className="space-y-4 text-right">
-            <Card className="bg-white p-5 rounded-[2.2rem] shadow-xl border-none relative overflow-hidden">
-              <div className="flex items-center gap-4 mb-6">
-                <div className="relative">
-                  <img src={driver.img} className="w-16 h-16 rounded-2xl object-cover shadow-lg border-2 border-white" />
-                  {driver.name === 'פינוי פסולת' && <Recycle className="absolute -top-2 -right-2 bg-green-500 text-white p-1 rounded-full" size={20}/>}
+          <div key={driver.name} className="space-y-4">
+            <Card className="bg-white p-5 rounded-[2rem] shadow-xl border-none relative overflow-hidden">
+                <div className="flex items-center gap-4 mb-4">
+                  <img src={driver.img} className="w-16 h-16 rounded-2xl object-cover shadow-lg" />
+                  <div>
+                    <h2 className="text-xl font-black text-slate-800">{driver.name}</h2>
+                    <Badge className="bg-blue-50 text-blue-700 border-none font-bold text-[10px] uppercase">{driver.defaultType}</Badge>
+                  </div>
                 </div>
-                <div>
-                  <h2 className="text-xl font-black text-slate-800">{driver.name}</h2>
-                  <Badge className="bg-blue-50 text-blue-700 border-none font-bold text-[10px]">{driver.defaultType}</Badge>
-                </div>
-              </div>
-
-              <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                {timeSlots.map(time => {
-                  const hasOrder = orders.some(o => o.driver_name === driver.name && o.scheduled_time?.startsWith(time.slice(0,4)));
-                  return (
-                    <div key={time} onClick={() => { 
-                      setNewOrder({
-                        ...newOrder, 
-                        driver_name: driver.name, 
-                        scheduled_time: time, 
-                        delivery_type: driver.defaultType,
-                        warehouse_source: driver.name === 'פינוי פסולת' ? 'שארק (מחסן 30)' : 'התלמיד'
-                      }); 
-                      setShowForm(true); 
-                    }} className="flex flex-col items-center gap-1 cursor-pointer">
-                      <div className={`w-10 h-14 rounded-xl border-2 flex items-center justify-center transition-all ${hasOrder ? 'bg-[#0B2C63] border-blue-400 shadow-md' : 'bg-slate-50 border-slate-100 hover:border-blue-200'}`}>
-                        {hasOrder ? <Truck size={16} className="text-white" /> : <Clock size={14} className="text-slate-300" />}
+                <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                  {['07:00', '08:00', '09:00', '10:00', '11:00'].map(time => (
+                    <div key={time} onClick={() => { setNewOrder({...newOrder, driver_name: driver.name, scheduled_time: time}); setShowForm(true); }}
+                         className="flex flex-col items-center gap-1 cursor-pointer">
+                      <div className="w-10 h-14 rounded-xl border-2 flex items-center justify-center bg-slate-50 border-slate-100 hover:border-blue-300">
+                        <Clock size={14} className="text-slate-300" />
                       </div>
                       <span className="text-[9px] font-bold text-slate-400">{time}</span>
                     </div>
-                  );
-                })}
-              </div>
+                  ))}
+                </div>
             </Card>
 
             <div className="space-y-3">
               {orders.filter(o => o.driver_name === driver.name).map((order) => (
-                <Card key={order.id} className="border-none shadow-md rounded-2xl bg-white overflow-hidden hover:shadow-lg transition-all">
-                  <div onClick={() => setExpandedId(expandedId === order.id ? null : order.id)} className="p-4 flex justify-between items-center cursor-pointer">
+                <Card key={order.id} className="p-4 rounded-2xl bg-white shadow-md border-none flex justify-between items-center">
                     <div className="flex items-center gap-3">
-                      <div className="bg-[#0B2C63] text-white font-black px-2 py-1 rounded-lg text-[10px]">{order.scheduled_time?.slice(0, 5)}</div>
-                      <div className="flex flex-col">
-                        <span className="font-black text-slate-800 text-sm leading-tight">{order.customer_name}</span>
-                        <span className="text-[10px] text-blue-600 font-bold">#{order.order_id_comax} {order.container_action ? `| ${order.container_action}` : ''}</span>
-                      </div>
+                        <div className="bg-[#0B2C63] text-white px-2 py-1 rounded-lg text-[10px] font-black">{order.scheduled_time}</div>
+                        <div className="font-black text-slate-800 text-sm">{order.customer_name}</div>
                     </div>
-                    <ChevronDown size={18} className={`text-slate-300 transition-transform ${expandedId === order.id ? 'rotate-180 text-blue-600' : ''}`} />
-                  </div>
+                    <Button onClick={() => supabase.from('saban_master_dispatch').delete().eq('id', order.id).then(fetchData)} variant="ghost" className="text-red-400 h-8 w-8 p-0"><Trash2 size={16}/></button>
                 </Card>
               ))}
             </div>
@@ -187,70 +147,34 @@ export default function SabanOSFullDispatch() {
         ))}
       </div>
 
-      {/* טופס יצירה משופר עם תאריך ושעה */}
       {showForm && (
         <div className="fixed inset-0 bg-[#0B2C63]/95 backdrop-blur-md z-[100] flex items-center justify-center p-4">
           <Card className="bg-white w-full max-w-lg rounded-[2.5rem] p-8 space-y-4 shadow-2xl border-t-[12px] border-blue-600 animate-in zoom-in-95 border-none">
-            <div className="flex justify-between items-center mb-2">
-              <h2 className="text-xl font-black text-[#0B2C63] flex items-center gap-2">
-                <Plus className="text-blue-600"/> הזמנה ל{newOrder.driver_name}
-              </h2>
-              <button onClick={() => setShowForm(false)} className="bg-slate-100 p-2 rounded-full text-slate-400"><X size={20}/></button>
+            <div className="flex justify-between items-center mb-2 text-[#0B2C63]">
+              <h2 className="text-xl font-black">{newOrder.driver_name === 'פינוי פסולת' ? 'פינוי מכולה ♻️' : 'הזמנה חדשה 📦'}</h2>
+              <button onClick={() => setShowForm(false)} className="bg-slate-100 p-2 rounded-full"><X size={20}/></button>
             </div>
-
-            {/* בחירת רושם */}
-            <div className="flex gap-2">
-              {teamMembers.map(m => (
-                <button key={m} onClick={() => setNewOrder({...newOrder, created_by: m})}
-                  className={`flex-1 py-3 rounded-2xl text-[11px] font-black border-none transition-all ${newOrder.created_by === m ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400'}`}>
-                  {m}
-                </button>
-              ))}
-            </div>
-
-            {/* תאריך ושעה - החזרנו אותם לטופס */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 mr-2 uppercase">תאריך אספקה</label>
-                <input type="date" value={newOrder.scheduled_date} onChange={e => setNewOrder({...newOrder, scheduled_date: e.target.value})} 
-                       className="w-full h-12 px-4 rounded-xl border-2 border-slate-100 font-bold text-right outline-none focus:border-blue-500" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 mr-2 uppercase">שעת הגעה</label>
-                <select value={newOrder.scheduled_time} onChange={e => setNewOrder({...newOrder, scheduled_time: e.target.value})}
-                        className="w-full h-12 px-4 rounded-xl border-2 border-slate-100 font-bold text-right outline-none focus:border-blue-500 bg-white">
-                  {timeSlots.map(t => <option key={t}>{t}</option>)}
-                </select>
-              </div>
-            </div>
-
-            {/* שדות לקוח ומסמך */}
-            <input placeholder="שם הלקוח" value={newOrder.customer_name} onChange={e => setNewOrder({...newOrder, customer_name: e.target.value})} 
-                   className="w-full h-14 px-6 rounded-2xl border-2 border-slate-100 font-bold text-lg text-right outline-none focus:border-blue-500" />
             
-            <div className="grid grid-cols-2 gap-3">
-              <input placeholder="מספר קומקס" value={newOrder.order_id_comax} onChange={e => setNewOrder({...newOrder, order_id_comax: e.target.value})} 
-                     className="h-14 px-6 rounded-2xl border-2 border-slate-100 font-bold text-lg text-right outline-none focus:border-blue-500" />
-              <select value={newOrder.warehouse_source} onChange={e => setNewOrder({...newOrder, warehouse_source: e.target.value})} 
-                      className="h-14 px-4 rounded-2xl border-2 border-slate-100 font-bold bg-white text-right outline-none focus:border-blue-500">
-                {newOrder.driver_name === 'פינוי פסולת' ? containerWarehouses.map(w => <option key={w}>{w}</option>) : <><option>התלמיד</option><option>החרש</option></>}
-              </select>
+            <div className="flex gap-2">
+                {teamMembers.map(m => (
+                    <button key={m} onClick={() => setNewOrder({...newOrder, created_by: m})}
+                            className={`flex-1 py-3 rounded-2xl text-[11px] font-black transition-all ${newOrder.created_by === m ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}>
+                        {m}
+                    </button>
+                ))}
             </div>
 
-            {/* לוגיקת מכולות */}
+            <input placeholder="שם הלקוח" value={newOrder.customer_name} onChange={e => setNewOrder({...newOrder, customer_name: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-slate-100 font-bold text-lg text-right outline-none focus:border-blue-500" />
+            <input placeholder="מספר קומקס" value={newOrder.order_id_comax} onChange={e => setNewOrder({...newOrder, order_id_comax: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-slate-100 font-bold text-lg text-right outline-none focus:border-blue-500" />
+            
             {newOrder.driver_name === 'פינוי פסולת' && (
-              <div className="grid grid-cols-3 gap-2 bg-green-50 p-2 rounded-2xl">
-                {containerActions.map(act => (
-                  <button key={act} onClick={() => setNewOrder({...newOrder, container_action: act})}
-                    className={`py-2 rounded-xl text-[11px] font-black border-none transition-all ${newOrder.container_action === act ? 'bg-green-600 text-white shadow-md' : 'bg-white text-green-600'}`}>
-                    {act}
-                  </button>
-                ))}
-              </div>
+               <select value={newOrder.warehouse_source} onChange={e => setNewOrder({...newOrder, warehouse_source: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-slate-100 font-bold text-right outline-none focus:border-blue-500 bg-white">
+                  {containerWarehouses.map(w => <option key={w}>{w}</option>)}
+               </select>
             )}
 
-            <Button onClick={saveAndShare} className="w-full h-16 bg-green-600 hover:bg-green-500 text-white rounded-2xl font-black text-xl shadow-xl transition-all active:scale-95 border-none">
-              שמור ושתף לסידור 🚀
+            <Button onClick={saveOrder} className="w-full h-16 bg-green-600 hover:bg-green-500 text-white rounded-2xl font-black text-xl shadow-xl transition-all border-none active:scale-95">
+              שמור ושתף לוואטסאפ 🚀
             </Button>
           </Card>
         </div>
