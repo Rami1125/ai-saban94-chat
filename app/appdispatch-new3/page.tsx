@@ -142,7 +142,7 @@ export default function SabanOSMasterDispatch() {
 
       <div className="bg-[#0B2C63] text-white p-6 rounded-b-[2.5rem] shadow-2xl mb-6 border-b-4 border-blue-500/50 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-black italic text-white uppercase tracking-tighter">SABAN<span className="text-blue-400">OS</span></h1>
+          <h1 className="text-3xl font-black italic text-white uppercase tracking-tighter">סידור <span className="text-blue-400"> ח.סבן</span></h1>
           <p className="text-[10px] text-blue-200 font-bold uppercase tracking-widest">Logistic Center</p>
         </div>
         <Button onClick={() => setShowForm(true)} className="bg-blue-600 hover:bg-blue-500 rounded-xl gap-2 font-black shadow-lg border-none text-white h-12 px-6">
