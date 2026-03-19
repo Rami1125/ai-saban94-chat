@@ -52,14 +52,12 @@ export default function SabanOSMaster() {
   }, [fetchData, supabase]);
 
   const generateWAMessage = (order: any) => {
-    const isMobile = /iPhone|Android/i.test(navigator.userAgent);
+    const isMobile = typeof navigator !== 'undefined' && /iPhone|Android/i.test(navigator.userAgent);
     
     if (!isMobile) {
-      // הודעה מקצועית למחשב (ללא אימוג'י)
       return `SabanOS - הזמנה חדשה\nלקוח: ${order.customer_name}\nמספר: ${order.order_id_comax}\nנהג: ${order.driver_name}\nשעה: ${order.scheduled_time}\nמחסן: ${order.warehouse_source}`;
     }
 
-    // הודעה מעוצבת לנייד (עם אימוג'י)
     const emoji = order.driver_name === 'פינוי פסולת' ? '♻️' : '📦';
     return `${emoji} *הזמנה חדשה - SabanOS*\n---------------------------\n👤 *לקוח:* ${order.customer_name}\n🆔 *מספר:* ${order.order_id_comax}\n🚛 *נהג:* ${order.driver_name}\n⏰ *שעה:* ${order.scheduled_time}\n🏭 *מחסן:* ${order.warehouse_source}\n---------------------------\n_נשלח מהנייד_`;
   };
@@ -73,6 +71,7 @@ export default function SabanOSMaster() {
       window.open(`https://wa.me/?text=${encodeURIComponent(generateWAMessage(newOrder))}`, '_blank');
       setShowForm(false);
       setNewOrder({ ...newOrder, customer_name: '', order_id_comax: '' });
+      fetchData();
     }
   };
 
@@ -88,21 +87,20 @@ export default function SabanOSMaster() {
     <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans text-right" dir="rtl">
       <Toaster position="top-center" richColors />
 
-      {/* תפריט המבורגר מודרני */}
       <div className="bg-[#0B2C63] text-white p-6 rounded-b-[2rem] shadow-2xl mb-6 flex justify-between items-center relative z-50">
         <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 hover:bg-white/10 rounded-xl transition-colors">
           {isMenuOpen ? <X size={28}/> : <Menu size={28}/>}
         </button>
         <h1 className="text-2xl font-black italic">SABAN<span className="text-blue-400">OS</span></h1>
-        <Button onClick={() => setShowForm(true)} className="bg-blue-600 rounded-xl font-black h-10 px-4">חדש +</Button>
+        <Button onClick={() => setShowForm(true)} className="bg-blue-600 rounded-xl font-black h-10 px-4 border-none text-white">חדש +</Button>
         
         {isMenuOpen && (
           <div className="absolute top-20 right-6 left-6 bg-white rounded-3xl shadow-2xl p-4 border border-slate-100 animate-in slide-in-from-top-4">
-             <button onClick={shareMorningReport} className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 rounded-2xl text-[#0B2C63] font-black border-b last:border-none">
+             <button onClick={shareMorningReport} className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 rounded-2xl text-[#0B2C63] font-black border-b last:border-none text-right">
                 <Share2 size={20} className="text-blue-600"/> שלח דוח בוקר לסידור
              </button>
-             <button className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 rounded-2xl text-[#0B2C63] font-black border-b last:border-none">
-                <History size={20} className="text-orange-500"/> היסטוריית פעולות (מלשינון)
+             <button className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 rounded-2xl text-[#0B2C63] font-black border-b last:border-none text-right">
+                <History size={20} className="text-orange-500"/> היסטוריית פעולות
              </button>
           </div>
         )}
@@ -139,7 +137,13 @@ export default function SabanOSMaster() {
                         <div className="bg-[#0B2C63] text-white px-2 py-1 rounded-lg text-[10px] font-black">{order.scheduled_time}</div>
                         <div className="font-black text-slate-800 text-sm">{order.customer_name}</div>
                     </div>
-                    <Button onClick={() => supabase.from('saban_master_dispatch').delete().eq('id', order.id).then(fetchData)} variant="ghost" className="text-red-400 h-8 w-8 p-0"><Trash2 size={16}/></button>
+                    <Button 
+                      onClick={() => supabase.from('saban_master_dispatch').delete().eq('id', order.id).then(fetchData)} 
+                      variant="ghost" 
+                      className="text-red-400 h-8 w-8 p-0"
+                    >
+                      <Trash2 size={16}/>
+                    </Button>
                 </Card>
               ))}
             </div>
@@ -152,13 +156,13 @@ export default function SabanOSMaster() {
           <Card className="bg-white w-full max-w-lg rounded-[2.5rem] p-8 space-y-4 shadow-2xl border-t-[12px] border-blue-600 animate-in zoom-in-95 border-none">
             <div className="flex justify-between items-center mb-2 text-[#0B2C63]">
               <h2 className="text-xl font-black">{newOrder.driver_name === 'פינוי פסולת' ? 'פינוי מכולה ♻️' : 'הזמנה חדשה 📦'}</h2>
-              <button onClick={() => setShowForm(false)} className="bg-slate-100 p-2 rounded-full"><X size={20}/></button>
+              <button onClick={() => setShowForm(false)} className="bg-slate-100 p-2 rounded-full border-none"><X size={20}/></button>
             </div>
             
             <div className="flex gap-2">
                 {teamMembers.map(m => (
                     <button key={m} onClick={() => setNewOrder({...newOrder, created_by: m})}
-                            className={`flex-1 py-3 rounded-2xl text-[11px] font-black transition-all ${newOrder.created_by === m ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}>
+                            className={`flex-1 py-3 rounded-2xl text-[11px] font-black transition-all border-none ${newOrder.created_by === m ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}>
                         {m}
                     </button>
                 ))}
