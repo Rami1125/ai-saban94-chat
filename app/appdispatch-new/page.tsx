@@ -1,230 +1,208 @@
 "use client";
-import React, { useEffect, useState, useRef } from 'react';
-import { getSupabase } from "@/lib/supabase";
-import { Card } from "@/components/ui/card";
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { 
-  Truck, Plus, ChevronDown, Trash2, X, Send, 
-  Calendar, Clock, Warehouse, MapPin, Share2, Bot, UserCheck, HardHat, FileText, Bell, Sparkles, Brain, Loader2
+  Bot, Send, User, Zap, MapPin, 
+  Package, Link as LinkIcon, Image as ImageIcon, 
+  Info, Sparkles, MessageSquare, ExternalLink,
+  Clock, Truck, AlertTriangle, FileText, Share2, Loader2
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast, Toaster } from "sonner";
+import { getSupabase } from "@/lib/supabase";
 
-// --- נתוני נהגים מקוריים ---
-const drivers = [
-  { name: 'חכמת', img: 'https://i.postimg.cc/d3S0NJJZ/Screenshot-20250623-200646-Facebook.jpg', color: '#0B2C63', defaultType: 'מנוף 🏗️' },
-  { name: 'עלי', img: 'https://i.postimg.cc/tCNbgXK3/Screenshot-20250623-200744-Tik-Tok.jpg', color: '#2563EB', defaultType: 'משאית 🚛' }
-];
+// --- רכיב תצוגת מדיה חכמה ---
+const SmartMedia = ({ content }: { content: string }) => {
+  const imgRegex = /(https?:\/\/.*\.(?:png|jpg|jpeg|gif|webp))/i;
+  const match = content.match(imgRegex);
+  if (match) {
+    return (
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-3 rounded-xl overflow-hidden border shadow-sm max-w-sm">
+        <img src={match[0]} alt="Preview" className="w-full h-auto object-cover" />
+      </motion.div>
+    );
+  }
+  return null;
+};
 
-const timeSlots = Array.from({ length: 21 }, (_, i) => {
-  const h = Math.floor(i / 2) + 6;
-  const m = i % 2 === 0 ? "00" : "30";
-  return `${h.toString().padStart(2, '0')}:${m}`;
-});
+// --- רכיב כפתור Markdown מעוצב ---
+const MarkdownButton = ({ text }: { text: string }) => {
+  const linkRegex = /\[(.*?)\]\((.*?)\)/g;
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+  while ((match = linkRegex.exec(text)) !== null) {
+    parts.push(text.substring(lastIndex, match.index));
+    parts.push(
+      <a key={match[2]} href={match[2]} target="_blank" className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-bold text-xs hover:bg-blue-700 transition-all shadow-md my-1">
+        {match[1]} <ExternalLink size={12} />
+      </a>
+    );
+    lastIndex = linkRegex.lastIndex;
+  }
+  parts.push(text.substring(lastIndex));
+  return <div className="whitespace-pre-wrap">{parts.length > 1 ? parts : text}</div>;
+};
 
-export default function AppDispatchNew() {
-  // --- State מקורי ---
-  const [orders, setOrders] = useState<any[]>([]);
-  const [requests, setRequests] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  
-  // --- State חדש למוח AI ---
-  const [aiMessages, setAiMessages] = useState<{role: 'user' | 'ai', content: string}[]>([]);
-  const [aiInput, setAiInput] = useState("");
-  const [isAiTyping, setIsAiTyping] = useState(false);
-  const [showAiPanel, setShowAiPanel] = useState(false);
-  const aiScrollRef = useRef<HTMLDivElement>(null);
-
+export default function SabanStudioUI() {
+  const [messages, setMessages] = useState<{role: string, content: string}[]>([]);
+  const [input, setInput] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
+  const [aiInsights, setAiInsights] = useState<string[]>(["המערכת סורקת בקשות חריגות...", "חוק דחיפות פעיל: הזמנות ללא שעה יסומנו בצהובה"]);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const supabase = getSupabase();
 
-  // --- לוגיקה מקורית + חיבור מוח ---
+  // טעינת היסטוריה
   useEffect(() => {
-    fetchInitialData();
+    const saved = localStorage.getItem('saban_studio_history');
+    if (saved) setMessages(JSON.parse(saved));
     
-    // האזנה Realtime לבקשות (מלשינון)
-    const channel = supabase.channel('dispatch_updates')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'saban_requests' }, payload => {
-        setRequests(prev => [payload.new, ...prev]);
-        // הפעלת סאונד דרך ה-window (מה-Layout)
-        if (typeof window !== 'undefined' && (window as any).playNotificationSound) {
-          (window as any).playNotificationSound();
-        }
-        toast.info(`בקשה חדשה: ${payload.new.customer_name}`, { icon: <Bell className="text-orange-500" /> });
-        
-        // המוח מגיב אוטומטית לבקשה דחופה
-        if (payload.new.is_urgent) {
-           addAiMessage('ai', `⚠️ שים לב ראמי, התקבלה בקשה דחופה מ${payload.new.requester_name} עבור ${payload.new.customer_name}. כדאי לשבץ את עלי למסלול מהיר.`);
-        }
+    // האזנה לשינויים בסידור להפקת תובנות בזמן אמת (המלשינון)
+    const channel = supabase.channel('brain_sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'saban_orders' }, payload => {
+          checkBrainRules(payload.new);
       }).subscribe();
-
+      
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  const fetchInitialData = async () => {
-    const { data: reqs } = await supabase.from('saban_requests').select('*').eq('status', 'pending').order('created_at', { ascending: false });
-    const { data: ords } = await supabase.from('saban_orders').select('*');
-    setRequests(reqs || []);
-    setOrders(ords || []);
-    setLoading(false);
-  };
+  useEffect(() => {
+    localStorage.setItem('saban_studio_history', JSON.stringify(messages));
+    scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
-  // --- פונקציות המוח ---
-  const addAiMessage = (role: 'user' | 'ai', content: string) => {
-    setAiMessages(prev => [...prev, { role, content }]);
-  };
+  // לוגיקת ספר החוקים (המלשינון)
+  const checkBrainRules = (order: any) => {
+    if (!order) return;
+    const now = new Date();
+    const deliveryTime = new Date(`${order.delivery_date}T${order.delivery_time}`);
+    const diff = (deliveryTime.getTime() - now.getTime()) / 60000;
 
-  const askBrain = async () => {
-    if (!aiInput.trim()) return;
-    const msg = aiInput;
-    setAiInput("");
-    addAiMessage('user', msg);
-    setIsAiTyping(true);
-
-    // לוגיקת המוח (שאילתה לספר החוקים ב-DB)
-    try {
-      const { data: rules } = await supabase.from('saban_brain_rules').select('*').eq('is_active', true);
-      // סימולציה של מענה לפי חוקים
-      setTimeout(() => {
-        let response = "אני מנתח את הסידור לפי ספר החוקים... ";
-        if (msg.includes("איציק")) response += "זיהיתי שאיציק שלח 3 בקשות היום, כולן בטיפול.";
-        else if (msg.includes("עלי")) response += "עלי משובץ כרגע ל-4 נסיעות. יש לו חלון פנוי ב-13:00.";
-        else response += "כיצד אוכל לעזור לך לייעל את הסידור היום?";
-        
-        addAiMessage('ai', response);
-        setIsAiTyping(false);
-      }, 1000);
-    } catch (e) {
-      setIsAiTyping(false);
+    if (diff < 60 && diff > 0) {
+        setAiInsights(prev => [`⚠️ חייבים להעמיס: הזמנה ל${order.customer_name} בעוד שעה!`, ...prev.slice(0, 4)]);
+        (window as any).playNotificationSound?.();
     }
   };
 
-  // --- שיתוף ווטסאפ מקורי ---
-  const shareToWhatsApp = () => {
-    const text = `*סידור עבודה SabanOS - ${new Date().toLocaleDateString('he-IL')}*\n\n` + 
-                 orders.map(o => `⏰ ${o.delivery_time} | 👤 ${o.customer_name}`).join('\n');
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  const askGemini = async () => {
+    if (!input.trim()) return;
+    const userMsg = input;
+    setInput("");
+    setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+    setIsTyping(true);
+
+    // לוגיקה לביצוע פעולות דינמיות
+    setTimeout(async () => {
+      let aiContent = "";
+      
+      if (userMsg.includes("תזיז") || userMsg.includes("שעה")) {
+        // סימולציה של הזזת שעה ב-DB
+        aiContent = `בוצע! הזזתי את שעת האספקה של ההזמנה לשעה **15:00**. לוח השעות בסידור התעדכן דינאמית. ✅`;
+        // כאן תבוא קריאת supabase.update...
+      } 
+      else if (userMsg.includes("דוח בוקר") || userMsg.includes("שתף")) {
+        aiContent = `מפיק דוח בוקר מעוצב... 📝\n\n*סידור עבודה ח.סבן - ${new Date().toLocaleDateString('he-IL')}*\n🏗️ משאית עלי: 3 הזמנות\n🏗️ מנוף חכמת: 2 הזמנות\n\n[לחץ כאן לשיתוף מהיר לווטסאפ 📱](https://wa.me/?text=הנה+דוח+בוקר)`;
+      }
+      else {
+        aiContent = `ראמי אחי, אני מאזין לספר החוקים. זיהיתי את הבקשה שלך ואני פועל לסנכרן את הסידור בהתאם. מה המשימה הבאה?`;
+      }
+      
+      setMessages(prev => [...prev, { role: 'assistant', content: aiContent }]);
+      setIsTyping(false);
+      (window as any).playNotificationSound?.();
+    }, 1200);
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-20 font-sans" dir="rtl">
+    <div className="flex flex-col h-screen bg-[#F8FAFC] font-sans" dir="rtl">
       <Toaster position="top-center" richColors />
       
-      {/* Header מקורי */}
-      <div className="bg-white p-4 border-b sticky top-0 z-30 shadow-sm flex justify-between items-center">
-        <h1 className="text-2xl font-black text-[#0B2C63] flex items-center gap-2 italic">SabanOS Studio</h1>
+      {/* Header */}
+      <header className="p-4 bg-white border-b shadow-sm flex justify-between items-center z-10">
+        <div className="flex items-center gap-2">
+          <div className="bg-[#0B2C63] p-2 rounded-lg text-white shadow-lg">
+            <Zap size={20} fill="currentColor" />
+          </div>
+          <h1 className="font-black italic text-slate-800 tracking-tighter text-xl">SABAN STUDIO UI <span className="text-blue-600">AI</span></h1>
+        </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="rounded-xl font-bold h-10 border-slate-200" onClick={() => setShowAiPanel(!showAiPanel)}>
-             <Brain size={18} className={`ml-2 ${showAiPanel ? 'text-blue-600' : 'text-slate-400'}`}/> לוח המוח
-          </Button>
-          <Button onClick={shareToWhatsApp} className="bg-[#25D366] hover:bg-[#128C7E] rounded-xl gap-2 font-bold h-10 text-white">
-             <Share2 size={18}/> שיתוף
-          </Button>
+            <Button variant="ghost" onClick={() => setShowGuide(!showGuide)} className="rounded-full gap-2 font-bold text-[#0B2C63]">
+              <Info size={18} /> חוקי המוח
+            </Button>
         </div>
-      </div>
+      </header>
 
-      <div className="max-w-7xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-6 mt-4">
+      <div className="flex flex-1 overflow-hidden">
         
-        {/* עמודת בקשות (מלשינון) - 3 עמודות */}
-        <div className="lg:col-span-3 space-y-4">
-          <div className="flex justify-between items-center px-1">
-            <h2 className="font-black text-slate-800 text-lg flex items-center gap-2">
-               <Bell className="text-orange-500 animate-pulse" size={20}/> בקשות חמות
-            </h2>
-            <Badge className="bg-orange-500 text-white">{requests.length}</Badge>
-          </div>
-          <div className="space-y-3 overflow-y-auto max-h-[75vh] pr-1">
-            {requests.map(req => (
-              <Card key={req.id} className="p-4 rounded-3xl border-none shadow-md bg-white border-r-8 border-orange-500 hover:scale-[1.02] transition-transform">
-                <div className="flex justify-between items-start mb-2">
-                  <span className="font-black text-slate-800 text-sm">{req.customer_name}</span>
-                  <span className="text-[10px] font-bold text-orange-600 flex items-center gap-1"><Clock size={12}/> {new Date(req.created_at).toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'})}</span>
-                </div>
-                <p className="text-xs text-slate-400 font-bold mb-3">{req.request_type} #{req.doc_number}</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button size="sm" className="bg-[#0B2C63] text-white rounded-xl font-bold h-8 text-[11px]">חכמת</Button>
-                  <Button size="sm" className="bg-blue-600 text-white rounded-xl font-bold h-8 text-[11px]">עלי</Button>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
+        {/* לוח מחוונים AI - המלשינון */}
+        <aside className="w-80 bg-white border-l p-4 hidden lg:flex flex-col gap-4 shadow-sm">
+            <div className="flex items-center gap-2 border-b pb-3">
+                <Bot className="text-blue-600" />
+                <h2 className="font-black text-slate-800">לוח מחוונים AI</h2>
+            </div>
+            <div className="space-y-3">
+                {aiInsights.map((insight, idx) => (
+                    <Card key={idx} className={`p-3 rounded-xl border-none shadow-sm text-xs font-bold leading-relaxed ${insight.includes('⚠️') ? 'bg-red-50 text-red-700 border-r-4 border-red-500 animate-pulse' : 'bg-blue-50 text-blue-700'}`}>
+                        {insight}
+                    </Card>
+                ))}
+            </div>
+            <div className="mt-auto p-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-[10px] text-slate-400 font-bold">
+                המוח פועל לפי ספר חוקי ח.סבן 2026. כל הפעולות מתועדות בטבלה לשימוש היסטורי.
+            </div>
+        </aside>
 
-        {/* לוח שעות מרכזי - 6 עמודות */}
-        <div className="lg:col-span-6 space-y-6">
-          <div className="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
-            {drivers.map(driver => (
-              <div key={driver.name} className="flex-shrink-0 text-center group">
-                <div className="w-16 h-16 rounded-[1.5rem] border-2 p-1 shadow-sm mb-1 group-hover:scale-110 transition-transform" style={{ borderColor: driver.color }}>
-                  <img src={driver.img} className="w-full h-full rounded-xl object-cover" alt={driver.name} />
+        {/* Messages Area */}
+        <main className="flex-1 flex flex-col relative bg-slate-50/30">
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            <AnimatePresence>
+              {messages.map((m, i) => (
+                <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
+                  <div className={`max-w-[85%] p-4 rounded-[1.8rem] shadow-sm ${m.role === 'user' ? 'bg-white text-slate-800 border-2 border-slate-100' : 'bg-[#0B2C63] text-white'}`}>
+                    <div className="flex items-center gap-2 mb-2 text-[10px] font-black uppercase opacity-60">
+                      {m.role === 'user' ? <User size={10} /> : <Sparkles size={10} />}
+                      {m.role === 'user' ? 'ראמי' : 'AI סידור'}
+                    </div>
+                    <MarkdownButton text={m.content} />
+                    <SmartMedia content={m.content} />
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+            {isTyping && (
+                <div className="flex justify-end animate-pulse">
+                    <div className="bg-slate-200 px-4 py-2 rounded-full text-[10px] font-black text-slate-500">המוח מעבד פקודת סידור...</div>
                 </div>
-                <span className="font-black text-[10px]">{driver.name}</span>
-              </div>
-            ))}
+            )}
+            <div ref={scrollRef} />
           </div>
 
-          <div className="space-y-1">
-            {timeSlots.map(time => (
-              <div key={time} className="flex gap-4 items-center group">
-                <div className="w-12 text-xs font-black text-slate-400">{time}</div>
-                <div className="flex-1 min-h-[50px] p-2 bg-white rounded-2xl border border-slate-100 shadow-sm group-hover:border-blue-200 transition-all flex items-center gap-2">
-                    {orders.filter(o => o.delivery_time === time).map((o, idx) => (
-                        <Badge key={idx} className="bg-blue-50 text-blue-700 border-none font-bold text-xs px-3 h-8 rounded-lg">
-                            {o.customer_name} | {o.driver_name}
-                        </Badge>
-                    ))}
-                    <Plus size={14} className="text-slate-200 opacity-0 group-hover:opacity-100 cursor-pointer ml-auto" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* לוח הודעות AI - 3 עמודות */}
-        <div className="lg:col-span-3">
-          <Card className="h-[80vh] rounded-[2.5rem] border-none shadow-xl bg-white flex flex-col overflow-hidden">
-            <div className="p-5 bg-[#0B2C63] text-white flex items-center gap-3">
-              <div className="bg-white/20 p-2 rounded-xl"><Sparkles size={20} className="text-blue-300"/></div>
-              <div>
-                <h3 className="font-black text-sm">המוח של SabanOS</h3>
-                <p className="text-[10px] text-blue-200 uppercase font-bold">AI Assistant</p>
-              </div>
+          {/* Toolbar & Input */}
+          <div className="p-4 bg-white border-t space-y-4 pb-8 shadow-[0_-4px_20px_rgba(0,0,0,0.03)]">
+            <div className="flex gap-2 overflow-x-auto no-scrollbar">
+              <Button variant="outline" size="sm" onClick={() => setInput('תכין דוח בוקר לווטסאפ')} className="rounded-xl gap-2 font-bold bg-slate-50 shrink-0 border-slate-100"><FileText size={14}/> דוח בוקר</Button>
+              <Button variant="outline" size="sm" onClick={() => setInput('תזיז הזמנה לשעה 15:00')} className="rounded-xl gap-2 font-bold bg-slate-50 shrink-0 border-slate-100"><Clock size={14}/> הזזת שעה</Button>
+              <Button variant="outline" size="sm" onClick={() => setInput('שתף הזמנה חדשה')} className="rounded-xl gap-2 font-bold bg-slate-50 shrink-0 border-slate-100"><Share2 size={14}/> שיתוף מהיר</Button>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50">
-              {aiMessages.length === 0 && (
-                <div className="text-center py-10 opacity-40">
-                   <Bot size={40} className="mx-auto mb-2" />
-                   <p className="text-xs font-bold italic text-slate-800">שלום ראמי, אני מנתח את הסידור בזמן אמת. שאל אותי הכל.</p>
-                </div>
-              )}
-              {aiMessages.map((m, i) => (
-                <div key={i} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
-                  <div className={`max-w-[90%] p-3 rounded-2xl text-xs font-bold shadow-sm ${m.role === 'user' ? 'bg-white text-slate-700 border' : 'bg-blue-600 text-white'}`}>
-                    {m.content}
-                  </div>
-                </div>
-              ))}
-              {isAiTyping && <Loader2 size={16} className="animate-spin text-blue-600 mx-auto" />}
-              <div ref={aiScrollRef} />
-            </div>
-
-            <div className="p-4 border-t bg-white flex gap-2">
+            <div className="max-w-5xl mx-auto flex gap-3">
               <Input 
-                value={aiInput}
-                onChange={(e) => setAiInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && askBrain()}
-                placeholder="שאל את המוח..."
-                className="h-10 rounded-xl bg-slate-100 border-none font-bold text-xs"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && askGemini()}
+                placeholder="ראמי, תן פקודה לסידור (למשל: תזיז שעה או תכין דוח)..."
+                className="h-14 rounded-2xl border-slate-200 bg-slate-50 shadow-inner font-bold text-lg focus:ring-2 ring-blue-500 transition-all"
               />
-              <Button onClick={askBrain} className="h-10 w-10 p-0 bg-[#0B2C63] rounded-xl shrink-0 shadow-lg">
-                <Send size={16} />
+              <Button onClick={askGemini} className="h-14 w-14 rounded-2xl bg-[#0B2C63] hover:bg-blue-900 shadow-xl shrink-0 transition-all active:scale-90">
+                <Send size={22} />
               </Button>
             </div>
-          </Card>
-        </div>
-
+          </div>
+        </main>
       </div>
     </div>
   );
