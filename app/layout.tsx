@@ -10,12 +10,12 @@ import Script from "next/script";
 const heebo = Heebo({ subsets: ["hebrew"], variable: "--font-heebo" });
 
 export const metadata: Metadata = {
-  title: "Saban OS - ח. סבן לוגיסטיקה",
+  title: "סידור ח.סבן",
   description: "מערכת ניהול ולוגיסטיקה חכמה",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Saban OS",
+    title: "סידור",
   },
   manifest: "/manifest.json",
 };
