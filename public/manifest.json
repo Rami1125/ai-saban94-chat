@@ -1,6 +1,6 @@
 {
-  "name": "H.Saban Enterprise OS",
-  "short_name": "Saban OS",
+  "name": "ח.סבן חומרי בנין",
+  "short_name": "סידור",
   "description": "מערכת ניהול ולוגיסטיקה כוללת - ח. סבן",
   "start_url": "/admin/master",
   "scope": "/",
