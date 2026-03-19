@@ -6,11 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
   Truck, Plus, ChevronDown, Trash2, X, Send, 
-  Calendar, Clock, Warehouse, MapPin, Share2, UserCheck, HardHat, Recycle, Bell, Play
+  Clock, Warehouse, MapPin, Share2, UserCheck, HardHat, Recycle, Bell, Play
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 
-// הגדרות נהגים כולל מחלקת מכולות
 const drivers = [
   { name: 'חכמת', img: 'https://i.postimg.cc/d3S0NJJZ/Screenshot-20250623-200646-Facebook.jpg', color: '#0B2C63', defaultType: 'מנוף 🏗️' },
   { name: 'עלי', img: 'https://i.postimg.cc/tCNbgXK3/Screenshot-20250623-200744-Tik-Tok.jpg', color: '#2563EB', defaultType: 'משאית 🚛' },
@@ -49,10 +48,10 @@ export default function SabanOSMasterDispatch() {
 
   const supabase = getSupabase();
 
-  // פונקציית שליחת Push דרך OneSignal
+  // שליחת Push בצורה אסינכרונית כדי לא לעצור את ה-WhatsApp
   const sendPush = async (title: string, msg: string) => {
     try {
-      await fetch("https://onesignal.com/api/v1/notifications", {
+      fetch("https://onesignal.com/api/v1/notifications", {
         method: "POST",
         headers: { "Content-Type": "application/json; charset=utf-8" },
         body: JSON.stringify({
@@ -69,9 +68,10 @@ export default function SabanOSMasterDispatch() {
     const { data: ords } = await supabase.from('saban_dispatch').select('*').order('scheduled_time', { ascending: true });
     const { data: reqs } = await supabase.from('itzik_requests').select('*').eq('status', 'pending');
     
-    // אם הגיעה בקשה חדשה - צלצול Ding מה-Layout
     if (reqs && reqs.length > requests.length) {
-      (window as any).playNotificationSound?.();
+      if (typeof window !== 'undefined' && (window as any).playNotificationSound) {
+        (window as any).playNotificationSound();
+      }
       toast.info("בקשה חדשה מאיציק זהבי 📢");
     }
 
@@ -87,25 +87,37 @@ export default function SabanOSMasterDispatch() {
   }, [fetchData, supabase]);
 
   const saveOrder = async () => {
-    if (!newOrder.customer_name || !newOrder.order_id_comax) return toast.error("חסר לקוח/מספר מסמך");
+    if (!newOrder.customer_name || !newOrder.order_id_comax) {
+        return toast.error("חסר שם לקוח או מספר מסמך");
+    }
 
-    const payload = { ...newOrder, start_process_time: new Date().toISOString() };
-    const { error } = await supabase.from('saban_dispatch').insert([payload]);
-    
-    if (!error) {
-      toast.success("נשמר בסידור");
+    try {
+      const payload = { ...newOrder, start_process_time: new Date().toISOString() };
+      const { error } = await supabase.from('saban_dispatch').insert([payload]);
       
-      // שליחת התראה Push לכל הצוות
+      if (error) throw error;
+
+      toast.success("נשמר בסידור");
+
+      // שליחת ה-Push ברקע
       sendPush(
         newOrder.driver_name === 'פינוי פסולת' ? "♻️ מכולה חדשה" : "📦 הזמנה חדשה",
-        `${newOrder.customer_name} | ${newOrder.driver_name} | ${newOrder.scheduled_time}`
+        `${newOrder.customer_name} | ${newOrder.driver_name}`
       );
 
-      const waMsg = `*📦 סדר יום *\nלקוח: ${newOrder.customer_name}\nמספר: ${newOrder.order_id_comax}\nנהג: ${newOrder.driver_name}\nשעה: ${newOrder.scheduled_time}`;
-      window.open(`https://wa.me/?text=${encodeURIComponent(waMsg)}`, '_blank');
+      // בניית הודעת וואטסאפ
+      const waMsg = `*📦 סדר יום SabanOS*\n👤 לקוח: ${newOrder.customer_name}\n🆔 מספר: ${newOrder.order_id_comax}\n🚚 נהג: ${newOrder.driver_name}\n⏰ שעה: ${newOrder.scheduled_time}`;
+      
+      // פתיחת וואטסאפ
+      const waUrl = `https://wa.me/?text=${encodeURIComponent(waMsg)}`;
+      window.open(waUrl, '_blank');
       
       setShowForm(false);
       setNewOrder({ ...newOrder, customer_name: '', address: '', order_id_comax: '' });
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      toast.error("שגיאה בשמירה. וודא שביצעת SQL עדכון.");
     }
   };
 
@@ -122,26 +134,24 @@ export default function SabanOSMasterDispatch() {
     toast.success("בקשה אושרה!");
   };
 
-  if (loading) return <div className="h-screen flex items-center justify-center font-black animate-pulse text-[#0B2C63]">SABAN OS טוען...</div>;
+  if (loading) return <div className="h-screen flex items-center justify-center font-black animate-pulse text-[#0B2C63]">טוען SabanOS...</div>;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans text-right" dir="rtl">
       <Toaster position="top-center" richColors />
 
-      {/* Header */}
       <div className="bg-[#0B2C63] text-white p-6 rounded-b-[2.5rem] shadow-2xl mb-6 border-b-4 border-blue-500/50 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-black italic text-white uppercase tracking-tighter">ח.סבן<span className="text-blue-400">סידור</span></h1>
-          <p className="text-[10px] text-blue-200 font-bold uppercase tracking-widest"> סידור הזמנות</p>
+          <h1 className="text-3xl font-black italic text-white uppercase tracking-tighter">SABAN<span className="text-blue-400">OS</span></h1>
+          <p className="text-[10px] text-blue-200 font-bold uppercase tracking-widest">Logistic Center</p>
         </div>
-        <Button onClick={() => setShowForm(true)} className="bg-blue-600 hover:bg-blue-500 rounded-xl gap-2 font-black shadow-lg">
+        <Button onClick={() => setShowForm(true)} className="bg-blue-600 hover:bg-blue-500 rounded-xl gap-2 font-black shadow-lg border-none text-white h-12 px-6">
           <Plus size={20} /> הזמנה חדשה
         </Button>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 space-y-8">
         
-        {/* לוח בקשות חנות - צלצול פעיל */}
         {requests.length > 0 && (
           <div className="space-y-4">
             <h2 className="text-lg font-black text-[#0B2C63] flex items-center gap-2 px-1">
@@ -149,10 +159,10 @@ export default function SabanOSMasterDispatch() {
             </h2>
             <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
               {requests.map(req => (
-                <Card key={req.id} className="min-w-[280px] p-5 bg-white border-r-8 border-orange-500 shadow-xl rounded-[2rem]">
+                <Card key={req.id} className="min-w-[280px] p-5 bg-white border-r-8 border-orange-500 shadow-xl rounded-[2rem] border-none">
                   <div className="font-black text-slate-800 mb-1">{req.request_type} #{req.doc_number}</div>
                   <div className="text-[10px] text-slate-400 font-bold mb-3">{req.from_branch} ➡️ {req.to_branch || 'לקוח'}</div>
-                  <Button onClick={() => approveRequest(req)} className="w-full h-10 bg-[#0B2C63] text-white font-black rounded-xl gap-2 shadow-md">
+                  <Button onClick={() => approveRequest(req)} className="w-full h-10 bg-[#0B2C63] text-white font-black rounded-xl gap-2 border-none">
                     <Play size={14}/> אשר לסידור
                   </Button>
                 </Card>
@@ -161,11 +171,10 @@ export default function SabanOSMasterDispatch() {
           </div>
         )}
 
-        {/* לוח נהגים כולל מכולות */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {drivers.map((driver) => (
             <div key={driver.name} className="space-y-4 text-right">
-              <Card className="bg-white p-5 rounded-[2.2rem] shadow-xl border border-slate-100 relative overflow-hidden">
+              <Card className="bg-white p-5 rounded-[2.2rem] shadow-xl border border-slate-100 relative overflow-hidden border-none">
                 <div className="flex items-center gap-4 mb-6">
                   <div className="relative">
                     <img src={driver.img} className="w-16 h-16 rounded-2xl object-cover shadow-lg border-2 border-white" />
@@ -200,8 +209,8 @@ export default function SabanOSMasterDispatch() {
 
               <div className="space-y-3">
                 {orders.filter(o => o.driver_name === driver.name).map((order) => (
-                  <Card key={order.id} className="border-none shadow-md rounded-2xl bg-white overflow-hidden hover:shadow-lg transition-all">
-                    <div onClick={() => setExpandedId(expandedId === order.id ? null : order.id)} className="p-4 flex justify-between items-center cursor-pointer">
+                  <Card key={order.id} className="border-none shadow-md rounded-2xl bg-white overflow-hidden hover:shadow-lg transition-all border-none">
+                    <div onClick={() => setExpandedId(expandedId === order.id ? null : order.id)} className="p-4 flex justify-between items-center cursor-pointer text-right" dir="rtl">
                       <div className="flex items-center gap-3">
                         <div className={`${driver.name === 'פינוי פסולת' ? 'bg-green-600' : 'bg-[#0B2C63]'} text-white font-black px-2 py-1 rounded-lg text-[10px]`}>{order.scheduled_time?.slice(0, 5)}</div>
                         <div className="flex flex-col">
@@ -219,16 +228,15 @@ export default function SabanOSMasterDispatch() {
         </div>
       </div>
 
-      {/* טופס יצירה */}
       {showForm && (
         <div className="fixed inset-0 bg-[#0B2C63]/95 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-          <Card className="bg-white w-full max-w-lg rounded-[2.5rem] p-8 space-y-4 shadow-2xl border-t-[12px] border-blue-600 animate-in zoom-in-95">
+          <Card className="bg-white w-full max-w-lg rounded-[2.5rem] p-8 space-y-4 shadow-2xl border-t-[12px] border-blue-600 animate-in zoom-in-95 border-none">
             <div className="flex justify-between items-center mb-2">
               <h2 className="text-xl font-black text-[#0B2C63] flex items-center gap-2">
                 {newOrder.driver_name === 'פינוי פסולת' ? <Recycle className="text-green-600"/> : <HardHat className="text-blue-600"/>}
                 הזמנה ל{newOrder.driver_name}
               </h2>
-              <button onClick={() => setShowForm(false)} className="bg-slate-100 p-2 rounded-full text-slate-400"><X size={20}/></button>
+              <button onClick={() => setShowForm(false)} className="bg-slate-100 p-2 rounded-full text-slate-400 border-none"><X size={20}/></button>
             </div>
 
             <div className="flex gap-2">
@@ -244,7 +252,7 @@ export default function SabanOSMasterDispatch() {
               <div className="grid grid-cols-3 gap-2 bg-green-50 p-2 rounded-2xl">
                 {containerActions.map(act => (
                   <button key={act} onClick={() => setNewOrder({...newOrder, container_action: act})}
-                          className={`py-2 rounded-xl text-[11px] font-black border-2 transition-all ${newOrder.container_action === act ? 'bg-green-600 border-green-600 text-white shadow-md' : 'bg-white border-green-100 text-green-600'}`}>
+                          className={`py-2 rounded-xl text-[11px] font-black border-none transition-all ${newOrder.container_action === act ? 'bg-green-600 text-white shadow-md' : 'bg-white text-green-600'}`}>
                     {act}
                   </button>
                 ))}
@@ -255,7 +263,7 @@ export default function SabanOSMasterDispatch() {
             <input placeholder="מספר קומקס" value={newOrder.order_id_comax} onChange={e => setNewOrder({...newOrder, order_id_comax: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-slate-100 font-bold text-lg text-right outline-none focus:border-blue-500" />
             
             <Button onClick={saveOrder} className="w-full h-16 bg-green-600 hover:bg-green-500 text-white rounded-2xl font-black text-xl shadow-xl transition-all active:scale-95 border-none">
-              שמור ושלח התראה 🚀
+              שמור ושתף לווצאף 🚀
             </Button>
           </Card>
         </div>
