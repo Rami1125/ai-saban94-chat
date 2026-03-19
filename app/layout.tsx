@@ -12,6 +12,11 @@ const heebo = Heebo({ subsets: ["hebrew"], variable: "--font-heebo" });
 export const metadata: Metadata = {
   title: "סידור ח.סבן",
   description: "מערכת ניהול ולוגיסטיקה חכמה",
+  icons: {
+    // פותר שגיאת 404 ע"י שימוש באייקון שקוף במידה והקובץ חסר ב-public
+    icon: 'data:image/x-icon;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wA=',
+    apple: "/icon-192.png",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -32,7 +37,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="he" dir="rtl">
       <head>
-        <link rel="apple-touch-icon" href="/icon-192.png" />
+        {/* מגן IndexedDB ו-OneSignal */}
+        <script dangerouslySetInnerHTML={{ __html: `
+          window.OneSignalDeferred = window.OneSignalDeferred || [];
+          // הגנה למקרה ש-IndexedDB חסום (מצב אינקוגניטו)
+          try {
+            if (!window.indexedDB) {
+              console.warn("OneSignal Warning: IndexedDB is not available.");
+            }
+          } catch (e) {
+            console.error("Browser security blocked IndexedDB access.");
+          }
+        `}} />
+        
         {/* OneSignal SDK */}
         <Script 
           src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" 
@@ -40,13 +57,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
         <Script id="onesignal-init" strategy="afterInteractive">
           {`
-            window.OneSignalDeferred = window.OneSignalDeferred || [];
-            OneSignalDeferred.push(async function(OneSignal) {
-              await OneSignal.init({
-                appId: "acc8a2bc-d54e-4261-b3d2-cc5c5f7b39d3",
-                safari_web_id: "web.onesignal.auto.5f4f9ed9-fb2e-4d6a-935d-81aa46fccce0",
-                notifyButton: { enable: true },
-              });
+            window.OneSignalDeferred.push(async function(OneSignal) {
+              try {
+                await OneSignal.init({
+                  appId: "acc8a2bc-d54e-4261-b3d2-cc5c5f7b39d3",
+                  safari_web_id: "web.onesignal.auto.5f4f9ed9-fb2e-4d6a-935d-81aa46fccce0",
+                  notifyButton: { enable: true },
+                  allowLocalhostAsSecureOrigin: true
+                });
+              } catch (err) {
+                console.error("OneSignal Init Error:", err);
+              }
             });
           `}
         </Script>
@@ -60,24 +81,42 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </ChatActionsProvider>
         </BusinessConfigProvider>
 
-        {/* מערכת סאונד - צלצול התראה איכותי */}
+        {/* מערכת סאונד - הגנה מפני חסימת Autoplay של הדפדפן */}
         <script dangerouslySetInnerHTML={{ __html: `
           window.playNotificationSound = () => {
-            const ctx = new (window.AudioContext || window.webkitAudioContext)();
-            const playTone = (freq, start, duration) => {
-              const osc = ctx.createOscillator();
-              const gain = ctx.createGain();
-              osc.type = "sine";
-              osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
-              gain.gain.setValueAtTime(0.1, ctx.currentTime + start);
-              gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + start + duration);
-              osc.connect(gain); gain.connect(ctx.destination);
-              osc.start(ctx.currentTime + start);
-              osc.stop(ctx.currentTime + start + duration);
-            };
-            // צליל כפול נעים (Notification Ding)
-            playTone(880, 0, 0.1);
-            playTone(1046, 0.1, 0.2);
+            try {
+              const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+              if (!AudioContextClass) return;
+              
+              const ctx = new AudioContextClass();
+              
+              // פונקציית צליל פנימית
+              const playTone = (freq, start, duration) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = "sine";
+                osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+                gain.gain.setValueAtTime(0.1, ctx.currentTime + start);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + start + duration);
+                osc.connect(gain); 
+                gain.connect(ctx.destination);
+                osc.start(ctx.currentTime + start);
+                osc.stop(ctx.currentTime + start + duration);
+              };
+
+              // דפדפנים דורשים אינטראקציה, אם ה-context ב-suspended, ננסה להפעיל
+              if (ctx.state === 'suspended') {
+                ctx.resume().then(() => {
+                  playTone(880, 0, 0.1);
+                  playTone(1046, 0.1, 0.2);
+                });
+              } else {
+                playTone(880, 0, 0.1);
+                playTone(1046, 0.1, 0.2);
+              }
+            } catch (e) {
+              console.warn("Audio playback failed:", e);
+            }
           };
         `}} />
       </body>
