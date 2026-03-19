@@ -118,7 +118,7 @@ export default function SabanOSMaster() {
         <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 hover:bg-white/10 rounded-xl transition-colors border-none text-white">
           {isMenuOpen ? <X size={28}/> : <Menu size={28}/>}
         </button>
-        <h1 className="text-2xl font-black italic">SABAN<span className="text-blue-400">OS</span></h1>
+        <h1 className="text-2xl font-black italic">סידור<span className="text-blue-400">J.ח.סבן</span></h1>
         <Button onClick={() => setShowForm(true)} className="bg-blue-600 rounded-xl font-black h-10 px-4 text-white border-none shadow-lg">חדש +</Button>
       </div>
 
