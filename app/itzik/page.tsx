@@ -5,10 +5,9 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
 import { 
   ShoppingCart, ArrowLeftRight, CheckCircle2, Clock, X, 
-  Plus, Send, Loader2, ChevronDown, Copy, User, BellRing, Search
+  Plus, Send, Loader2, ChevronDown, BellRing, Search
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 
@@ -17,6 +16,7 @@ export default function ItzikSmartApp() {
   const [customerResults, setCustomerResults] = useState<any[]>([]);
   const [showExtraFields, setShowExtraFields] = useState(false);
   const [requests, setRequests] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
   
   const [form, setForm] = useState({
     customerName: '', docNum: '', notes: '', 
@@ -29,39 +29,72 @@ export default function ItzikSmartApp() {
 
   useEffect(() => {
     fetchRequests();
-    // רישום OneSignal
-    if (typeof window !== 'undefined' && (window as any).OneSignalDeferred) {
-      (window as any).OneSignalDeferred.push((OneSignal: any) => OneSignal.login("itzik_zahavi"));
-    }
-  }, []);
+    
+    // מאזין לשינויים בזמן אמת - Realtime
+    const channel = supabase
+      .channel('itzik_updates')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'saban_requests' }, 
+        () => fetchRequests()
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [supabase]);
 
   const fetchRequests = async () => {
-    const { data } = await supabase.from('saban_requests').select('*').order('created_at', { ascending: false });
+    const { data } = await supabase
+      .from('saban_requests')
+      .select('*')
+      .order('created_at', { ascending: false });
     setRequests(data || []);
   };
 
   const handleSearchCustomer = async (val: string) => {
     setForm({...form, customerName: val});
     if (val.length > 2) {
-      const { data } = await supabase.from('customers').select('*').ilike('name', `%${val}%`).limit(5);
+      // חיפוש לקוחות מתוך טבלת הלקוחות הקיימת במערכת
+      const { data } = await supabase
+        .from('customers')
+        .select('*')
+        .ilike('name', `%${val}%`)
+        .limit(5);
       setCustomerResults(data || []);
     } else { setCustomerResults([]); }
   };
 
   const handleSend = async () => {
     if (!form.customerName || !form.docNum) return toast.error("חובה למלא לקוח ומספר מסמך");
+    
+    setLoading(true);
     const { error } = await supabase.from('saban_requests').insert([{
       request_type: mode === 'ORDER' ? 'הזמנה' : 'העברה',
-      customer_name: form.customerName, doc_number: form.docNum,
-      notes: form.notes, delivery_date: form.date,
+      customer_name: form.customerName, 
+      doc_number: form.docNum,
+      notes: form.notes, 
+      delivery_date: form.date,
       time_window: `${form.startTime}-${form.endTime}`,
       extra_data: { address: form.address, email: form.email },
-      status: 'pending', requester_name: 'איציק זהבי'
+      status: 'pending', 
+      requester_name: 'איציק זהבי'
     }]);
-    if (!error) { toast.success("נשלח לסידור!"); setMode('HOME'); resetForm(); }
+
+    if (!error) { 
+      toast.success("נשלח לסידור! 🔥"); 
+      setMode('HOME'); 
+      resetForm(); 
+      fetchRequests();
+    } else {
+      toast.error("שגיאה בשמירה");
+    }
+    setLoading(false);
   };
 
-  const resetForm = () => setForm({customerName:'', docNum:'', notes:'', date: new Date().toISOString().split('T')[0], startTime:'07:30', endTime:'10:00', address:'', email:''});
+  const resetForm = () => setForm({
+    customerName:'', docNum:'', notes:'', 
+    date: new Date().toISOString().split('T')[0], 
+    startTime:'07:30', endTime:'10:00', address:'', email:''
+  });
 
   return (
     <div className="max-w-md mx-auto min-h-screen bg-[#F8FAFC] p-4 pb-24 text-right" dir="rtl">
@@ -75,7 +108,9 @@ export default function ItzikSmartApp() {
         </div>
         <div className="h-12 w-12 bg-white rounded-2xl shadow-sm border flex items-center justify-center relative">
           <BellRing className="text-blue-600" size={20} />
-          {requests.filter(r => r.status === 'pending').length > 0 && <span className="absolute top-0 right-0 h-3 w-3 bg-red-500 rounded-full border-2 border-white"></span>}
+          {requests.filter(r => r.status === 'pending').length > 0 && (
+            <span className="absolute top-0 right-0 h-3 w-3 bg-red-500 rounded-full border-2 border-white"></span>
+          )}
         </div>
       </div>
 
@@ -109,7 +144,9 @@ export default function ItzikSmartApp() {
                     <div className="text-[10px] text-slate-400 font-bold">#{req.doc_number}</div>
                   </div>
                 </div>
-                <Badge className={req.status === 'approved' ? 'bg-green-500' : 'bg-orange-500'}>{req.status === 'approved' ? 'אושר' : 'בטיפול'}</Badge>
+                <Badge className={req.status === 'approved' ? 'bg-green-500 border-none' : 'bg-orange-500 border-none'}>
+                    {req.status === 'approved' ? 'אושר' : 'בטיפול'}
+                </Badge>
               </Card>
             ))}
           </div>
@@ -149,24 +186,51 @@ export default function ItzikSmartApp() {
               <Input value={form.docNum} onChange={e => setForm({...form, docNum: e.target.value})} placeholder="חשבונית/הזמנה..." className="h-14 rounded-2xl bg-slate-50 border-none font-bold text-lg" />
             </div>
 
-            <div className="bg-slate-50 rounded-2xl p-2">
-                <Button variant="ghost" onClick={() => setShowExtraFields(!showExtraFields)} className="w-full justify-between font-black text-xs text-slate-500">
+            <div className="bg-slate-50 rounded-2xl p-2 border border-slate-100">
+                <Button variant="ghost" onClick={() => setShowExtraFields(!showExtraFields)} className="w-full justify-between font-black text-xs text-slate-500 hover:bg-transparent">
                     <div className="flex items-center gap-2"><Plus size={16}/> הוסף כתובת/אימייל</div>
-                    <ChevronDown size={16} className={showExtraFields ? 'rotate-180' : ''}/>
+                    <ChevronDown size={16} className={showExtraFields ? 'rotate-180 transition-transform' : 'transition-transform'}/>
                 </Button>
                 {showExtraFields && (
                     <div className="p-2 space-y-3 animate-in fade-in">
-                        <Input placeholder="כתובת למשלוח" value={form.address} onChange={e => setForm({...form, address: e.target.value})} className="bg-white rounded-xl" />
-                        <Input placeholder="אימייל לקוח" value={form.email} onChange={e => setForm({...form, email: e.target.value})} className="bg-white rounded-xl" />
+                        <Input placeholder="כתובת למשלוח" value={form.address} onChange={e => setForm({...form, address: e.target.value})} className="bg-white rounded-xl border-slate-200" />
+                        <Input placeholder="אימייל לקוח" value={form.email} onChange={e => setForm({...form, email: e.target.value})} className="bg-white rounded-xl border-slate-200" />
                     </div>
                 )}
             </div>
 
-            <Button onClick={handleSend} className="w-full h-16 bg-[#0B2C63] rounded-[2rem] font-black text-xl shadow-lg flex gap-3">
-               <Send size={24} /> שלח לסידור
+            <Button onClick={handleSend} disabled={loading} className="w-full h-16 bg-[#0B2C63] hover:bg-[#0B2C63]/90 rounded-[2rem] font-black text-xl shadow-lg flex gap-3">
+                {loading ? <Loader2 className="animate-spin" /> : <><Send size={24} /> שלח לסידור</>}
             </Button>
           </div>
         </Card>
+      )}
+
+      {mode === 'HISTORY' && (
+          <div className="space-y-4 animate-in fade-in">
+              <div className="flex justify-between items-center px-1">
+                <h2 className="font-black text-xl text-[#0B2C63]">כל הבקשות שלי</h2>
+                <X onClick={() => setMode('HOME')} className="cursor-pointer text-slate-400 bg-white p-1 rounded-full shadow-sm" />
+              </div>
+              <div className="space-y-3">
+                {requests.map(req => (
+                  <Card key={req.id} className="p-4 rounded-3xl border-none shadow-md bg-white flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-xl ${req.status === 'approved' ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>
+                        {req.status === 'approved' ? <CheckCircle2 size={24}/> : <Clock size={24}/>}
+                      </div>
+                      <div>
+                        <div className="font-black text-sm">{req.customer_name}</div>
+                        <div className="text-[10px] text-slate-400 font-bold">#{req.doc_number} | {req.request_type}</div>
+                      </div>
+                    </div>
+                    <Badge className={req.status === 'approved' ? 'bg-green-500 border-none' : 'bg-orange-500 border-none'}>
+                        {req.status === 'approved' ? 'אושר' : 'בטיפול'}
+                    </Badge>
+                  </Card>
+                ))}
+              </div>
+          </div>
       )}
     </div>
   );
