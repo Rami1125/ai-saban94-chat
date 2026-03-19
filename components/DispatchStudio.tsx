@@ -1,89 +1,130 @@
 "use client";
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { getSupabase } from "@/lib/supabase";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Truck, MapPin, Send, History, RefreshCw, Timer, Activity, CheckCircle2 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import { toast } from "sonner";
+import { 
+  Menu, X, Check, MessageSquare, Clock, 
+  AlertTriangle, Filter, LayoutDashboard
+} from "lucide-react";
+import { 
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger 
+} from "@/components/ui/sheet";
 
 export default function DispatchStudio() {
-  const [orders, setOrders] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [requests, setRequests] = useState<any[]>([]);
   const supabase = getSupabase();
 
-  const fetchDispatch = useCallback(async () => {
-    setLoading(true);
-    const today = new Date().toISOString().split('T')[0];
-    
-    // שימוש ב-* פותר את שגיאת ה-400
-    const { data, error } = await supabase
-      .from('dispatch_orders')
-      .select('*')
-      .eq('scheduled_date', today)
-      .order('scheduled_time', { ascending: true });
-    
-    if (error) {
-      console.error("Supabase Error:", error.message);
-    } else {
-      setOrders(data || []);
-    }
-    setLoading(false);
-  }, [supabase]);
-
   useEffect(() => {
-    fetchDispatch();
-    const channel = supabase.channel('dispatch_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'dispatch_orders' }, () => fetchDispatch())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [fetchDispatch, supabase]);
+    fetchPendingRequests();
+    const sub = supabase.channel('dispatch_room')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'saban_requests' }, () => {
+        (window as any).playNotificationSound?.();
+        fetchPendingRequests();
+      }).subscribe();
+    return () => { supabase.removeChannel(sub); };
+  }, []);
 
-  const getLiveTimer = (startTime: string) => {
-    if (!startTime) return 0;
-    return Math.floor((new Date().getTime() - new Date(startTime).getTime()) / 60000);
+  const fetchPendingRequests = async () => {
+    const { data } = await supabase.from('saban_requests')
+      .select('*')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true });
+    setRequests(data || []);
   };
 
-  if (loading && orders.length === 0) return <div className="text-center p-10 font-bold">טוען סידור עבודה...</div>;
+  const approveRequest = async (id: string) => {
+    await supabase.from('saban_requests').update({ status: 'approved' }).eq('id', id);
+    // כאן OneSignal ישלח אוטומטית אם הגדרנו Function, או שנשלח קריאת API ידנית
+  };
 
   return (
-    <div className="space-y-4 text-right" dir="rtl">
-      {orders.length === 0 ? (
-        <Card className="p-10 text-center border-dashed border-2">
-          <p className="text-slate-400">אין הזמנות להיום. הגיע הזמן להוסיף אחת!</p>
-        </Card>
-      ) : (
-        <AnimatePresence>
-          {orders.map((order) => (
-            <motion.div key={order.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              <Card className={`overflow-hidden border-none shadow-md ${order.status === 'unloading' ? 'ring-2 ring-purple-500' : ''}`}>
-                <CardContent className="p-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="font-black text-lg flex items-center gap-2">
-                        {order.customer_name}
-                        {order.status === 'completed' && <CheckCircle2 size={16} className="text-green-500" />}
-                      </h3>
-                      <p className="text-slate-500 text-xs flex items-center gap-1"><MapPin size={12}/> {order.delivery_address}</p>
-                    </div>
-                    <Badge variant="outline">{order.scheduled_time?.slice(0, 5)}</Badge>
-                  </div>
-                  
-                  <div className="flex gap-4 mt-4 text-xs font-bold text-slate-600">
-                    <span className="flex items-center gap-1"><Truck size={12}/> {order.driver_name}</span>
-                    {order.status === 'unloading' && (
-                      <span className="text-purple-600 animate-pulse flex items-center gap-1">
-                        <Timer size={12}/> פורק כבר {getLiveTimer(order.actual_pto_start)} דק'
-                      </span>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      )}
+    <div className="flex flex-col h-screen bg-slate-900 text-white overflow-hidden font-sans">
+      {/* Top Navigation */}
+      <div className="h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-900/50 backdrop-blur-md">
+        <div className="flex items-center gap-4">
+          <div className="bg-blue-600 p-2 rounded-xl">
+            <LayoutDashboard size={20}/>
+          </div>
+          <h1 className="text-xl font-black tracking-tight">סידור עבודה - Saban OS</h1>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* המבורגר בקשות איציק */}
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="outline" className="relative border-slate-700 bg-slate-800 hover:bg-slate-700 rounded-xl gap-2 font-bold">
+                <Menu size={18}/> בקשות מהשטח
+                {requests.length > 0 && (
+                  <span className="absolute -top-1 -right-1 h-5 w-5 bg-red-500 rounded-full text-[10px] flex items-center justify-center border-2 border-slate-900 animate-pulse">
+                    {requests.length}
+                  </span>
+                )}
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-[400px] bg-slate-50 border-none p-0">
+              <div className="p-6 bg-white border-b border-slate-100">
+                <SheetHeader>
+                  <SheetTitle className="text-2xl font-black text-slate-800">בקשות ממתינות</SheetTitle>
+                </SheetHeader>
+              </div>
+              <div className="p-4 space-y-4 overflow-y-auto h-[calc(100vh-100px)]">
+                {requests.length === 0 ? (
+                  <div className="text-center py-20 text-slate-400 font-bold">אין בקשות חדשות</div>
+                ) : (
+                  requests.map(req => (
+                    <Card key={req.id} className="p-5 rounded-2xl border-none shadow-sm bg-white border-r-4 border-orange-500">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <Badge className="bg-orange-100 text-orange-600 mb-1">{req.request_type}</Badge>
+                          <div className="text-lg font-black text-slate-800">מסמך: {req.doc_number}</div>
+                          <div className="text-sm text-slate-500 font-bold flex items-center gap-1">
+                            <Clock size={14}/> {req.delivery_date} | {req.time_window}
+                          </div>
+                        </div>
+                        <div className="text-[10px] text-slate-300 font-black">איציק זהבי</div>
+                      </div>
+                      
+                      {req.notes && (
+                        <div className="bg-slate-50 p-3 rounded-xl text-sm font-medium text-slate-600 mb-4 flex gap-2">
+                          <MessageSquare size={16} className="shrink-0 opacity-50"/>
+                          {req.notes}
+                        </div>
+                      )}
+
+                      <div className="flex gap-2">
+                        <Button onClick={() => approveRequest(req.id)} className="flex-1 bg-green-600 hover:bg-green-700 rounded-xl font-bold gap-2">
+                          <Check size={18}/> אשר
+                        </Button>
+                        <Button variant="outline" className="rounded-xl border-slate-200">
+                          מענה
+                        </Button>
+                      </div>
+                    </Card>
+                  ))
+                )}
+              </div>
+            </SheetContent>
+          </Sheet>
+        </div>
+      </div>
+
+      {/* אזור הסידור הראשי (המפות והלוח הקיים) */}
+      <div className="flex-1 p-6">
+        {/* כאן נכנס הלוגיקה הקיימת של גרירת הזמנות וכו' */}
+        <div className="grid grid-cols-12 gap-6 h-full">
+            <div className="col-span-8 bg-slate-800/50 rounded-[32px] border border-slate-800 flex items-center justify-center border-dashed">
+                <span className="text-slate-500 font-bold italic">מפת סידור ומשאיות (עלי וחכמת)</span>
+            </div>
+            <div className="col-span-4 space-y-4">
+                <div className="bg-slate-800/50 p-6 rounded-[32px] border border-slate-800">
+                    <h3 className="font-black text-lg mb-4">סיכום יומי</h3>
+                    {/* סטטיסטיקות */}
+                </div>
+            </div>
+        </div>
+      </div>
     </div>
   );
 }
