@@ -48,35 +48,33 @@ export default function SabanOSMasterDispatch() {
 
   const supabase = getSupabase();
 
-  // שליחת Push בצורה אסינכרונית כדי לא לעצור את ה-WhatsApp
-  const sendPush = async (title: string, msg: string) => {
-    try {
-      fetch("https://onesignal.com/api/v1/notifications", {
-        method: "POST",
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-        body: JSON.stringify({
-          app_id: "acc8a2bc-d54e-4261-b3d2-cc5c5f7b39d3",
-          included_segments: ["All"],
-          headings: { "he": title },
-          contents: { "he": msg },
-        })
-      });
-    } catch (err) { console.error("Push Error", err); }
+  // שליחת התראה ברקע ללא חסימת הפונקציה
+  const sendPush = (title: string, msg: string) => {
+    fetch("https://onesignal.com/api/v1/notifications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({
+        app_id: "acc8a2bc-d54e-4261-b3d2-cc5c5f7b39d3",
+        included_segments: ["All"],
+        headings: { "he": title },
+        contents: { "he": msg },
+      })
+    }).catch(e => console.log("Push skip"));
   };
 
   const fetchData = useCallback(async () => {
-    const { data: ords } = await supabase.from('saban_dispatch').select('*').order('scheduled_time', { ascending: true });
-    const { data: reqs } = await supabase.from('itzik_requests').select('*').eq('status', 'pending');
-    
-    if (reqs && reqs.length > requests.length) {
-      if (typeof window !== 'undefined' && (window as any).playNotificationSound) {
-        (window as any).playNotificationSound();
+    try {
+      const { data: ords } = await supabase.from('saban_dispatch').select('*').order('scheduled_time', { ascending: true });
+      const { data: reqs } = await supabase.from('itzik_requests').select('*').eq('status', 'pending');
+      
+      if (reqs && reqs.length > requests.length) {
+        (window as any).playNotificationSound?.();
+        toast.info("בקשה חדשה מאיציק זהבי 📢");
       }
-      toast.info("בקשה חדשה מאיציק זהבי 📢");
-    }
 
-    setOrders(ords || []);
-    setRequests(reqs || []);
+      setOrders(ords || []);
+      setRequests(reqs || []);
+    } catch (e) { console.log("Fetch error"); }
     setLoading(false);
   }, [supabase, requests.length]);
 
@@ -91,47 +89,36 @@ export default function SabanOSMasterDispatch() {
         return toast.error("חסר שם לקוח או מספר מסמך");
     }
 
+    setLoading(true);
     try {
-      const payload = { ...newOrder, start_process_time: new Date().toISOString() };
+      const payload = { 
+        ...newOrder, 
+        start_process_time: new Date().toISOString(),
+        container_action: newOrder.driver_name === 'פינוי פסולת' ? newOrder.container_action : null
+      };
+
       const { error } = await supabase.from('saban_dispatch').insert([payload]);
       
       if (error) throw error;
 
       toast.success("נשמר בסידור");
 
-      // שליחת ה-Push ברקע
       sendPush(
         newOrder.driver_name === 'פינוי פסולת' ? "♻️ מכולה חדשה" : "📦 הזמנה חדשה",
         `${newOrder.customer_name} | ${newOrder.driver_name}`
       );
 
-      // בניית הודעת וואטסאפ
       const waMsg = `*📦 סדר יום SabanOS*\n👤 לקוח: ${newOrder.customer_name}\n🆔 מספר: ${newOrder.order_id_comax}\n🚚 נהג: ${newOrder.driver_name}\n⏰ שעה: ${newOrder.scheduled_time}`;
-      
-      // פתיחת וואטסאפ
-      const waUrl = `https://wa.me/?text=${encodeURIComponent(waMsg)}`;
-      window.open(waUrl, '_blank');
+      window.open(`https://wa.me/?text=${encodeURIComponent(waMsg)}`, '_blank');
       
       setShowForm(false);
       setNewOrder({ ...newOrder, customer_name: '', address: '', order_id_comax: '' });
       fetchData();
     } catch (err) {
-      console.error(err);
-      toast.error("שגיאה בשמירה. וודא שביצעת SQL עדכון.");
+      toast.error("שגיאה! חייב להריץ SQL ב-Supabase");
+    } finally {
+      setLoading(false);
     }
-  };
-
-  const approveRequest = async (req: any) => {
-    await supabase.from('saban_dispatch').insert([{
-      customer_name: req.customer_name || 'חנות',
-      order_id_comax: req.doc_number,
-      warehouse_source: req.from_branch || 'התלמיד',
-      created_by: 'איציק זהבי',
-      scheduled_time: req.delivery_time || '07:00',
-      driver_name: 'חכמת'
-    }]);
-    await supabase.from('itzik_requests').update({ status: 'approved' }).eq('id', req.id);
-    toast.success("בקשה אושרה!");
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center font-black animate-pulse text-[#0B2C63]">טוען SabanOS...</div>;
@@ -140,9 +127,10 @@ export default function SabanOSMasterDispatch() {
     <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans text-right" dir="rtl">
       <Toaster position="top-center" richColors />
 
+      {/* Header */}
       <div className="bg-[#0B2C63] text-white p-6 rounded-b-[2.5rem] shadow-2xl mb-6 border-b-4 border-blue-500/50 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-black italic text-white uppercase tracking-tighter">סידור <span className="text-blue-400"> ח.סבן</span></h1>
+          <h1 className="text-3xl font-black italic text-white uppercase tracking-tighter">SABAN<span className="text-blue-400">OS</span></h1>
           <p className="text-[10px] text-blue-200 font-bold uppercase tracking-widest">Logistic Center</p>
         </div>
         <Button onClick={() => setShowForm(true)} className="bg-blue-600 hover:bg-blue-500 rounded-xl gap-2 font-black shadow-lg border-none text-white h-12 px-6">
@@ -152,6 +140,7 @@ export default function SabanOSMasterDispatch() {
 
       <div className="max-w-7xl mx-auto px-4 space-y-8">
         
+        {/* לוח בקשות חנות */}
         {requests.length > 0 && (
           <div className="space-y-4">
             <h2 className="text-lg font-black text-[#0B2C63] flex items-center gap-2 px-1">
@@ -161,8 +150,18 @@ export default function SabanOSMasterDispatch() {
               {requests.map(req => (
                 <Card key={req.id} className="min-w-[280px] p-5 bg-white border-r-8 border-orange-500 shadow-xl rounded-[2rem] border-none">
                   <div className="font-black text-slate-800 mb-1">{req.request_type} #{req.doc_number}</div>
-                  <div className="text-[10px] text-slate-400 font-bold mb-3">{req.from_branch} ➡️ {req.to_branch || 'לקוח'}</div>
-                  <Button onClick={() => approveRequest(req)} className="w-full h-10 bg-[#0B2C63] text-white font-black rounded-xl gap-2 border-none">
+                  <div className="text-[10px] text-slate-400 font-bold mb-3 text-right">מקור: {req.from_branch}</div>
+                  <Button onClick={() => {
+                     supabase.from('saban_dispatch').insert([{
+                       customer_name: req.customer_name || 'חנות',
+                       order_id_comax: req.doc_number,
+                       driver_name: 'חכמת',
+                       scheduled_time: '07:00'
+                     }]).then(() => {
+                       supabase.from('itzik_requests').update({ status: 'approved' }).eq('id', req.id).then(fetchData);
+                       toast.success("אושר!");
+                     });
+                  }} className="w-full h-10 bg-[#0B2C63] text-white font-black rounded-xl gap-2 border-none">
                     <Play size={14}/> אשר לסידור
                   </Button>
                 </Card>
@@ -174,7 +173,7 @@ export default function SabanOSMasterDispatch() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {drivers.map((driver) => (
             <div key={driver.name} className="space-y-4 text-right">
-              <Card className="bg-white p-5 rounded-[2.2rem] shadow-xl border border-slate-100 relative overflow-hidden border-none">
+              <Card className="bg-white p-5 rounded-[2.2rem] shadow-xl border-none relative overflow-hidden">
                 <div className="flex items-center gap-4 mb-6">
                   <div className="relative">
                     <img src={driver.img} className="w-16 h-16 rounded-2xl object-cover shadow-lg border-2 border-white" />
@@ -197,7 +196,7 @@ export default function SabanOSMasterDispatch() {
                         }); 
                         setShowForm(true); 
                       }} className="flex flex-col items-center gap-1 cursor-pointer">
-                        <div className={`w-10 h-14 rounded-xl border-2 flex items-center justify-center transition-all ${hasOrder ? 'bg-[#0B2C63] border-blue-400 shadow-md' : 'bg-slate-50 border-slate-100 hover:border-blue-200'}`}>
+                        <div className={`w-10 h-14 rounded-xl border-2 flex items-center justify-center transition-all ${hasOrder ? 'bg-[#0B2C63] border-blue-400 shadow-md' : 'bg-slate-50 border-slate-100'}`}>
                           {hasOrder ? (driver.name === 'פינוי פסולת' ? <Recycle size={16} className="text-green-400"/> : <Truck size={16} className="text-white" />) : <Clock size={14} className="text-slate-300" />}
                         </div>
                         <span className="text-[9px] font-bold text-slate-400">{time}</span>
@@ -209,7 +208,7 @@ export default function SabanOSMasterDispatch() {
 
               <div className="space-y-3">
                 {orders.filter(o => o.driver_name === driver.name).map((order) => (
-                  <Card key={order.id} className="border-none shadow-md rounded-2xl bg-white overflow-hidden hover:shadow-lg transition-all border-none">
+                  <Card key={order.id} className="border-none shadow-md rounded-2xl bg-white overflow-hidden hover:shadow-lg transition-all">
                     <div onClick={() => setExpandedId(expandedId === order.id ? null : order.id)} className="p-4 flex justify-between items-center cursor-pointer text-right" dir="rtl">
                       <div className="flex items-center gap-3">
                         <div className={`${driver.name === 'פינוי פסולת' ? 'bg-green-600' : 'bg-[#0B2C63]'} text-white font-black px-2 py-1 rounded-lg text-[10px]`}>{order.scheduled_time?.slice(0, 5)}</div>
@@ -218,7 +217,7 @@ export default function SabanOSMasterDispatch() {
                           <span className="text-[10px] text-blue-600 font-bold">#{order.order_id_comax} {order.container_action ? `| ${order.container_action}` : ''}</span>
                         </div>
                       </div>
-                      <ChevronDown size={18} className={`text-slate-300 transition-transform ${expandedId === order.id ? 'rotate-180 text-blue-600' : ''}`} />
+                      <ChevronDown size={18} className={`text-slate-300 transition-transform ${expandedId === order.id ? 'rotate-180' : ''}`} />
                     </div>
                   </Card>
                 ))}
