@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
   Truck, Plus, ChevronDown, Trash2, X, Send, 
-  Clock, Warehouse, MapPin, Share2, UserCheck, HardHat, Recycle, Menu, Edit2, Calendar, RefreshCw, CheckCircle2
+  Clock, Warehouse, MapPin, Share2, UserCheck, HardHat, Recycle, Menu, Edit2, Calendar, RefreshCw, CheckCircle2,
+  Brain, Loader2 // הוספתי אייקונים למוח ולטעינה
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 
@@ -16,7 +17,6 @@ const drivers = [
   { id: 'waste', name: 'פינוי פסולת', img: 'https://cdn-icons-png.flaticon.com/512/3299/3299935.png', color: '#16a34a', defaultType: 'מכולה ♻️' }
 ];
 
-// סטטוסים מקצועיים לח. סבן
 const statusOptions = [
   { label: 'פתוח', value: 'פתוח', color: 'bg-orange-100 text-orange-700 border-orange-200' },
   { label: 'אושר להפצה', value: 'אושר להפצה', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
@@ -43,6 +43,12 @@ export default function SabanMasterDispatch() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<any>(null);
   
+  // 🔥 משתנים חדשים למוח של ח. סבן
+  const [aiInput, setAiInput] = useState("");
+  const [messages, setMessages] = useState<any[]>([]);
+  const [isTyping, setIsTyping] = useState(false);
+  const [showAiChat, setShowAiChat] = useState(false);
+
   const [form, setForm] = useState({
     scheduled_date: new Date().toISOString().split('T')[0],
     scheduled_time: '07:00',
@@ -55,37 +61,7 @@ export default function SabanMasterDispatch() {
     container_action: 'הובלה',
     status: 'פתוח'
   });
-const handleAiCommand = async () => {
-  if (!aiInput.trim() || isTyping) return;
-  
-  const userMsg = aiInput;
-  setAiInput("");
-  setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
-  setIsTyping(true);
 
-  try {
-    // 🔥 במקום לפנות לגוגל, פונים ל-API המשוריין שלנו
-    const res = await fetch('/api/admin_pro/brain', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: userMsg })
-    });
-
-    const data = await res.json();
-    
-    if (data.answer) {
-      setMessages(prev => [...prev, { role: 'ai', content: data.answer }]);
-      toast.success("פקודה עובדה בשרת 🚀");
-    } else {
-      throw new Error(data.error || "שגיאה בשרת");
-    }
-  } catch (e) {
-    console.error("AI Error:", e);
-    toast.error("נתק בתקשורת מול המוח");
-  } finally {
-    setIsTyping(false);
-  }
-};
   const supabase = getSupabase();
 
   const fetchData = useCallback(async () => {
@@ -99,6 +75,41 @@ const handleAiCommand = async () => {
     }
   }, [supabase]);
 
+  // 🔥 פונקציית ה-AI המתוקנת
+  const handleAiCommand = async () => {
+    if (!aiInput.trim() || isTyping) return;
+    
+    const userMsg = aiInput;
+    setAiInput("");
+    setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+    setIsTyping(true);
+
+    try {
+      const res = await fetch('/api/admin_pro/brain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: userMsg })
+      });
+
+      const data = await res.json();
+      
+      if (data.answer) {
+        setMessages(prev => [...prev, { role: 'ai', content: data.answer }]);
+        if (data.answer.includes("✅")) {
+          fetchData(); // ריענון אוטומטי של הלוח אם בוצע שינוי
+          toast.success("סידור עודכן בהצלחה! 🦾");
+        }
+      } else {
+        throw new Error(data.error || "שגיאה בשרת");
+      }
+    } catch (e) {
+      console.error("AI Error:", e);
+      toast.error("נתק בתקשורת מול המוח");
+    } finally {
+      setIsTyping(false);
+    }
+  };
+
   useEffect(() => {
     fetchData();
     const sub = supabase.channel('master_live').on('postgres_changes', { event: '*', schema: 'public', table: 'saban_master_dispatch' }, fetchData).subscribe();
@@ -108,19 +119,13 @@ const handleAiCommand = async () => {
   const generateWAMessage = (order: any) => {
     const isMobile = typeof navigator !== 'undefined' && /iPhone|Android/i.test(navigator.userAgent);
     const actionInfo = order.driver_name === 'פינוי פסולת' ? `\n♻️ *פעולה:* ${order.container_action}` : '';
-    
-    if (!isMobile) {
-      return `סידור ח. סבן חומרי בניין\nעדכון הזמנה\nלקוח: ${order.customer_name}\nסטטוס: ${order.status}\nנהג: ${order.driver_name}\nשעה: ${order.scheduled_time}\nנציג: ${order.created_by}`;
-    }
-
-    return `📦 *סידור ח. סבן*\n---------------------------\n👤 *לקוח:* ${order.customer_name}\n🚦 *סטטוס:* ${order.status}\n🚛 *נהג:* ${order.driver_name}${actionInfo}\n⏰ *שעה:* ${order.scheduled_time}\n---------------------------\n_מעדכן: ${order.created_by}_`;
+    const text = `📦 *סידור ח. סבן*\n---------------------------\n👤 *לקוח:* ${order.customer_name}\n🚦 *סטטוס:* ${order.status}\n🚛 *נהג:* ${order.driver_name}${actionInfo}\n⏰ *שעה:* ${order.scheduled_time}\n---------------------------\n_מעדכן: ${order.created_by}_`;
+    return text;
   };
 
   const saveOrder = async () => {
     if (!form.customer_name || !form.order_id_comax) return toast.error("חסר נתונים");
-
     const payload = { ...form, start_process_time: new Date().toISOString() };
-    
     const { error } = editingOrder 
       ? await supabase.from('saban_master_dispatch').update(payload).eq('id', editingOrder.id)
       : await supabase.from('saban_master_dispatch').insert([payload]);
@@ -133,7 +138,7 @@ const handleAiCommand = async () => {
       setForm({ ...form, customer_name: '', order_id_comax: '', address: '', status: 'פתוח' });
       fetchData();
     } else {
-        toast.error("שגיאה בשמירה ל-SQL");
+      toast.error("שגיאה בשמירה ל-SQL");
     }
   };
 
@@ -155,18 +160,23 @@ const handleAiCommand = async () => {
 
       {/* Header */}
       <div className="bg-[#0B2C63] text-white p-6 rounded-b-[2.5rem] shadow-2xl mb-8 flex justify-between items-center relative z-50">
-        <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 bg-white/10 rounded-xl border-none text-white transition-all">
+        <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 bg-white/10 rounded-xl border-none text-white transition-all cursor-pointer">
           {isMenuOpen ? <X size={28}/> : <Menu size={28}/>}
         </button>
         <div className="text-center">
             <h1 className="text-xl font-black italic tracking-tighter leading-tight text-white uppercase">ח.סבן</h1>
             <p className="text-[10px] font-bold text-blue-300 uppercase tracking-widest">Master Dispatch</p>
         </div>
-        <Button onClick={() => { setEditingOrder(null); setShowForm(true); }} className="bg-blue-600 rounded-xl font-black h-10 px-4 border-none shadow-lg text-white">חדש +</Button>
+        <div className="flex gap-2">
+          <Button onClick={() => setShowAiChat(!showAiChat)} className="bg-white/10 border-none rounded-xl text-white hover:bg-white/20">
+            <Brain size={20} className={isTyping ? "animate-bounce" : ""} />
+          </Button>
+          <Button onClick={() => { setEditingOrder(null); setShowForm(true); }} className="bg-blue-600 rounded-xl font-black h-10 px-4 border-none shadow-lg text-white">חדש +</Button>
+        </div>
         
         {isMenuOpen && (
           <div className="absolute top-24 right-6 left-6 bg-white rounded-[2rem] shadow-2xl p-4 border border-slate-100 animate-in slide-in-from-top-4">
-             <button onClick={shareMorningReport} className="w-full flex items-center gap-3 p-5 hover:bg-slate-50 rounded-2xl text-[#0B2C63] font-black border-none text-right transition-colors">
+             <button onClick={shareMorningReport} className="w-full flex items-center gap-3 p-5 hover:bg-slate-50 rounded-2xl text-[#0B2C63] font-black border-none text-right transition-colors cursor-pointer">
                 <Share2 size={22} className="text-blue-600"/> שלח דוח סידור בוקר
              </button>
           </div>
@@ -225,7 +235,7 @@ const handleAiCommand = async () => {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 mt-2 pt-4 border-t border-slate-50 text-[11px] font-bold text-slate-500 uppercase">
+                    <div className="grid grid-cols-2 gap-4 mt-2 pt-4 border-t border-slate-50 text-[11px] font-bold text-slate-500 uppercase text-right">
                         <div className="flex items-center gap-2 truncate"><MapPin size={14} className="text-red-400"/> {order.address || 'איסוף עצמי'}</div>
                         <div className="flex items-center gap-2"><Warehouse size={14} className="text-blue-400"/> {order.warehouse_source}</div>
                         <div className="flex items-center gap-2"><UserCheck size={14} className="text-orange-400"/> {order.created_by}</div>
@@ -238,6 +248,57 @@ const handleAiCommand = async () => {
         ))}
       </div>
 
+      {/* 🔥 ממשק הצאט של המוח - Saban Brain Interface */}
+      {showAiChat && (
+        <div className="fixed bottom-24 left-6 right-6 z-[90] animate-in slide-in-from-bottom-8">
+          <Card className="bg-white/95 backdrop-blur-xl border-2 border-blue-100 rounded-[2.5rem] shadow-2xl p-6 h-[400px] flex flex-col">
+            <div className="flex justify-between items-center mb-4 border-b pb-4 border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="bg-blue-600 p-2 rounded-xl text-white"><Brain size={20} /></div>
+                <h3 className="font-black text-[#0B2C63] italic">SABAN BRAIN V1</h3>
+              </div>
+              <button onClick={() => setShowAiChat(false)} className="bg-slate-100 p-1 rounded-full border-none text-slate-400"><X size={20}/></button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto space-y-4 mb-4 p-2 no-scrollbar text-right">
+              {messages.length === 0 && (
+                <div className="text-center text-slate-400 font-bold text-sm py-10 italic">
+                  ראמי, אני מחכה לפקודה. נסה: "תשנה סטטוס לאדר בניה ל'בביצוע'"
+                </div>
+              )}
+              {messages.map((m, i) => (
+                <div key={i} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
+                  <div className={`max-w-[80%] p-4 rounded-3xl font-bold text-sm shadow-sm ${m.role === 'user' ? 'bg-slate-100 text-slate-800 rounded-bl-none' : 'bg-[#0B2C63] text-white rounded-br-none'}`}>
+                    {m.content}
+                  </div>
+                </div>
+              ))}
+              {isTyping && (
+                <div className="flex justify-end">
+                  <div className="bg-blue-50 text-blue-600 p-4 rounded-3xl rounded-br-none animate-pulse flex items-center gap-2 font-black italic">
+                    <Loader2 size={16} className="animate-spin" /> מסנכרן SQL...
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2 bg-slate-50 p-2 rounded-2xl border-2 border-slate-100">
+              <input 
+                value={aiInput} 
+                onChange={e => setAiInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleAiCommand()}
+                placeholder="פקודה למוח..."
+                className="flex-1 bg-transparent border-none outline-none font-bold text-right px-2"
+              />
+              <button onClick={handleAiCommand} disabled={isTyping} className="bg-blue-600 text-white p-3 rounded-xl hover:bg-blue-700 transition-all border-none cursor-pointer">
+                <Send size={20} />
+              </button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Form Overlay */}
       {showForm && (
         <div className="fixed inset-0 bg-[#0B2C63]/95 backdrop-blur-md z-[100] flex items-center justify-center p-4">
           <Card className="bg-white w-full max-w-lg rounded-[3rem] p-10 space-y-6 shadow-2xl border-none text-right overflow-y-auto max-h-[90vh]">
@@ -249,18 +310,18 @@ const handleAiCommand = async () => {
             <div className="grid grid-cols-3 gap-2 mb-2">
                 {teamMembers.map(m => (
                     <button key={m} onClick={() => setForm({...form, created_by: m})}
-                            className={`py-3 rounded-2xl text-[10px] font-black border-none transition-all ${form.created_by === m ? 'bg-blue-600 text-white shadow-lg scale-105' : 'bg-slate-100 text-slate-400'}`}>
+                            className={`py-3 rounded-2xl text-[10px] font-black border-none transition-all cursor-pointer ${form.created_by === m ? 'bg-blue-600 text-white shadow-lg scale-105' : 'bg-slate-100 text-slate-400'}`}>
                         {m}
                     </button>
                 ))}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
+                <div className="space-y-1 text-right">
                     <label className="text-[10px] font-black text-slate-400 mr-2 uppercase tracking-widest">תאריך</label>
                     <input type="date" value={form.scheduled_date} onChange={e => setForm({...form, scheduled_date: e.target.value})} className="w-full h-12 px-4 rounded-xl border-2 border-slate-100 font-bold outline-none focus:border-blue-500 text-right" />
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-1 text-right">
                     <label className="text-[10px] font-black text-slate-400 mr-2 uppercase tracking-widest">שעה</label>
                     <select value={form.scheduled_time} onChange={e => setForm({...form, scheduled_time: e.target.value})} className="w-full h-12 px-4 rounded-xl border-2 border-slate-100 font-bold bg-white outline-none focus:border-blue-500 text-right">
                         {timeSlots.map(t => <option key={t} value={t}>{t}</option>)}
@@ -268,7 +329,7 @@ const handleAiCommand = async () => {
                 </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 text-right">
                 <label className="text-[10px] font-black text-blue-600 mr-2 uppercase tracking-widest">סטטוס לוגיסטי</label>
                 <select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-blue-100 font-black text-right outline-none focus:border-blue-500 bg-white shadow-sm">
                     {statusOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
@@ -280,13 +341,13 @@ const handleAiCommand = async () => {
             <input placeholder="כתובת אספקה" value={form.address} onChange={e => setForm({...form, address: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-slate-100 font-bold text-right outline-none focus:border-blue-500 transition-all focus:bg-blue-50/30" />
 
             <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
+                <div className="space-y-2 text-right">
                     <label className="text-[10px] font-black text-slate-400 mr-2 uppercase">נהג</label>
                     <select value={form.driver_name} onChange={e => setForm({...form, driver_name: e.target.value})} className="w-full h-14 px-4 rounded-xl border-2 border-slate-100 font-bold text-right outline-none focus:border-blue-500 bg-white">
                         {drivers.map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
                     </select>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 text-right">
                     <label className="text-[10px] font-black text-slate-400 mr-2 uppercase">מחסן</label>
                     <select value={form.warehouse_source} onChange={e => setForm({...form, warehouse_source: e.target.value})} className="w-full h-14 px-4 rounded-xl border-2 border-slate-100 font-bold text-right outline-none focus:border-blue-500 bg-white">
                         {standardWarehouses.concat(wasteWarehouses).map(w => <option key={w} value={w}>{w}</option>)}
