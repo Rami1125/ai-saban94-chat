@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+/**
+ * Saban OS V60.1 - Master Dispatch API
+ * -----------------------------------
+ * - FIX: Proper Syntax closing
+ * - Auto-Generation of Comax ID
+ */
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -15,7 +22,7 @@ export async function POST(req: Request) {
   try {
     const { query, history, customerId } = await req.json();
 
-    // 1. שליפת כל ההזמנות הקיימות מהטבלה לצורך קונטקסט (שליפה אונליין)
+    // 1. שליפת קונטקסט של הזמנות קיימות
     const { data: allOrders } = await supabase
       .from('saban_master_dispatch')
       .select('*')
@@ -33,13 +40,13 @@ export async function POST(req: Request) {
       ${ordersContext}
 
       חוקי שליטה:
-      - פתיחת הזמנה: החזר [CREATE_ORDER:לקוח|שעה|נהג|מחסן|פעולה|כתובת]
-      - שליפת נתון: אם ראמי שואל "מה הסטטוס", ענה לו על סמך רשימת ההזמנות למעלה.
-      - ענה בטקסט בולט (Black), חד ומקצועי.
+      - פתיחת הזמנה: חובה להחזיר [CREATE_ORDER:לקוח|שעה|נהג|מחסן|פעולה|כתובת]
+      - שליפת נתון: ענה לראמי על סמך רשימת ההזמנות למעלה.
+      - ענה בעברית מקצועית, קצרה וחדה.
       חתימה: ראמי, הכל מסונכרן ב-100%. 🦾
     `.trim();
 
-    // 2. הפעלת ה-AI (Discovery Loop)
+    // 2. הפעלת AI
     let finalAnswer = "";
     let success = false;
     const apiKeys = (process.env.GOOGLE_AI_KEY_POOL || "").split(",").map(k => k.trim());
@@ -47,6 +54,7 @@ export async function POST(req: Request) {
     for (const entry of DISCOVERY_MATRIX) {
       if (success) break;
       for (const key of apiKeys) {
+        if (success) break;
         try {
           const url = `https://generativelanguage.googleapis.com/v1beta/models/${entry.name}:generateContent?key=${key}`;
           const res = await fetch(url, {
@@ -62,14 +70,15 @@ export async function POST(req: Request) {
           if (res.ok) {
             const data = await res.json();
             finalAnswer = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            success = true;
-            break;
+            if (finalAnswer) { success = true; break; }
           }
         } catch (e) { continue; }
       }
     }
 
-// 3. לוגיקת כתיבה ל-SQL (Insert)
+    if (!success) return NextResponse.json({ answer: "ראמי אחי, המוח עמוס. נסה שוב. 🦾" });
+
+    // 3. לוגיקת כתיבה ל-SQL (Insert)
     const orderMatch = finalAnswer.match(/\[CREATE_ORDER:(.*?)\]/);
     if (orderMatch) {
       const params = orderMatch[1].split('|');
@@ -95,7 +104,5 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
   }
 }
