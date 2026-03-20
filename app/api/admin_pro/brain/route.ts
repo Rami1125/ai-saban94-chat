@@ -5,7 +5,11 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
-
+const DISCOVERY_MATRIX = [
+  { name: "gemini-1.5-flash", versions: ["v1beta"] },
+  { name: "gemini-1.5-pro", versions: ["v1beta"] },
+  { name: "gemini-2.0-flash-exp", versions: ["v1beta"] }
+];
 export async function POST(req: Request) {
   let debugLog = ""; // צובר לוגים להצגה למשתמש
   
