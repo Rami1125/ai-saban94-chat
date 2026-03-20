@@ -20,8 +20,11 @@ export default function SabanCustomerTracking() {
 
     // האזנה לשינויים בזמן אמת (Realtime)
     const fetchAndSubscribe = async () => {
-      const { data } = await supabase.from('saban_master_dispatch').select('*').eq('id', orderId).single();
-      setOrder(data);
+const { data } = await supabase
+  .from('saban_master_dispatch')
+  .select('*')
+  .eq('order_id_comax', orderId) // <--- החיפוש עובר למספר ההזמנה שלך
+  .single();
 
       const channel = supabase
         .channel(`track_${orderId}`)
