@@ -95,23 +95,22 @@ export async function POST(req: Request) {
     if (!success) return NextResponse.json({ answer: "ראמי אחי, המוח עמוס. נסה שוב בעוד רגע. 🦾" });
 
     // 4. לוגיקת ביצוע מול saban_master_dispatch
-    const orderMatch = finalAnswer.match(/\[CREATE_ORDER:(.*?)\|(.*?)\|(.*?)\|(.*?)\|(.*?)\|(.*?)\]/);
-    
-    if (orderMatch) {
-      const [_, customer, time, driver, warehouse, action, address] = orderMatch;
-      
-      const { error } = await supabase.from('saban_master_dispatch').insert([{
-        customer_name: customer.trim() || "לקוח כללי",
-        scheduled_time: time.trim() || "08:00",
-        driver_name: driver.trim() || "לא שובץ",
-        warehouse_source: warehouse.trim() || "החרש (4)",
-        container_action: action.trim() || "הובלה",
-        address: address.trim() || "",
-        order_id_comax: `AI-${Math.floor(100000 + Math.random() * 900000)}`, // שדה חובה ב-DB
-        status: (driver.trim() && driver.trim() !== 'לא שובץ') ? 'אושר להפצה' : 'פתוח',
-        created_by: 'SABAN_BRAIN',
+const orderMatch = finalAnswer.match(/\[CREATE_ORDER:(.*?)\]/);
+if (orderMatch) {
+    const params = orderMatch[1].split('|');
+    const [customer, time, driver, warehouse, action, address] = params;
+
+    await supabase.from('saban_master_dispatch').insert([{
+        customer_name: customer?.trim() || "לקוח כללי",
+        scheduled_time: time?.trim() || "08:00",
+        driver_name: driver?.trim() || "לא שובץ",
+        warehouse_source: warehouse?.trim() || "כללי",
+        container_action: action?.trim() || "הובלה",
+        address: address?.trim() || "לא צוינה",
+        order_id_comax: `AI-${Math.floor(100000 + Math.random() * 900000)}`,
+        status: (driver && driver.trim() !== 'לא שובץ') ? 'אושר להפצה' : 'פתוח',
         scheduled_date: new Date().toISOString().split('T')[0]
-      }]);
+    }]);
 
       if (error) console.error("DB Insert Error:", error.message);
     }
