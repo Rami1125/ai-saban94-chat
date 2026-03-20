@@ -25,37 +25,39 @@ export default function SabanCustomerTracking() {
         setLoading(false);
         return;
     }
+const fetchOrder = async () => {
+  const cleanId = orderId.toString().replace(/[\[\]]/g, '').trim();
+  console.log("🔍 SabanOS Testing ID:", cleanId);
 
-    const fetchOrder = async () => {
-      // ניקוי ה-ID מתווים מיותרים
-      const cleanId = orderId.toString().replace(/[\[\]]/g, '').trim();
-      console.log("SabanOS: Fetching Order ID ->", cleanId);
+  try {
+    // בדיקה אם ה-Client של Supabase בכלל עובד
+    if (!supabase) {
+        throw new Error("Supabase client is not initialized");
+    }
 
-      try {
-        const { data, error: sbError } = await supabase
-          .from('saban_master_dispatch')
-          .select('*')
-          .eq('order_id_comax', cleanId)
-          .maybeSingle(); // maybeSingle מונע שגיאת 406 אם אין תוצאה
+    const { data, error: sbError, status } = await supabase
+      .from('saban_master_dispatch')
+      .select('*')
+      .eq('order_id_comax', cleanId)
+      .maybeSingle();
 
-        if (sbError) {
-            console.error("SabanOS: Supabase Error ->", sbError);
-            throw sbError;
-        }
+    console.log("📡 Supabase Response Status:", status);
+    console.log("📦 Data Received:", data);
 
-        if (!data) {
-            console.warn("SabanOS: No order found for ID ->", cleanId);
-            setError("הזמנה לא נמצאה במערכת");
-        } else {
-            setOrder(data);
-        }
-      } catch (err: any) {
-        setError(err.message || "שגיאת תקשורת עם השרת");
-      } finally {
-        setLoading(false);
-      }
-    };
+    if (sbError) throw sbError;
 
+    if (!data) {
+        setError(`הזמנה ${cleanId} לא נמצאה בסידור. וודא שהמספר נכון ב-Supabase.`);
+    } else {
+        setOrder(data);
+    }
+  } catch (err: any) {
+    console.error("❌ Critical Error:", err);
+    setError(`שגיאה: ${err.message || "לא ניתן להתחבר לנתונים"}`);
+  } finally {
+    setLoading(false);
+  }
+};
     fetchOrder();
 
     // הגנה: אם אחרי 10 שניות עדיין בטעינה, נשחרר את המסך
