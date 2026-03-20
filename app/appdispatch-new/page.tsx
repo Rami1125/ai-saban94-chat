@@ -1,209 +1,264 @@
 "use client";
-import React, { useState, useEffect, useRef } from 'react';
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import React, { useEffect, useState, useCallback } from 'react';
+import { getSupabase } from "@/lib/supabase";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
-  Bot, Send, User, Zap, MapPin, 
-  Package, Link as LinkIcon, Image as ImageIcon, 
-  Info, Sparkles, MessageSquare, ExternalLink,
-  Clock, Truck, AlertTriangle, FileText, Share2, Loader2
+  Truck, Plus, X, Send, Clock, Warehouse, MapPin, 
+  Share2, UserCheck, Recycle, Menu, Edit2, Calendar, RefreshCw, Trash2
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 import { toast, Toaster } from "sonner";
-import { getSupabase } from "@/lib/supabase";
 
-// --- רכיב תצוגת מדיה חכמה ---
-const SmartMedia = ({ content }: { content: string }) => {
-  const imgRegex = /(https?:\/\/.*\.(?:png|jpg|jpeg|gif|webp))/i;
-  const match = content.match(imgRegex);
-  if (match) {
-    return (
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-3 rounded-xl overflow-hidden border shadow-sm max-w-sm">
-        <img src={match[0]} alt="Preview" className="w-full h-auto object-cover" />
-      </motion.div>
-    );
-  }
-  return null;
-};
+// הגדרות קבועות לפי המבנה העסקי של ח. סבן
+const drivers = [
+  { name: 'חכמת', type: 'מנוף 🏗️', color: '#0B2C63' },
+  { name: 'עלי', type: 'משאית 🚛', color: '#2563EB' },
+  { name: 'פינוי פסולת', type: 'מכולה ♻️', color: '#16a34a' }
+];
 
-// --- רכיב כפתור Markdown מעוצב ---
-const MarkdownButton = ({ text }: { text: string }) => {
-  const linkRegex = /\[(.*?)\]\((.*?)\)/g;
-  const parts = [];
-  let lastIndex = 0;
-  let match;
-  while ((match = linkRegex.exec(text)) !== null) {
-    parts.push(text.substring(lastIndex, match.index));
-    parts.push(
-      <a key={match[2]} href={match[2]} target="_blank" className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-bold text-xs hover:bg-blue-700 transition-all shadow-md my-1">
-        {match[1]} <ExternalLink size={12} />
-      </a>
-    );
-    lastIndex = linkRegex.lastIndex;
-  }
-  parts.push(text.substring(lastIndex));
-  return <div className="whitespace-pre-wrap">{parts.length > 1 ? parts : text}</div>;
-};
+const teamMembers = ['ראמי', 'יואב', 'איציק'];
+const containerActions = ['הצבה', 'החלפה', 'הוצאה', 'הובלה'];
+const warehouses = ['התלמיד (1)', 'החרש (4)', 'שארק (30)', 'כראדי (32)', 'שי שרון (40)'];
 
-export default function SabanStudioUI() {
-  const [messages, setMessages] = useState<{role: string, content: string}[]>([]);
-  const [input, setInput] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
-  const [showGuide, setShowGuide] = useState(false);
-  const [aiInsights, setAiInsights] = useState<string[]>(["המערכת סורקת בקשות חריגות...", "חוק דחיפות פעיל: הזמנות ללא שעה יסומנו בצהובה"]);
-  const scrollRef = useRef<HTMLDivElement>(null);
+const timeSlots = Array.from({ length: 24 }, (_, i) => {
+  const h = Math.floor(i / 2) + 6;
+  const m = i % 2 === 0 ? "00" : "30";
+  return `${h.toString().padStart(2, '0')}:${m}`;
+});
+
+export default function SabanMasterDispatch() {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [editingOrder, setEditingOrder] = useState<any>(null);
+  
+  const [form, setForm] = useState({
+    scheduled_date: new Date().toISOString().split('T')[0],
+    scheduled_time: '07:00',
+    customer_name: '',
+    order_id_comax: '',
+    driver_name: 'חכמת',
+    warehouse_source: 'החרש (4)',
+    container_action: 'הובלה',
+    address: '',
+    created_by: 'ראמי',
+    status: 'פתוח'
+  });
+
   const supabase = getSupabase();
 
-  // טעינת היסטוריה
-  useEffect(() => {
-    const saved = localStorage.getItem('saban_studio_history');
-    if (saved) setMessages(JSON.parse(saved));
-    
-    // האזנה לשינויים בסידור להפקת תובנות בזמן אמת (המלשינון)
-    const channel = supabase.channel('brain_sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'saban_orders' }, payload => {
-          checkBrainRules(payload.new);
-      }).subscribe();
+  // משיכת נתונים מדויקת לפי המבנה החדש
+  const fetchData = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('saban_master_dispatch')
+        .select('*')
+        .order('scheduled_time', { ascending: true });
       
-    return () => { supabase.removeChannel(channel); };
-  }, []);
+      if (error) throw error;
+      setOrders(data || []);
+    } catch (err: any) {
+      toast.error("שגיאת סנכרון: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [supabase]);
 
   useEffect(() => {
-    localStorage.setItem('saban_studio_history', JSON.stringify(messages));
-    scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    fetchData();
+    // האזנה בזמן אמת לשינויים בטבלת המאסטר
+    const sub = supabase.channel('master_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'saban_master_dispatch' }, fetchData)
+      .subscribe();
+    return () => { supabase.removeChannel(sub); };
+  }, [fetchData, supabase]);
 
-  // לוגיקת ספר החוקים (המלשינון)
-  const checkBrainRules = (order: any) => {
-    if (!order) return;
-    const now = new Date();
-    const deliveryTime = new Date(`${order.delivery_date}T${order.delivery_time}`);
-    const diff = (deliveryTime.getTime() - now.getTime()) / 60000;
+  const saveOrder = async () => {
+    // וידוא שדות חובה לפי הגדרות ה-SQL (is_nullable: NO)
+    if (!form.customer_name || !form.order_id_comax || !form.driver_name) {
+      return toast.error("חובה למלא לקוח, מספר קומקס ונהג");
+    }
 
-    if (diff < 60 && diff > 0) {
-        setAiInsights(prev => [`⚠️ חייבים להעמיס: הזמנה ל${order.customer_name} בעוד שעה!`, ...prev.slice(0, 4)]);
-        (window as any).playNotificationSound?.();
+    const payload = { 
+      ...form, 
+      start_process_time: new Date().toISOString(),
+      // עדכון סטטוס אוטומטי אם יש נהג
+      status: (form.driver_name && form.driver_name !== 'לא שובץ') ? 'אושר להפצה' : 'פתוח'
+    };
+    
+    const { error } = editingOrder 
+      ? await supabase.from('saban_master_dispatch').update(payload).eq('id', editingOrder.id)
+      : await supabase.from('saban_master_dispatch').insert([payload]);
+
+    if (!error) {
+      toast.success(editingOrder ? "הזמנה עודכנה" : "הזמנה חדשה נרשמה ב-SQL");
+      setShowForm(false);
+      setEditingOrder(null);
+      // איפוס חלקי של הטופס
+      setForm({ ...form, customer_name: '', order_id_comax: '', address: '' });
+      fetchData();
+    } else {
+      toast.error("שגיאת כתיבה לטבלה: " + error.message);
     }
   };
 
-  const askGemini = async () => {
-    if (!input.trim()) return;
-    const userMsg = input;
-    setInput("");
-    setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
-    setIsTyping(true);
-
-    // לוגיקה לביצוע פעולות דינמיות
-    setTimeout(async () => {
-      let aiContent = "";
-      
-      if (userMsg.includes("תזיז") || userMsg.includes("שעה")) {
-        // סימולציה של הזזת שעה ב-DB
-        aiContent = `בוצע! הזזתי את שעת האספקה של ההזמנה לשעה **15:00**. לוח השעות בסידור התעדכן דינאמית. ✅`;
-        // כאן תבוא קריאת supabase.update...
-      } 
-      else if (userMsg.includes("דוח בוקר") || userMsg.includes("שתף")) {
-        aiContent = `מפיק דוח בוקר מעוצב... 📝\n\n*סידור עבודה ח.סבן - ${new Date().toLocaleDateString('he-IL')}*\n🏗️ משאית עלי: 3 הזמנות\n🏗️ מנוף חכמת: 2 הזמנות\n\n[לחץ כאן לשיתוף מהיר לווטסאפ 📱](https://wa.me/?text=הנה+דוח+בוקר)`;
-      }
-      else {
-        aiContent = `ראמי אחי, אני מאזין לספר החוקים. זיהיתי את הבקשה שלך ואני פועל לסנכרן את הסידור בהתאם. מה המשימה הבאה?`;
-      }
-      
-      setMessages(prev => [...prev, { role: 'assistant', content: aiContent }]);
-      setIsTyping(false);
-      (window as any).playNotificationSound?.();
-    }, 1200);
+  const shareMorningReport = () => {
+    const today = new Date().toLocaleDateString('he-IL');
+    const report = `☀️ *דוח סידור ח. סבן - ${today}*\n\n` +
+      orders.map(o => `⏰ ${o.scheduled_time} | 👤 ${o.customer_name} | 🚛 ${o.driver_name}`).join('\n');
+    window.open(`https://wa.me/?text=${encodeURIComponent(report)}`, '_blank');
   };
 
+  if (loading) return (
+    <div className="h-screen flex items-center justify-center bg-slate-50">
+      <div className="text-center">
+        <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+        <p className="font-black italic text-slate-800 uppercase tracking-tighter">Saban OS: Syncing Master Table...</p>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="flex flex-col h-screen bg-[#F8FAFC] font-sans" dir="rtl">
+    <div className="min-h-screen bg-[#F1F5F9] pb-24 font-sans text-right" dir="rtl">
       <Toaster position="top-center" richColors />
-      
-      {/* Header */}
-      <header className="p-4 bg-white border-b shadow-sm flex justify-between items-center z-10">
-        <div className="flex items-center gap-2">
-          <div className="bg-[#0B2C63] p-2 rounded-lg text-white shadow-lg">
-            <Zap size={20} fill="currentColor" />
-          </div>
-          <h1 className="font-black italic text-slate-800 tracking-tighter text-xl">SABAN STUDIO UI <span className="text-blue-600">AI</span></h1>
-        </div>
-        <div className="flex gap-2">
-            <Button variant="ghost" onClick={() => setShowGuide(!showGuide)} className="rounded-full gap-2 font-bold text-[#0B2C63]">
-              <Info size={18} /> חוקי המוח
-            </Button>
-        </div>
-      </header>
 
-      <div className="flex flex-1 overflow-hidden">
+      {/* Modern Header */}
+      <nav className="bg-[#0B2C63] text-white p-6 shadow-xl sticky top-0 z-50 flex justify-between items-center">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" onClick={() => setIsMenuOpen(!isMenuOpen)} className="text-white hover:bg-white/10">
+            <Menu size={28}/>
+          </Button>
+          <div className="hidden sm:block">
+            <h1 className="text-2xl font-black italic tracking-tighter leading-none uppercase">Master <span className="text-blue-400">Dispatch</span></h1>
+            <p className="text-[10px] font-bold text-blue-300 uppercase tracking-[0.2em] mt-1">ח. סבן חומרי בניין</p>
+          </div>
+        </div>
         
-        {/* לוח מחוונים AI - המלשינון */}
-        <aside className="w-80 bg-white border-l p-4 hidden lg:flex flex-col gap-4 shadow-sm">
-            <div className="flex items-center gap-2 border-b pb-3">
-                <Bot className="text-blue-600" />
-                <h2 className="font-black text-slate-800">לוח מחוונים AI</h2>
-            </div>
-            <div className="space-y-3">
-                {aiInsights.map((insight, idx) => (
-                    <Card key={idx} className={`p-3 rounded-xl border-none shadow-sm text-xs font-bold leading-relaxed ${insight.includes('⚠️') ? 'bg-red-50 text-red-700 border-r-4 border-red-500 animate-pulse' : 'bg-blue-50 text-blue-700'}`}>
-                        {insight}
-                    </Card>
-                ))}
-            </div>
-            <div className="mt-auto p-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-[10px] text-slate-400 font-bold">
-                המוח פועל לפי ספר חוקי ח.סבן 2026. כל הפעולות מתועדות בטבלה לשימוש היסטורי.
-            </div>
-        </aside>
+        <div className="flex gap-3">
+          <Button onClick={shareMorningReport} variant="outline" className="border-white/20 bg-white/5 text-white hidden md:flex gap-2">
+            <Share2 size={18}/> דוח בוקר
+          </Button>
+          <Button onClick={() => { setEditingOrder(null); setShowForm(true); }} className="bg-blue-500 hover:bg-blue-400 font-black px-6 rounded-xl shadow-lg">
+            הזמנה חדשה +
+          </Button>
+        </div>
+      </nav>
 
-        {/* Messages Area */}
-        <main className="flex-1 flex flex-col relative bg-slate-50/30">
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            <AnimatePresence>
-              {messages.map((m, i) => (
-                <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
-                  <div className={`max-w-[85%] p-4 rounded-[1.8rem] shadow-sm ${m.role === 'user' ? 'bg-white text-slate-800 border-2 border-slate-100' : 'bg-[#0B2C63] text-white'}`}>
-                    <div className="flex items-center gap-2 mb-2 text-[10px] font-black uppercase opacity-60">
-                      {m.role === 'user' ? <User size={10} /> : <Sparkles size={10} />}
-                      {m.role === 'user' ? 'ראמי' : 'AI סידור'}
+      {/* Grid Layout */}
+      <div className="max-w-[1900px] mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {drivers.map((driver) => (
+          <div key={driver.name} className="flex flex-col gap-6">
+            <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border-b-4" style={{ borderColor: driver.color }}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-black text-slate-800 italic uppercase">{driver.name}</h2>
+                <Badge className="bg-slate-100 text-slate-500 font-black text-[10px]">{driver.type}</Badge>
+              </div>
+              <div className="flex gap-2 overflow-x-auto no-scrollbar py-2">
+                {timeSlots.map(time => {
+                  const hasOrder = orders.some(o => o.driver_name === driver.name && o.scheduled_time === time);
+                  return (
+                    <div key={time} className="flex flex-col items-center gap-1 min-w-[50px]">
+                      <div className={`w-12 h-14 rounded-2xl border-2 flex items-center justify-center transition-all ${hasOrder ? 'bg-[#0B2C63] border-blue-400 shadow-md' : 'bg-slate-50 border-slate-100'}`}>
+                        {hasOrder ? <Truck size={18} className="text-white animate-pulse" /> : <Clock size={14} className="text-slate-300" />}
+                      </div>
+                      <span className="text-[9px] font-black text-slate-400">{time}</span>
                     </div>
-                    <MarkdownButton text={m.content} />
-                    <SmartMedia content={m.content} />
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-            {isTyping && (
-                <div className="flex justify-end animate-pulse">
-                    <div className="bg-slate-200 px-4 py-2 rounded-full text-[10px] font-black text-slate-500">המוח מעבד פקודת סידור...</div>
-                </div>
-            )}
-            <div ref={scrollRef} />
-          </div>
-
-          {/* Toolbar & Input */}
-          <div className="p-4 bg-white border-t space-y-4 pb-8 shadow-[0_-4px_20px_rgba(0,0,0,0.03)]">
-            <div className="flex gap-2 overflow-x-auto no-scrollbar">
-              <Button variant="outline" size="sm" onClick={() => setInput('תכין דוח בוקר לווטסאפ')} className="rounded-xl gap-2 font-bold bg-slate-50 shrink-0 border-slate-100"><FileText size={14}/> דוח בוקר</Button>
-              <Button variant="outline" size="sm" onClick={() => setInput('תזיז הזמנה לשעה 15:00')} className="rounded-xl gap-2 font-bold bg-slate-50 shrink-0 border-slate-100"><Clock size={14}/> הזזת שעה</Button>
-              <Button variant="outline" size="sm" onClick={() => setInput('שתף הזמנה חדשה')} className="rounded-xl gap-2 font-bold bg-slate-50 shrink-0 border-slate-100"><Share2 size={14}/> שיתוף מהיר</Button>
+                  );
+                })}
+              </div>
             </div>
+
+            {/* Orders List for Driver */}
+            <div className="space-y-4">
+              {orders.filter(o => o.driver_name === driver.name).map((order) => (
+                <Card key={order.id} className="p-6 rounded-[2rem] bg-white shadow-md border-none hover:shadow-xl transition-all group">
+                  <div className="flex justify-between items-start">
+                    <div className="flex gap-4">
+                      <div className="bg-[#0B2C63] text-white px-3 py-2 rounded-xl text-sm font-black italic h-fit">{order.scheduled_time}</div>
+                      <div>
+                        <h3 className="font-black text-xl text-slate-900 leading-tight">{order.customer_name}</h3>
+                        <p className="text-blue-600 font-bold text-[10px] uppercase">COMAX: #{order.order_id_comax}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => { setEditingOrder(order); setForm(order); setShowForm(true); }} className="p-2 bg-slate-50 text-slate-400 hover:text-blue-600 rounded-lg transition-colors border-none"><Edit2 size={16}/></button>
+                      <button onClick={async () => { if(confirm('למחוק?')) { await supabase.from('saban_master_dispatch').delete().eq('id', order.id); fetchData(); } }} className="p-2 bg-red-50 text-red-400 hover:text-red-600 rounded-lg transition-colors border-none"><Trash2 size={16}/></button>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4 pt-4 border-t border-slate-50 grid grid-cols-2 gap-y-3 gap-x-1">
+                    <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500"><MapPin size={14} className="text-red-400"/> {order.address || 'ללא כתובת'}</div>
+                    <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500"><Warehouse size={14} className="text-blue-400"/> {order.warehouse_source}</div>
+                    <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500"><UserCheck size={14} className="text-orange-400"/> {order.created_by}</div>
+                    <Badge className={`w-fit text-[9px] font-black ${order.status === 'אושר להפצה' ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'}`}>
+                      {order.status}
+                    </Badge>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* New Order Form Overlay */}
+      {showForm && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4 overflow-y-auto">
+          <Card className="bg-white w-full max-w-xl rounded-[3rem] p-8 md:p-12 shadow-2xl relative">
+            <button onClick={() => setShowForm(false)} className="absolute top-8 left-8 p-2 hover:bg-slate-100 rounded-full border-none transition-colors"><X size={28}/></button>
+            <h2 className="text-3xl font-black text-[#0B2C63] italic mb-8 border-r-4 border-blue-600 pr-4 uppercase">פרטי הזמנה</h2>
             
-            <div className="max-w-5xl mx-auto flex gap-3">
-              <Input 
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && askGemini()}
-                placeholder="ראמי, תן פקודה לסידור (למשל: תזיז שעה או תכין דוח)..."
-                className="h-14 rounded-2xl border-slate-200 bg-slate-50 shadow-inner font-bold text-lg focus:ring-2 ring-blue-500 transition-all"
-              />
-              <Button onClick={askGemini} className="h-14 w-14 rounded-2xl bg-[#0B2C63] hover:bg-blue-900 shadow-xl shrink-0 transition-all active:scale-90">
-                <Send size={22} />
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 px-2 uppercase">תאריך</label>
+                  <input type="date" value={form.scheduled_date} onChange={e => setForm({...form, scheduled_date: e.target.value})} className="w-full h-14 bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 font-black text-right" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 px-2 uppercase">שעה</label>
+                  <select value={form.scheduled_time} onChange={e => setForm({...form, scheduled_time: e.target.value})} className="w-full h-14 bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 font-black text-right">
+                    {timeSlots.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 px-2 uppercase italic">לקוח ומסמך קומקס</label>
+                <div className="grid grid-cols-2 gap-4">
+                  <Input placeholder="שם הלקוח" value={form.customer_name} onChange={e => setForm({...form, customer_name: e.target.value})} className="h-14 rounded-2xl border-2 font-black text-lg" />
+                  <Input placeholder="מספר קומקס" value={form.order_id_comax} onChange={e => setForm({...form, order_id_comax: e.target.value})} className="h-14 rounded-2xl border-2 font-black text-lg" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 px-2 uppercase">נהג משבץ</label>
+                  <select value={form.driver_name} onChange={e => setForm({...form, driver_name: e.target.value})} className="w-full h-14 bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 font-black text-right">
+                    {drivers.map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 px-2 uppercase">מקור המלאי</label>
+                  <select value={form.warehouse_source} onChange={e => setForm({...form, warehouse_source: e.target.value})} className="w-full h-14 bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 font-black text-right">
+                    {warehouses.map(w => <option key={w} value={w}>{w}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 px-2 uppercase">כתובת למשלוח</label>
+                <Input placeholder="כתובת מלאה..." value={form.address} onChange={e => setForm({...form, address: e.target.value})} className="h-14 rounded-2xl border-2 font-black" />
+              </div>
+
+              <Button onClick={saveOrder} className="w-full h-20 bg-blue-600 hover:bg-blue-700 text-white rounded-[2rem] font-black text-2xl shadow-2xl transition-all active:scale-95 mt-4">
+                {editingOrder ? 'עדכן סידור ✍️' : 'שמור ושדרג ל-SQL 🚀'}
               </Button>
             </div>
-          </div>
-        </main>
-      </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
