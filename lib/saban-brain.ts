@@ -1,5 +1,6 @@
 import { getSupabase } from "./supabase";
 
+// מטריצת מודלים מעודכנת למרץ 2026
 const DISCOVERY_MATRIX = [
   { name: "gemini-3.1-pro-preview", versions: ["v1beta"] },
   { name: "gemini-3.1-flash-preview", versions: ["v1beta"] },
@@ -21,11 +22,13 @@ export const SabanBrain = {
     if (keys.length === 0) return "שגיאה: חסר מפתח API ב-Pool. אנא הגדר NEXT_PUBLIC_GOOGLE_AI_KEY_POOL ב-Vercel.";
 
     try {
+      // שליפת חוקים און-ליין
       const { data: rules } = await supabase.from('saban_brain_rules').select('rule_description').eq('is_active', true);
       const systemRules = rules?.map(r => r.rule_description).join("\n") || "פעל לפי היגיון לוגיסטי.";
 
       const finalPrompt = `אתה המוח של סידור ח.סבן. חוקי עבודה: ${systemRules}\nשאלה: ${userPrompt}`;
 
+      // רוטציה משולשת (מפתחות -> מודלים -> גרסאות)
       for (const key of keys) {
         for (const modelInfo of DISCOVERY_MATRIX) {
           for (const version of modelInfo.versions) {
@@ -41,12 +44,15 @@ export const SabanBrain = {
               const data = await response.json();
               if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
                 const aiText = data.candidates[0].content.parts[0].text;
+                
+                // תיעוד שיחה לשימוש חוזר
                 await supabase.from('saban_brain_history').insert([{
                   user_query: userPrompt,
                   ai_response: aiText,
                   model_used: modelInfo.name,
                   status: 'success'
                 }]);
+                
                 return aiText;
               }
             } catch (e) { continue; }
