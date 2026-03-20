@@ -1,27 +1,44 @@
-"use client";
-import React, { useState, useEffect, useRef } from 'react';
-import { getSupabase } from "@/lib/supabase";
-import { SabanBrain } from "@/lib/saban-brain";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { 
-  Bot, Send, Sparkles, Brain, Zap, Clock, ShieldCheck, 
-  Terminal, MessageSquare, RefreshCw, AlertCircle, LayoutDashboard, Database
-} from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import { toast, Toaster } from "sonner";
+import type { Metadata, Viewport } from "next";
+import { Heebo } from "next/font/google";
+import "./globals.css";
+import { ClientProviders } from "@/components/ClientProviders";
 
-export default function SabanSuperBrainCenter() {
-  const [messages, setMessages] = useState<any[]>([]);
-  const [input, setInput] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
-  const [rules, setRules] = useState<any[]>([]);
-  const [stats, setStats] = useState({ orders: 0, pending: 0, health: '100%' });
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const supabase = getSupabase();
+const heebo = Heebo({ subsets: ["hebrew"], variable: "--font-heebo" });
 
+export const metadata: Metadata = {
+  title: "סידור ח.סבן",
+  description: "מערכת ניהול ולוגיסטיקה חכמה",
+  icons: {
+    icon: 'data:image/x-icon;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wA=',
+    apple: "/icon-192.png",
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "סידור",
+  },
+  manifest: "/manifest.json",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0B2C63",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="he" dir="rtl">
+      <body className={`${heebo.variable} font-sans antialiased bg-slate-50`}>
+        <ClientProviders>
+          {children}
+        </ClientProviders>
+      </body>
+    </html>
+  );
+}
   useEffect(() => {
     loadInitialData();
     // Realtime Sync
