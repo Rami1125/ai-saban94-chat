@@ -77,27 +77,37 @@ export async function POST(req: Request) {
     }
 
     if (!success) return NextResponse.json({ answer: "ראמי אחי, המוח עמוס. נסה שוב. 🦾" });
-// לוגיקת עדכון (Update)
+// זיהוי פקודת עדכון מהמוח
 const updateMatch = finalAnswer.match(/\[UPDATE_ORDER:(.*?)\]/);
+
 if (updateMatch) {
-  const [customer, field, value] = updateMatch[1].split('|');
-  
-  // מיפוי שדות לעברית/אנגלית
-  const fieldMap: any = {
+  const parts = updateMatch[1].split('|');
+  const customer = parts[0]?.trim();
+  const fieldLabel = parts[1]?.trim();
+  const newValue = parts[2]?.trim();
+
+  // מילון תרגום מעברית לשמות העמודות ב-SQL
+  const fieldMapping: { [key: string]: string } = {
     'סטטוס': 'status',
     'נהג': 'driver_name',
     'שעה': 'scheduled_time',
-    'מחסן': 'warehouse_source'
+    'מחסן': 'warehouse_source',
+    'כתובת': 'address'
   };
 
-  const dbField = fieldMap[field.trim()] || field.trim();
+  const dbField = fieldMapping[fieldLabel] || fieldLabel;
 
+  // ביצוע העדכון עם חיפוש גמיש (ilike) כדי להתגבר על חוסר ב-י' או ה'
   const { error } = await supabase
     .from('saban_master_dispatch')
-    .update({ [dbField]: value.trim() })
-    .ilike('customer_name', `%${customer.trim()}%`); // חיפוש גמיש בשם הלקוח
+    .update({ [dbField]: newValue })
+    .ilike('customer_name', `%${customer}%`); // מחפש חלק מהשם, למשל "אדר בניה"
 
-  if (error) console.error("❌ SQL Update Failed:", error.message);
+  if (error) {
+    console.error("❌ שגיאת עדכון SQL:", error.message);
+  } else {
+    console.log(`✅ עודכן שדה ${dbField} לערך ${newValue} עבור ${customer}`);
+  }
 }
     // 3. לוגיקת כתיבה ל-SQL (Insert)
     const orderMatch = finalAnswer.match(/\[CREATE_ORDER:(.*?)\]/);
