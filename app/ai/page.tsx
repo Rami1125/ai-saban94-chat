@@ -1,296 +1,348 @@
 "use client";
-
-import React, { useState, useEffect, useRef, use } from 'react';
-import { supabase } from "@/lib/supabase"; 
+import React, { useEffect, useState, useCallback } from 'react';
+import { getSupabase } from "@/lib/supabase";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { 
-  Send, Zap, ShoppingCart, Loader2, User, ShieldCheck, 
-  X, Plus, Minus, ShoppingBag, Award, ImageIcon,
-  CheckCircle2, AlertTriangle, ArrowRight
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+  Truck, Plus, ChevronDown, Trash2, X, Send, 
+  Clock, Warehouse, MapPin, Share2, UserCheck, HardHat, Recycle, Menu, Edit2, Calendar, RefreshCw, Brain, Loader2
+} from "lucide-react";
 import { toast, Toaster } from "sonner";
 
-/**
- * Saban OS V55.0 - Unified VIP Chat (PostgreSQL Cart Integration)
- * --------------------------------------------------------
- * - Feature: Direct SQL injection to 'shopping_carts' table.
- * - Sync: Real-time cart badge using Supabase subscriptions.
- * - UX: Note 25 Compact Modal for Qty selection.
- */
+const drivers = [
+  { id: 'hakmat', name: 'חכמת', img: 'https://i.postimg.cc/d3S0NJJZ/Screenshot-20250623-200646-Facebook.jpg', color: '#0B2C63', defaultType: 'מנוף 🏗️' },
+  { id: 'ali', name: 'עלי', img: 'https://i.postimg.cc/tCNbgXK3/Screenshot-20250623-200744-Tik-Tok.jpg', color: '#2563EB', defaultType: 'משאית 🚛' },
+  { id: 'waste', name: 'פינוי פסולת', img: 'https://cdn-icons-png.flaticon.com/512/3299/3299935.png', color: '#16a34a', defaultType: 'מכולה ♻️' }
+];
 
-export default function UnifiedVipChat({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const [mounted, setMounted] = useState(false);
-  const [client, setClient] = useState<any>(null);
-  const [messages, setMessages] = useState<any[]>([]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
+const teamMembers = ['ראמי', 'יואב', 'איציק'];
+const containerActions = ['הצבה', 'החלפה', 'הוצאה'];
+const wasteWarehouses = ['שארק (30)', 'כראדי (32)', 'שי שרון (40)'];
+const standardWarehouses = ['התלמיד (1)', 'החרש (4)'];
+
+const timeSlots = Array.from({ length: 24 }, (_, i) => {
+  const h = Math.floor(i / 2) + 6;
+  const m = i % 2 === 0 ? "00" : "30";
+  return `${h.toString().padStart(2, '0')}:${m}`;
+});
+
+export default function SabanMasterDispatch() {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [editingOrder, setEditingOrder] = useState<any>(null);
   
-  // Cart & Modal States
-  const [cartCount, setCartCount] = useState(0);
-  const [isQtyModalOpen, setIsQtyModalOpen] = useState(false);
-  const [productToOrder, setProductToOrder] = useState<any>(null);
-  const [qty, setQty] = useState(1);
+  // AI State
+  const [aiInput, setAiInput] = useState("");
+  const [aiMessages, setAiMessages] = useState<any[]>([]);
+  const [isAiTyping, setIsAiTyping] = useState(false);
+  const [showAiMobile, setShowAiMobile] = useState(false);
 
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [form, setForm] = useState({
+    scheduled_date: new Date().toISOString().split('T')[0],
+    scheduled_time: '07:00',
+    customer_name: '',
+    warehouse_source: 'התלמיד (1)',
+    driver_name: 'חכמת',
+    created_by: 'ראמי',
+    order_id_comax: '',
+    address: '',
+    container_action: 'הצבה'
+  });
 
-  useEffect(() => { setMounted(true); }, []);
+  const supabase = getSupabase();
+
+  const fetchData = useCallback(async () => {
+    try {
+      const { data } = await supabase.from('saban_master_dispatch').select('*').order('scheduled_time', { ascending: true });
+      setOrders(data || []);
+    } catch (err) {
+      console.error("Fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [supabase]);
 
   useEffect(() => {
-    if (!mounted) return;
+    fetchData();
+    const sub = supabase.channel('master_live').on('postgres_changes', { event: '*', schema: 'public', table: 'saban_master_dispatch' }, fetchData).subscribe();
+    return () => { supabase.removeChannel(sub); };
+  }, [fetchData, supabase]);
 
-    async function init() {
-      // 1. שליפת פרופיל הלקוח
-      const { data: p } = await supabase.from('vip_profiles').select('*').eq('id', id).maybeSingle();
-      setClient(p);
-
-      // 2. שליפת כמות ראשונית מהסל ב-SQL
-      fetchCartState();
-
-      // 3. האזנה לשינויים ב-SQL בזמן אמת (Real-time Sync)
-      const channel = supabase.channel('cart_updates')
-        .on('postgres_changes', { event: '*', table: 'shopping_carts', filter: `user_id=eq.${id}` }, () => {
-          fetchCartState();
-        })
-        .subscribe();
-
-      setMessages([{ 
-        role: 'assistant', 
-        content: `### חדר מצב Saban OS פעיל 🦾\nשלום ${p?.nickname || 'אחי'}, המוח מוכן להזרים פקודות לביצוע ב**${p?.main_project || 'שטח'}**.` 
-      }]);
-
-      return () => { supabase.removeChannel(channel); };
-    }
-    init();
-  }, [id, mounted]);
-
-  const fetchCartState = async () => {
-    const { data } = await supabase.from('shopping_carts').select('id').eq('user_id', id);
-    setCartCount(data?.length || 0);
-  };
-
-  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
-
-  // פתיחת המודאל - שליפת המוצר מהמלאי
-  const triggerOrder = async (sku: string) => {
-    setLoading(true);
-    const { data: p } = await supabase.from('inventory').select('*').eq('sku', sku).maybeSingle();
-    setLoading(false);
-    
-    if (p) {
-      setProductToOrder(p);
-      setQty(1);
-      setIsQtyModalOpen(true);
-    } else {
-      toast.error("מוצר לא אותר במלאי המערכת");
-    }
-  };
-
-  // הזרקה סופית לטבלת ה-SQL החדשה
-  const finalizeAddToSql = async () => {
-    if (!productToOrder) return;
-    const toastId = toast.loading(`מזריק ${productToOrder.product_name} לסל...`);
-
-    try {
-      const { error } = await supabase.from('shopping_carts').upsert({
-        user_id: id,
-        sku: productToOrder.sku,
-        product_name: productToOrder.product_name,
-        price: productToOrder.price || 0,
-        quantity: qty,
-        image_url: productToOrder.image_url
-      }, { onConflict: 'user_id,sku' });
-
-      if (error) throw error;
-
-      setIsQtyModalOpen(false);
-      toast.success("המוצר הוזרק ללוח הזמנות! 🦾", { id: toastId });
-    } catch (e: any) {
-      toast.error("תקלה בהזרקה ל-Database", { id: toastId });
-    }
-  };
-
-  const handleSend = async () => {
-    if (!input.trim() || loading) return;
-    const q = input; setInput("");
-    setMessages(prev => [...prev, { role: 'user', content: q }]);
-    setLoading(true);
+  const handleAiCommand = async () => {
+    if (!aiInput.trim() || isAiTyping) return;
+    const userMsg = aiInput;
+    setAiInput("");
+    setAiMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+    setIsAiTyping(true);
 
     try {
       const res = await fetch('/api/admin_pro/brain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: q, history: messages.slice(-5), customerId: id })
+        body: JSON.stringify({ query: userMsg })
       });
       const data = await res.json();
-      setMessages(prev => [...prev, { role: 'assistant', content: data.answer }]);
-    } catch (e) { toast.error("נתק ב-DNA המערכת"); } finally { setLoading(false); }
+      if (data.aiResponse) {
+        setAiMessages(prev => [...prev, { role: 'ai', content: data.aiResponse }]);
+        if (data.executionResult?.includes('✅')) {
+          fetchData();
+          toast.success("סידור עודכן מהמוח! 🦾");
+        }
+      }
+    } catch (e) {
+      toast.error("נתק מול המוח");
+    } finally {
+      setIsAiTyping(false);
+    }
   };
 
-  if (!mounted) return null;
+  const generateWAMessage = (order: any) => {
+    const isMobile = typeof navigator !== 'undefined' && /iPhone|Android/i.test(navigator.userAgent);
+    const actionInfo = order.driver_name === 'פינוי פסולת' ? `\n♻️ *פעולה:* ${order.container_action}` : '';
+    const emoji = order.driver_name === 'פינוי פסולת' ? '♻️' : '📦';
+    return `${emoji} *סידור ח. סבן חומרי בניין*\n---------------------------\n👤 *לקוח:* ${order.customer_name}\n🆔 *מספר:* ${order.order_id_comax}\n🚛 *נהג:* ${order.driver_name}${actionInfo}\n⏰ *שעה:* ${order.scheduled_time}\n🏭 *מחסן:* ${order.warehouse_source}\n---------------------------\n_נציג מעדכן: ${order.created_by}_`;
+  };
+
+  const saveOrder = async () => {
+    if (!form.customer_name || !form.order_id_comax) return toast.error("חסר נתונים");
+    const payload = { ...form, start_process_time: new Date().toISOString() };
+    const { error } = editingOrder 
+      ? await supabase.from('saban_master_dispatch').update(payload).eq('id', editingOrder.id)
+      : await supabase.from('saban_master_dispatch').insert([payload]);
+
+    if (!error) {
+      toast.success(editingOrder ? "עודכן!" : "נשמר!");
+      if (!editingOrder) window.open(`https://wa.me/?text=${encodeURIComponent(generateWAMessage(form))}`, '_blank');
+      setShowForm(false);
+      setEditingOrder(null);
+      setForm({ ...form, customer_name: '', order_id_comax: '', address: '' });
+      fetchData();
+    }
+  };
+
+  const shareMorningReport = () => {
+    const report = `☀️ *דוח סידור ח. סבן - ${new Date().toLocaleDateString('he-IL')}*\n` +
+      orders.map(o => `• ${o.scheduled_time} | ${o.customer_name} | ${o.driver_name}`).join('\n');
+    window.open(`https://wa.me/?text=${encodeURIComponent(report)}`, '_blank');
+  };
+
+  if (loading) return <div className="h-screen flex items-center justify-center font-black animate-pulse text-[#0B2C63] italic text-2xl">ח. סבן - טוען סידור...</div>;
 
   return (
-    <div className="flex h-screen bg-[#F8FAFC] text-slate-900 font-sans overflow-hidden" dir="rtl">
-      <Toaster position="top-center" richColors theme="dark" />
-      
-      {/* --- Note 25 Quantity Modal --- */}
-      <AnimatePresence>
-        {isQtyModalOpen && productToOrder && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[2000] bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-6">
-            <motion.div initial={{ scale: 0.9, y: 30 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 30 }} className="bg-white rounded-[50px] w-full max-w-sm overflow-hidden shadow-2xl border border-white/10">
-               <div className="bg-[#020617] p-8 text-white flex justify-between items-center relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600/10 blur-[60px] rounded-full" />
-                  <div className="text-right z-10">
-                     <h3 className="text-xl font-black italic uppercase tracking-tighter leading-none">כמות לביצוע</h3>
-                     <p className="text-blue-400 text-[8px] font-bold uppercase mt-1 tracking-widest flex items-center gap-1 justify-end"><Award size={10}/> SQL INTEGRATED</p>
-                  </div>
-                  <button onClick={() => setIsQtyModalOpen(false)} className="p-3 bg-white/5 rounded-2xl hover:bg-white/10 text-white"><X size={20}/></button>
-               </div>
-               
-               <div className="p-8 space-y-8 text-center">
-                  <div className="flex items-center gap-4 justify-center">
-                     <div className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-slate-100 shadow-md">
-                        <img src={productToOrder.image_url} className="w-full h-full object-cover" />
-                     </div>
-                     <div className="text-right">
-                        <h4 className="text-base font-black text-slate-900 leading-tight truncate max-w-[150px]">{productToOrder.product_name}</h4>
-                        <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase">SKU: {productToOrder.sku}</p>
-                     </div>
-                  </div>
+    <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans text-right" dir="rtl">
+      <Toaster position="top-center" richColors />
 
-                  <div className="flex items-center justify-center gap-8 py-6 bg-slate-50 rounded-[35px] shadow-inner">
-                     <button onClick={() => setQty(Math.max(1, qty - 1))} className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-slate-900 shadow-md border border-slate-200 active:scale-90 transition-all"><Minus size={20}/></button>
-                     <span className="text-5xl font-black italic text-slate-900 tracking-tighter w-20">{qty}</span>
-                     <button onClick={() => setQty(qty + 1)} className="w-12 h-12 bg-slate-900 text-white rounded-2xl flex items-center justify-center shadow-md active:scale-90 transition-all hover:bg-blue-600"><Plus size={20}/></button>
-                  </div>
-
-                  <button 
-                    onClick={finalizeAddToSql}
-                    className="w-full bg-blue-600 text-white py-6 rounded-[30px] font-black text-lg uppercase italic tracking-widest shadow-xl flex items-center justify-center gap-4 border-b-8 border-blue-800 active:translate-y-1 transition-all"
-                  >
-                    אשר ושגר לסל 🦾
-                  </button>
-               </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <main className="flex-1 flex flex-col relative bg-white max-w-4xl mx-auto shadow-2xl border-x border-slate-100">
-        <header className="h-16 border-b border-slate-100 flex items-center justify-between px-6 bg-white/95 backdrop-blur-md sticky top-0 z-50">
-           <div className="flex items-center gap-4">
-              <div className="w-10 h-10 bg-[#020617] rounded-2xl flex items-center justify-center text-blue-500 shadow-lg border-2 border-white ring-4 ring-slate-50">
-                 <Zap size={20} fill="currentColor" />
-              </div>
-              <div className="text-right">
-                 <h2 className="text-sm font-black italic uppercase leading-none">{client?.full_name || 'VIP Portal'}</h2>
-                 <p className="text-[7px] text-emerald-500 font-black uppercase tracking-widest mt-1 flex items-center gap-1 italic">
-                    <div className="w-1 h-1 bg-emerald-500 rounded-full animate-pulse" /> Saban SQL Link
-                 </p>
-              </div>
-           </div>
-           
-           <div className="flex items-center gap-4">
-              <motion.button 
-                whileTap={{ scale: 0.9 }}
-                onClick={() => window.location.href='/cart'} 
-                className={`relative p-3 rounded-2xl transition-all shadow-md flex items-center gap-2 ${cartCount > 0 ? 'bg-blue-600 text-white animate-bounce' : 'bg-slate-50 text-slate-400'}`}
-              >
-                 <ShoppingBag size={18} />
-                 {cartCount > 0 && <span className="font-black text-xs italic">{cartCount}</span>}
-              </motion.button>
-              <img src="/ai.png" alt="S" className="h-7 object-contain" />
-           </div>
-        </header>
-
-        <div className="flex-1 overflow-y-auto p-4 md:p-10 space-y-12 pb-40 scrollbar-hide bg-[#FBFCFD]">
-          <AnimatePresence>
-            {messages.map((m, i) => (
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} key={i} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
-                <div className={`max-w-[95%] p-8 rounded-[45px] shadow-sm border ${
-                  m.role === 'user' ? 'bg-white border-slate-200 text-slate-900 shadow-xl' : 'bg-[#020617] text-white border-white/5 shadow-2xl rounded-tr-none'
-                }`}>
-                  <div className={`flex items-center gap-3 mb-6 opacity-30 ${m.role === 'user' ? 'text-slate-500' : 'text-blue-300'}`}>
-                     <span className="text-[8px] font-black uppercase tracking-[0.4em] italic">{m.role === 'user' ? 'VIP REQUEST' : 'OS INTELLIGENCE'}</span>
-                  </div>
-                  <SmartRenderer text={m.content} onAdd={triggerOrder} />
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-          {loading && (
-             <div className="flex justify-end pr-6">
-                <div className="bg-slate-900 px-8 py-4 rounded-[30px] flex items-center gap-4 border border-white/5 animate-pulse shadow-xl">
-                   <Loader2 className="animate-spin text-blue-500" size={18} />
-                   <span className="text-[10px] font-black text-blue-400 uppercase italic tracking-widest">DNA Syncing...</span>
-                </div>
-             </div>
-          )}
-          <div ref={scrollRef} className="h-10" />
+      {/* Header */}
+      <div className="bg-[#0B2C63] text-white p-6 rounded-b-[2.5rem] shadow-2xl mb-8 flex justify-between items-center relative z-50">
+        <div className="flex gap-2">
+          <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 bg-white/10 rounded-xl border-none text-white transition-all cursor-pointer">
+            {isMenuOpen ? <X size={28}/> : <Menu size={28}/>}
+          </button>
+          {/* Mobile AI Burger */}
+          <button onClick={() => setShowAiMobile(true)} className="lg:hidden p-2 bg-blue-500/30 rounded-xl border-none text-white transition-all cursor-pointer">
+            <Brain size={28} className={isAiTyping ? "animate-pulse" : ""}/>
+          </button>
         </div>
+        
+        <div className="text-center">
+            <h1 className="text-xl font-black italic tracking-tighter leading-tight text-white uppercase">ח.סבן</h1>
+            <p className="text-[10px] font-bold text-blue-300 uppercase tracking-widest">חומרי בניין</p>
+        </div>
+        <Button onClick={() => { setEditingOrder(null); setShowForm(true); }} className="bg-blue-600 rounded-xl font-black h-10 px-4 border-none shadow-lg text-white">חדש +</Button>
+        
+        {isMenuOpen && (
+          <div className="absolute top-24 right-6 left-6 bg-white rounded-[2rem] shadow-2xl p-4 border border-slate-100 animate-in slide-in-from-top-4 z-[60]">
+             <button onClick={shareMorningReport} className="w-full flex items-center gap-3 p-5 hover:bg-slate-50 rounded-2xl text-[#0B2C63] font-black border-none text-right transition-colors cursor-pointer">
+                <Share2 size={22} className="text-blue-600"/> שלח דוח בוקר לוואטסאפ
+             </button>
+          </div>
+        )}
+      </div>
 
-        <footer className="p-6 absolute bottom-0 w-full z-20 bg-gradient-to-t from-white via-white pt-10">
-          <div className="max-w-3xl mx-auto bg-white border-2 border-slate-100 p-2 rounded-[50px] shadow-[0_50px_100px_rgba(0,0,0,0.2)] flex items-center gap-4 ring-[15px] ring-slate-50/50 backdrop-blur-3xl focus-within:ring-blue-100/50 transition-all">
+      <div className="max-w-[1800px] mx-auto px-4 grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {drivers.map((driver) => (
+          <div key={driver.id} className="space-y-6">
+            <Card className="bg-white p-6 rounded-[2.5rem] shadow-xl border-none relative overflow-hidden">
+                <div className="flex items-center gap-4 mb-6">
+                  <img src={driver.img} className="w-16 h-16 rounded-2xl object-cover shadow-lg border-2 border-white" />
+                  <div>
+                    <h2 className="text-2xl font-black text-slate-800 leading-tight">{driver.name}</h2>
+                    <Badge className="bg-slate-50 text-slate-500 border-none font-bold text-[10px] uppercase">{driver.defaultType}</Badge>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                  {timeSlots.map(time => {
+                    const hasOrder = orders.some(o => o.driver_name === driver.name && o.scheduled_time === time);
+                    return (
+                      <div key={time} onClick={() => { setForm({...form, driver_name: driver.name, scheduled_time: time}); setEditingOrder(null); setShowForm(true); }}
+                           className="flex flex-col items-center gap-2 cursor-pointer group">
+                        <div className={`w-12 h-16 rounded-2xl border-2 flex items-center justify-center transition-all ${hasOrder ? 'bg-[#0B2C63] border-blue-400 shadow-md' : 'bg-slate-50 border-slate-100 hover:border-blue-300'}`}>
+                          {hasOrder ? <Truck size={20} className="text-white animate-pulse" /> : <Clock size={16} className="text-slate-300" />}
+                        </div>
+                        <span className="text-[10px] font-black text-slate-400">{time}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+            </Card>
+
+            <div className="space-y-4">
+              {orders.filter(o => o.driver_name === driver.name).map((order) => (
+                <Card key={order.id} className="p-6 rounded-[2rem] bg-white shadow-lg border-none relative group border-r-8 border-r-[#0B2C63]">
+                    <div className="flex justify-between items-start mb-4">
+                        <div className="flex items-center gap-4">
+                            <div className="bg-[#0B2C63] text-white px-3 py-2 rounded-xl text-xs font-black italic shadow-inner">{order.scheduled_time}</div>
+                            <div className="text-right">
+                                <div className="font-black text-slate-800 text-xl leading-tight">{order.customer_name}</div>
+                                <div className="text-blue-600 font-bold text-xs uppercase tracking-tighter">קומקס: #{order.order_id_comax}</div>
+                            </div>
+                        </div>
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                             <button onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(generateWAMessage(order))}`, '_blank')} className="p-2 bg-green-50 text-green-600 rounded-lg border-none cursor-pointer"><RefreshCw size={16}/></button>
+                             <button onClick={() => { setEditingOrder(order); setForm(order); setShowForm(true); }} className="p-2 bg-blue-50 text-blue-600 rounded-lg border-none cursor-pointer"><Edit2 size={16}/></button>
+                             <button onClick={() => { if(confirm('למחוק הזמנה?')) supabase.from('saban_master_dispatch').delete().eq('id', order.id).then(fetchData); }} className="p-2 bg-red-50 text-red-500 rounded-lg border-none cursor-pointer"><Trash2 size={16}/></button>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 mt-2 pt-4 border-t border-slate-50 text-[11px] font-bold text-slate-500 text-right">
+                        <div className="flex items-center gap-2 truncate"><MapPin size={14} className="text-red-400"/> {order.address || 'לא צוינה כתובת'}</div>
+                        <div className="flex items-center gap-2"><Warehouse size={14} className="text-blue-400"/> {order.warehouse_source}</div>
+                        <div className="flex items-center gap-2"><UserCheck size={14} className="text-orange-400"/> רושם: {order.created_by}</div>
+                        {order.driver_name === 'פינוי פסולת' && <div className="flex items-center gap-2"><Recycle size={14} className="text-green-500"/> פעולה: {order.container_action}</div>}
+                    </div>
+                </Card>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 🔥 Desktop Permanent AI Sidebar (מתחת להזמנות) */}
+      <div className="hidden lg:block max-w-[1800px] mx-auto px-4 mt-12">
+        <Card className="bg-[#0B2C63] rounded-[3rem] p-8 shadow-2xl border-none relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
+          <div className="flex items-center gap-6 mb-6">
+            <div className="bg-blue-500 p-4 rounded-[1.5rem] shadow-lg shadow-blue-500/30">
+              <Brain size={32} className="text-white" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-black text-white italic uppercase tracking-tighter">Saban AI Dispatch</h2>
+              <p className="text-blue-300 text-sm font-bold uppercase tracking-widest">מערכת פקודות חכמה - שליטה ב-SQL</p>
+            </div>
+          </div>
+
+          <div className="flex gap-4">
             <input 
-              type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} 
-              placeholder="כתוב פקודה או בחר מוצר לביצוע..." 
-              className="flex-1 bg-transparent px-6 py-4 outline-none font-black text-xl text-right text-slate-900" 
+              value={aiInput}
+              onChange={(e) => setAiInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAiCommand()}
+              placeholder="ראמי, מה הפקודה? (למשל: 'תעביר את אדר בניה לשעה 11:00')"
+              className="flex-1 h-16 bg-white/10 border-2 border-white/10 rounded-2xl px-6 text-white font-bold placeholder:text-white/30 outline-none focus:border-blue-400 transition-all text-right"
             />
-            <button onClick={handleSend} className="w-14 h-14 bg-[#020617] rounded-full flex items-center justify-center text-white active:scale-90 transition-all shadow-xl">
-              <Send size={24} />
+            <button 
+              onClick={handleAiCommand}
+              disabled={isAiTyping}
+              className="w-20 bg-blue-500 hover:bg-blue-400 text-white rounded-2xl flex items-center justify-center transition-all border-none cursor-pointer"
+            >
+              {isAiTyping ? <Loader2 className="animate-spin" /> : <Send size={24} />}
             </button>
           </div>
-        </footer>
-      </main>
-    </div>
-  );
-}
-
-function SmartRenderer({ text, onAdd }: any) {
-  if (!text) return null;
-
-  const skuMatch = text.match(/\[QUICK_ADD:\s*([^\]]+)\]/i);
-  const sku = skuMatch ? skuMatch[1] : null;
-
-  const galleryMatch = text.match(/\[GALLERY:\s*([^\]]+)\]/i);
-  const urls = galleryMatch ? galleryMatch[1].split(',').map(u => u.trim()).filter(u => u.length > 5) : [];
-
-  const cleanText = text
-    .replace(/\[GALLERY:[\s\S]*?\]/gi, '')
-    .replace(/\[QUICK_ADD:[\s\S]*?\]/gi, '')
-    .replace(/\[VIDEO:[\s\S]*?\]/gi, '')
-    .trim();
-
-  return (
-    <div className="space-y-6 text-right" dir="rtl">
-      {urls.length > 0 && (
-        <div className="my-4 grid grid-cols-12 gap-3 h-48">
-           <div className="col-span-8 bg-slate-900 rounded-[30px] overflow-hidden border border-white/5 relative shadow-lg">
-              <img src={urls[0]} className="w-full h-full object-cover" alt="Main" />
-           </div>
-           <div className="col-span-4 flex flex-col gap-3">
-              {urls.slice(1, 3).map((url, i) => (
-                <div key={i} className="flex-1 bg-slate-900 rounded-[20px] overflow-hidden border border-white/5 shadow-sm">
-                   <img src={url} className="w-full h-full object-cover grayscale opacity-60" alt="Thumb" />
+          
+          {aiMessages.length > 0 && (
+            <div className="mt-6 bg-black/20 rounded-2xl p-4 max-h-40 overflow-y-auto no-scrollbar space-y-2">
+              {aiMessages.slice(-3).map((m, i) => (
+                <div key={i} className={`p-3 rounded-xl text-sm font-bold ${m.role === 'ai' ? 'bg-blue-500/20 text-blue-200 border-r-4 border-blue-400' : 'text-white/60'}`}>
+                  {m.content}
                 </div>
               ))}
-           </div>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* 🔥 Mobile AI Drawer (המבורגר) */}
+      {showAiMobile && (
+        <div className="fixed inset-0 bg-[#0B2C63] z-[200] flex flex-col animate-in slide-in-from-bottom">
+          <div className="p-6 flex justify-between items-center border-b border-white/10">
+            <div className="flex items-center gap-3">
+              <Brain className="text-blue-400" size={24}/>
+              <h2 className="text-white font-black italic">SABAN AI</h2>
+            </div>
+            <button onClick={() => setShowAiMobile(false)} className="bg-white/10 p-2 rounded-full border-none text-white"><X size={24}/></button>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-6 space-y-4 no-scrollbar">
+             {aiMessages.map((m, i) => (
+                <div key={i} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
+                  <div className={`max-w-[85%] p-4 rounded-[2rem] font-bold text-sm ${m.role === 'user' ? 'bg-white/10 text-white rounded-bl-none' : 'bg-blue-600 text-white rounded-br-none'}`}>
+                    {m.content}
+                  </div>
+                </div>
+             ))}
+          </div>
+
+          <div className="p-6 bg-white/5 border-t border-white/10 flex gap-2">
+            <input 
+              value={aiInput}
+              onChange={(e) => setAiInput(e.target.value)}
+              placeholder="פקודה למוח..."
+              className="flex-1 h-14 bg-white/10 border-none rounded-xl px-4 text-white font-bold outline-none text-right"
+            />
+            <button onClick={handleAiCommand} className="bg-blue-600 text-white w-14 h-14 rounded-xl flex items-center justify-center border-none"><Send size={20}/></button>
+          </div>
         </div>
       )}
 
-      {cleanText.split('\n').map((line: string, i: number) => {
-        if (!line.trim()) return null;
-        if (line.startsWith('###')) return <h3 key={i} className="text-2xl font-black text-white italic border-r-6 border-blue-600 pr-4 my-8 uppercase tracking-tight">{line.replace('###', '')}</h3>;
-        return <p key={i} className="text-[18px] leading-relaxed font-bold text-white/90 tracking-tight">{line}</p>;
-      })}
+      {/* Form Overlay */}
+      {showForm && (
+        <div className="fixed inset-0 bg-[#0B2C63]/95 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <Card className="bg-white w-full max-w-lg rounded-[3rem] p-10 space-y-6 shadow-2xl border-none text-right overflow-y-auto max-h-[90vh]">
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="text-2xl font-black text-[#0B2C63]">{editingOrder ? 'עריכת הזמנה' : 'הזמנה חדשה'}</h2>
+              <button onClick={() => { setShowForm(false); setEditingOrder(null); }} className="bg-slate-100 p-2 rounded-full border-none text-slate-400 hover:text-black transition-colors"><X size={24}/></button>
+            </div>
+            
+            <div className="flex gap-2 mb-2">
+                {teamMembers.map(m => (
+                    <button key={m} onClick={() => setForm({...form, created_by: m})}
+                            className={`flex-1 py-4 rounded-2xl text-[11px] font-black border-none transition-all cursor-pointer ${form.created_by === m ? 'bg-blue-600 text-white shadow-xl' : 'bg-slate-100 text-slate-400'}`}>
+                        {m}
+                    </button>
+                ))}
+            </div>
 
-      {sku && (
-        <button 
-          onClick={() => onAdd(sku)}
-          className="w-full mt-8 bg-white text-slate-950 py-6 rounded-[35px] font-black text-[11px] uppercase tracking-[0.5em] shadow-xl flex items-center justify-center gap-4 border-b-6 border-slate-200 active:scale-95 transition-all italic cursor-pointer"
-        >
-          הוסף להזמנה <ShoppingCart size={22} className="text-blue-600" />
-        </button>
+            <div className="grid grid-cols-2 gap-4 text-right">
+                <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 mr-2 uppercase tracking-widest">תאריך</label>
+                    <input type="date" value={form.scheduled_date} onChange={e => setForm({...form, scheduled_date: e.target.value})} className="w-full h-12 px-4 rounded-xl border-2 border-slate-100 font-bold outline-none focus:border-blue-500 text-right" />
+                </div>
+                <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 mr-2 uppercase tracking-widest">שעה</label>
+                    <select value={form.scheduled_time} onChange={e => setForm({...form, scheduled_time: e.target.value})} className="w-full h-12 px-4 rounded-xl border-2 border-slate-100 font-bold bg-white outline-none focus:border-blue-500 text-right">
+                        {timeSlots.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                </div>
+            </div>
+
+            <input placeholder="שם הלקוח" value={form.customer_name} onChange={e => setForm({...form, customer_name: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-slate-100 font-bold text-lg text-right outline-none focus:border-blue-500" />
+            <input placeholder="מספר קומקס" value={form.order_id_comax} onChange={e => setForm({...form, order_id_comax: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-slate-100 font-bold text-lg text-right outline-none focus:border-blue-500" />
+            
+            <div className="space-y-2 text-right">
+                <label className="text-[10px] font-black text-slate-400 mr-2 uppercase italic">מחסן מטפל</label>
+                <select value={form.warehouse_source} onChange={e => setForm({...form, warehouse_source: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-slate-100 font-bold text-right outline-none bg-white">
+                    {form.driver_name === 'פינוי פסולת' ? wasteWarehouses.map(w => <option key={w} value={w}>{w}</option>) : standardWarehouses.map(w => <option key={w} value={w}>{w}</option>)}
+                </select>
+            </div>
+
+            <Button onClick={saveOrder} className="w-full h-18 bg-green-600 hover:bg-green-700 text-white rounded-[2rem] font-black text-xl shadow-xl transition-all border-none cursor-pointer">
+              שמור סידור 🚀
+            </Button>
+          </Card>
+        </div>
       )}
     </div>
   );
