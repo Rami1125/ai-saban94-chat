@@ -16,9 +16,9 @@ const supabase = createClient(
 
 // מטריצת המודלים לסריקה (ממויינת לפי מהירות ויציבות)
 const DISCOVERY_MATRIX = [
-  { name: "gemini-2.0-flash", versions: ["v1beta", "v1"] },
-  { name: "gemini-1.5-flash", versions: ["v1", "v1beta"] },
-  { name: "gemini-1.5-flash-8b", versions: ["v1", "v1beta"] },
+  { name: "gemini-2.0-flash-lite", versions: ["v1beta", "v1"] },
+  { name: "gemini-1.5-flash-002", versions: ["v1", "v1beta"] },
+  { name: "Gemini 3.1 Flash-Lite", versions: ["v1", "v1beta"] },
   { name: "gemini-1.5-pro", versions: ["v1beta", "v1"] },
   { name: "gemini-2.0-flash-lite-preview-02-05", versions: ["v1beta"] }
 ];
