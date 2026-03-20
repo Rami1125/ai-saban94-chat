@@ -1,4 +1,3 @@
-"use client";
 import type { Metadata, Viewport } from "next";
 import { Heebo } from "next/font/google";
 import "./globals.css";
@@ -41,7 +40,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: `
           (function() {
             window.OneSignalDeferred = window.OneSignalDeferred || [];
-            // בדיקה שקטנה שתמנע מהדפדפן לנסות לפתוח DB אם הוא חסום
             var dbCheck = function() {
               try {
                 var request = window.indexedDB.open("onesignal_db_check");
@@ -60,7 +58,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Script id="onesignal-init" strategy="afterInteractive">
           {`
             window.OneSignalDeferred.push(async function(OneSignal) {
-              // אם ה-DB לא זמין, אל תנסה לאתחל (מונע את השגיאה הארוכה)
               if (window.isIndexedDBAvailable === false) {
                 console.warn("SabanOS: OneSignal disabled due to IndexedDB restriction.");
                 return;
@@ -73,9 +70,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   notifyButton: { enable: true },
                   allowLocalhostAsSecureOrigin: true
                 });
-              } catch (err) {
-                // שקט תעשייתי - לא מציגים שגיאות אנונימיות
-              }
+              } catch (err) {}
             });
           `}
         </Script>
@@ -89,7 +84,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </ChatActionsProvider>
         </BusinessConfigProvider>
 
-        {/* מערכת סאונד סבן - פועלת רק אחרי אינטראקציה */}
+        {/* מערכת סאונד סבן */}
         <script dangerouslySetInnerHTML={{ __html: `
           window.playNotificationSound = () => {
             try {
