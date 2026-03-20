@@ -9,16 +9,13 @@ const supabaseAdmin = createClient(
 export async function POST(req: Request) {
   try {
     const { query } = await req.json();
-    
-    // מפתח יחיד מה-ENV
-    const apiKey = process.env.GOOGLE_AI_KEY;
-    const model = "gemini-1.5-flash"; // הכי יציב למפתח בודד
+    const apiKey = process.env.GOOGLE_AI_KEY; // מפתח יחיד!
 
-    if (!apiKey) return NextResponse.json({ error: "Missing API Key in Vercel" }, { status: 500 });
+    if (!apiKey) {
+      return NextResponse.json({ answer: "ראמי אחי, חסר מפתח API ב-Vercel. 🦾" });
+    }
 
-    console.log("🚀 שולח בקשה ל-Gemini עם מפתח יחיד...");
-
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
