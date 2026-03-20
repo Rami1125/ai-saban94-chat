@@ -22,7 +22,7 @@ export default function SabanCustomerTracking() {
   useEffect(() => {
     // אתחול OneSignal להתראות Push
     OneSignal.init({ 
-        appId: "YOUR_ONESIGNAL_APP_ID", // תחליף ב-ID שלך מהפאנל של OneSignal
+        appId: "acc8a2bc-d54e-4261-b3d2-cc5c5f7b39d3", // תחליף ב-ID שלך מהפאנל של OneSignal
         allowLocalhoodNotifications: true 
     });
 
