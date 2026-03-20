@@ -4,18 +4,23 @@ import React, { useState, useEffect } from 'react';
 import { 
   ShieldAlert, CheckCircle2, XCircle, Play, 
   Key, RefreshCw, AlertTriangle, Terminal,
-  Activity, Zap, Info, Clock, Cpu
+  Activity, Zap, Info, Clock, Cpu, Brain
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast, Toaster } from "sonner";
-import { Card } from "@/components/ui/card";
 
 /**
- * Saban OS - AI Diagnostics Pro v5.0
+ * Saban OS - AI Diagnostics Pro v5.1 (Fixed)
  * ----------------------------------
  * ממשק אבחון מתקדם לבדיקת Pool המפתחות מול מודלים עדכניים.
- * תומך בסדרות Gemini 3.1, 2.5, 2.0 ו-1.5.
  */
+
+// הגדרת קומפוננטות עזר פנימיות למניעת שגיאות רינדור
+const LocalCard = ({ children, className = "" }: { children: React.ReactNode, className?: string }) => (
+  <div className={`bg-white/5 border border-white/10 rounded-[2.5rem] ${className}`}>
+    {children}
+  </div>
+);
 
 const AVAILABLE_MODELS = [
   { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro (Latest)', quota: '2 RPM / 32K TPD', desc: 'המודל החזק ביותר בסדרה 3' },
@@ -32,7 +37,6 @@ export default function AIKeyDiagnostics() {
   const [isTesting, setIsTesting] = useState(false);
 
   useEffect(() => {
-    // טעינה מתוך ה-Environment Variables ב-Vercel או לוקאלית
     const pool = process.env.NEXT_PUBLIC_GOOGLE_AI_KEY_POOL || "";
     const keyArray = pool.split(',').map(k => k.trim()).filter(k => k !== "");
     setKeys(keyArray.map(k => ({ key: k, status: 'pending' })));
@@ -41,7 +45,6 @@ export default function AIKeyDiagnostics() {
   const testSingleKey = async (apiKey: string, index: number) => {
     const startTime = Date.now();
     try {
-      // בדיקה מול נתיב ה-v1beta העדכני
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -54,7 +57,6 @@ export default function AIKeyDiagnostics() {
       if (res.ok) {
         updateKeyStatus(index, 'valid', undefined, latency);
       } else {
-        // זיהוי שגיאות ספציפיות כמו 404 (מודל לא נמצא) או 403 (מפתח חסום)
         const errorMsg = data.error?.message || `Error ${res.status}`;
         updateKeyStatus(index, 'invalid', errorMsg, latency);
       }
@@ -74,16 +76,12 @@ export default function AIKeyDiagnostics() {
   const runFullDiagnostics = async () => {
     setIsTesting(true);
     toast.info(`מתחיל בדיקה מול ${selectedModel}...`);
-    
-    // איפוס סטטוסים לפני בדיקה
     setKeys(prev => prev.map(k => ({ ...k, status: 'pending', error: undefined, latency: undefined })));
     
     for (let i = 0; i < keys.length; i++) {
       await testSingleKey(keys[i].key, i);
     }
-    
     setIsTesting(false);
-    toast.success("אבחון ה-Pool הושלם.");
   };
 
   const currentModelData = AVAILABLE_MODELS.find(m => m.id === selectedModel);
@@ -93,7 +91,6 @@ export default function AIKeyDiagnostics() {
       <Toaster position="top-center" richColors theme="dark" />
       
       <div className="max-w-5xl mx-auto space-y-8">
-        {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b border-white/5 pb-10">
           <div className="flex items-center gap-5">
             <div className="w-16 h-16 bg-blue-600/10 rounded-[22px] flex items-center justify-center border border-blue-500/20 shadow-2xl">
@@ -131,32 +128,30 @@ export default function AIKeyDiagnostics() {
           </div>
         </div>
 
-        {/* Status Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white/5 border border-white/10 p-6 rounded-[2.5rem] flex items-center gap-5">
+          <LocalCard className="p-6 flex items-center gap-5">
             <div className="w-12 h-12 bg-blue-500/10 rounded-2xl flex items-center justify-center text-blue-400 border border-blue-500/20"><Activity size={24}/></div>
             <div>
               <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">מכסות (RPM/TPD)</div>
               <div className="text-lg font-black italic">{currentModelData?.quota}</div>
             </div>
-          </div>
-          <div className="bg-white/5 border border-white/10 p-6 rounded-[2.5rem] flex items-center gap-5">
+          </LocalCard>
+          <LocalCard className="p-6 flex items-center gap-5">
             <div className="w-12 h-12 bg-emerald-500/10 rounded-2xl flex items-center justify-center text-emerald-400 border border-emerald-500/20"><CheckCircle2 size={24}/></div>
             <div>
               <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">מפתחות תקינים</div>
               <div className="text-2xl font-black text-emerald-400 leading-none">{keys.filter(k => k.status === 'valid').length} <span className="text-slate-600 text-sm">/ {keys.length}</span></div>
             </div>
-          </div>
-          <div className="bg-white/5 border border-white/10 p-6 rounded-[2.5rem] flex items-center gap-5">
+          </LocalCard>
+          <LocalCard className="p-6 flex items-center gap-5">
             <div className="w-12 h-12 bg-orange-500/10 rounded-2xl flex items-center justify-center text-orange-400 border border-orange-500/20"><Cpu size={24}/></div>
             <div>
               <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">תיאור מודל</div>
               <div className="text-xs font-bold text-slate-300 leading-tight">{currentModelData?.desc}</div>
             </div>
-          </div>
+          </LocalCard>
         </div>
 
-        {/* Keys List */}
         <div className="space-y-4">
           <AnimatePresence mode="popLayout">
             {keys.map((k, idx) => (
@@ -212,19 +207,6 @@ export default function AIKeyDiagnostics() {
             ))}
           </AnimatePresence>
         </div>
-
-        {/* Footer Warning */}
-        {keys.some(k => k.status === 'invalid' && k.error?.includes('404')) && (
-          <div className="bg-blue-500/10 border border-blue-500/20 p-8 rounded-[3rem] flex gap-5 items-start shadow-2xl">
-            <Info className="text-blue-400 shrink-0" size={28} />
-            <div className="space-y-2">
-              <p className="text-blue-100 font-black text-lg italic uppercase">הנחיה לתיקון המוח (404 Not Found)</p>
-              <p className="text-blue-200/70 text-sm font-bold leading-relaxed">
-                שגיאת 404 מופיעה כי המודל שביקשת הופסק או הוחלף. עליך לעדכן את המשתנה `NEXT_PUBLIC_GOOGLE_AI_KEY_POOL` ב-Vercel ולהשאיר רק את המפתחות שקיבלו "Synced" בירוק תחת המודלים החדשים (כמו Gemini 2.5 או 1.5 Flash V2).
-              </p>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
