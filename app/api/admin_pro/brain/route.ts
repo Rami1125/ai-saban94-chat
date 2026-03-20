@@ -69,33 +69,33 @@ export async function POST(req: Request) {
       }
     }
 
-// זיהוי הפקודה מהמוח
-const orderMatch = finalAnswer.match(/\[CREATE_ORDER:(.*?)\]/);
+// 3. לוגיקת כתיבה ל-SQL (Insert)
+    const orderMatch = finalAnswer.match(/\[CREATE_ORDER:(.*?)\]/);
+    if (orderMatch) {
+      const params = orderMatch[1].split('|');
+      const [customer, time, driver, warehouse, action, address] = params;
 
-if (orderMatch) {
-  const params = orderMatch[1].split('|');
-  // חילוץ פרמטרים (תמיכה ב-5 או 6 פרמטרים)
-  const [customer, time, driver, warehouse, action, address] = params;
+      const { error } = await supabase.from('saban_master_dispatch').insert([{
+        customer_name: customer?.trim() || "לקוח כללי",
+        scheduled_time: time?.trim() || "08:00",
+        driver_name: driver?.trim() || "לא שובץ",
+        warehouse_source: warehouse?.trim() || "החרש (4)",
+        container_action: action?.trim() || "הובלה",
+        address: address?.trim() || "לא צוינה",
+        order_id_comax: `AI-${Math.floor(100000 + Math.random() * 900000)}`,
+        status: (driver && driver.trim() !== 'לא שובץ') ? 'אושר להפצה' : 'פתוח',
+        scheduled_date: new Date().toISOString().split('T')[0],
+        created_by: 'SABAN_AI_BRAIN'
+      }]);
 
-  // הזרקה לטבלת המאסטר עם ערכי ברירת מחדל לשדות חובה
-  const { data, error } = await supabase.from('saban_master_dispatch').insert([{
-    customer_name: customer?.trim() || "לקוח כללי",
-    scheduled_time: time?.trim() || "08:00",
-    driver_name: driver?.trim() || "לא שובץ",
-    warehouse_source: warehouse?.trim() || "החרש (4)",
-    container_action: action?.trim() || "הובלה",
-    address: address?.trim() || "לא צוינה",
-    // יצירת מספר קומקס חובה כדי שה-DB לא יחסום
-    order_id_comax: `AI-${Math.floor(100000 + Math.random() * 900000)}`,
-    // קביעת סטטוס לפי הנהג
-    status: (driver && driver.trim() !== 'לא שובץ' && driver.trim() !== 'לעדכן') ? 'אושר להפצה' : 'פתוח',
-    scheduled_date: new Date().toISOString().split('T')[0],
-    created_by: 'SABAN_AI_BRAIN'
-  }]);
+      if (error) console.error("❌ SQL Insert Failed:", error.message);
+    }
 
-  if (error) {
-    console.error("❌ שגיאת SQL:", error.message);
-  } else {
-    console.log("✅ הזמנה נרשמה בהצלחה ב-Master Dispatch");
+    return NextResponse.json({ answer: finalAnswer });
+
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
   }
 }
