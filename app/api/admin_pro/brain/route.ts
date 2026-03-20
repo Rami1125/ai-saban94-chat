@@ -7,15 +7,21 @@ const supabaseAdmin = createClient(
 );
 
 export async function POST(req: Request) {
+  const startTime = Date.now();
   try {
     const { query } = await req.json();
-    const apiKey = process.env.GOOGLE_AI_KEY; // מפתח יחיד!
+    const apiKey = process.env.GOOGLE_AI_KEY;
+    const model = "gemini-1.5-flash";
 
-    if (!apiKey) {
-      return NextResponse.json({ answer: "ראמי אחי, חסר מפתח API ב-Vercel. 🦾" });
-    }
+    // 1. בדיקת מפתח
+    if (!apiKey) return NextResponse.json({ error: "מפתח API חסר ב-Vercel", status: "FAILED_ENV" });
 
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+    // 2. בדיקת קשר ל-SQL (שליפת לקוחות לדוגמה)
+    const { data: testDb, error: dbError } = await supabaseAdmin.from('saban_master_dispatch').select('customer_name').limit(1);
+    const dbStatus = dbError ? `שגיאה: ${dbError.message}` : "מחובר תקין ✅";
+
+    // 3. פנייה למוח
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -24,41 +30,39 @@ export async function POST(req: Request) {
       }),
     });
 
-    const data = await res.json();
+    const aiData = await res.json();
+    if (!res.ok) return NextResponse.json({ error: aiData.error?.message, status: "FAILED_GEMINI", dbStatus });
 
-    if (!res.ok) {
-      console.error("❌ Gemini Error:", data);
-      return NextResponse.json({ error: data.error?.message || "Gemini Failed" }, { status: res.status });
-    }
-
-    const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-
-    // לוגיקת עדכון SQL (נשארת זהה)
-    let sqlReport = "לא זוהתה פקודה";
+    const aiText = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    
+    // 4. בדיקת פקודה וביצוע ב-SQL
+    let executionResult = "לא זוהתה פקודה";
     const updateMatch = aiText.match(/\[UPDATE_ORDER:(.*?)\]/);
     
     if (updateMatch) {
       const [customer, field, value] = updateMatch[1].split('|').map(s => s.trim());
-      const mapping: any = { 'סטטוס': 'status', 'נהג': 'driver_name', 'שעה': 'scheduled_time' };
-      const dbField = mapping[field] || field;
-
-      const { data: dbData, error } = await supabaseAdmin
+      const { data: updateData, error: updateError } = await supabaseAdmin
         .from('saban_master_dispatch')
-        .update({ [dbField]: value })
+        .update({ [field === 'סטטוס' ? 'status' : field]: value })
         .ilike('customer_name', `%${customer}%`)
         .select();
 
-      if (error) sqlReport = `❌ שגיאה: ${error.message}`;
-      else if (dbData && dbData.length > 0) sqlReport = `✅ עודכן ב-SQL: ${customer}`;
-      else sqlReport = `⚠️ לקוח '${customer}' לא נמצא.`;
+      if (updateError) executionResult = `❌ כשל בעדכון: ${updateError.message}`;
+      else if (updateData && updateData.length > 0) executionResult = `✅ בוצע בהצלחה ללקוח: ${customer}`;
+      else executionResult = `⚠️ פקודה זוהתה, אך הלקוח '${customer}' לא נמצא בטבלה.`;
     }
 
-    return NextResponse.json({ 
-      answer: aiText,
-      sqlReport: sqlReport 
+    return NextResponse.json({
+      query,
+      aiResponse: aiText,
+      executionResult,
+      dbStatus,
+      latency: `${Date.now() - startTime}ms`,
+      modelUsed: model,
+      success: true
     });
 
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message, status: "CRITICAL_ERROR" }, { status: 500 });
   }
 }
