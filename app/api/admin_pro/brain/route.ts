@@ -77,7 +77,28 @@ export async function POST(req: Request) {
     }
 
     if (!success) return NextResponse.json({ answer: "ראמי אחי, המוח עמוס. נסה שוב. 🦾" });
+// לוגיקת עדכון (Update)
+const updateMatch = finalAnswer.match(/\[UPDATE_ORDER:(.*?)\]/);
+if (updateMatch) {
+  const [customer, field, value] = updateMatch[1].split('|');
+  
+  // מיפוי שדות לעברית/אנגלית
+  const fieldMap: any = {
+    'סטטוס': 'status',
+    'נהג': 'driver_name',
+    'שעה': 'scheduled_time',
+    'מחסן': 'warehouse_source'
+  };
 
+  const dbField = fieldMap[field.trim()] || field.trim();
+
+  const { error } = await supabase
+    .from('saban_master_dispatch')
+    .update({ [dbField]: value.trim() })
+    .ilike('customer_name', `%${customer.trim()}%`); // חיפוש גמיש בשם הלקוח
+
+  if (error) console.error("❌ SQL Update Failed:", error.message);
+}
     // 3. לוגיקת כתיבה ל-SQL (Insert)
     const orderMatch = finalAnswer.match(/\[CREATE_ORDER:(.*?)\]/);
     if (orderMatch) {
