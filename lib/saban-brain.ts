@@ -1,10 +1,9 @@
-// lib/saban-brain.ts
 import { getSupabase } from "./supabase";
 
 const DISCOVERY_MATRIX = [
   { name: "gemini-3.1-pro-preview", versions: ["v1beta"] },
   { name: "gemini-3.1-flash-preview", versions: ["v1beta"] },
-  { name: "gemini-1.5-pro", versions: ["v1"] }
+  { name: "gemini-2.5-pro", versions: ["v1"] }
 ];
 
 const getKeyPool = () => {
@@ -13,61 +12,43 @@ const getKeyPool = () => {
 };
 
 export const SabanBrain = {
+  // פונקציית העל לשאילתות מורכבות
   ask: async (userPrompt: string) => {
     const supabase = getSupabase();
     const keys = getKeyPool();
-    
-    if (keys.length === 0) return "❌ אחי, אין מפתחות ב-Pool. המוח כבוי.";
+    if (keys.length === 0) return "שגיאה: חסר מפתח API ב-Pool";
 
-    const { data: rules } = await supabase.from('saban_brain_rules').select('rule_description').eq('is_active', true);
-    const systemRules = rules?.map(r => r.rule_description).join("\n") || "פעל כמנהל סידור.";
+    // שליפת חוקים בזמן אמת
+    const { data: rules } = await supabase.from('saban_brain_rules').select('*').eq('is_active', true);
+    const systemRules = rules?.map(r => `- ${r.rule_name}: ${r.rule_description}`).join("\n") || "";
 
-    const finalPrompt = `חוקי סבן: ${systemRules}\nשאלה: ${userPrompt}`;
+    const finalPrompt = `
+      אתה המוח התפעולי של ח.סבן. 
+      הנחיות עבודה (ספר חוקים):
+      ${systemRules}
+      
+      משימה נוכחית: ${userPrompt}
+      ענה בצורה מקצועית, תמציתית ובשפה של מנהל עבודה (אח/שותף).
+    `;
 
-    for (let i = 0; i < keys.length; i++) {
-      const key = keys[i];
-      const keySnippet = key.substring(0, 6) + "..."; // מזהה קצר למלשינון
-
-      for (const modelInfo of DISCOVERY_MATRIX) {
+    for (const key of keys) {
+      for (const model of DISCOVERY_MATRIX) {
         try {
-          const url = `https://generativelanguage.googleapis.com/${modelInfo.versions[0]}/models/${modelInfo.name}:generateContent?key=${key}`;
-          
-          const response = await fetch(url, {
+          const response = await fetch(`https://generativelanguage.googleapis.com/${model.versions[0]}/models/${model.name}:generateContent?key=${key}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ contents: [{ parts: [{ text: finalPrompt }] }] })
           });
-
-          if (!response.ok) {
-            const errorData = await response.json();
-            const reason = errorData.error?.status || "UNKNOWN_ERROR";
-            
-            // --- המלשינון בפעולה ---
-            console.error(`🚨 כשל במפתח [${i+1}]: ${keySnippet} | מודל: ${modelInfo.name} | סיבה: ${reason}`);
-            
-            // תיעוד הכשל בטבלה לביקורת שלך
-            await supabase.from('saban_brain_history').insert([{
-              user_query: "SYSTEM_CHECK",
-              ai_response: `FAILED: ${reason}`,
-              model_used: modelInfo.name,
-              status: `error_key_${i+1}`
-            }]);
-
-            if (reason === "RESOURCE_EXHAUSTED") continue; // נגמרה המכסה? עבור למפתח הבא
-            if (reason === "API_KEY_INVALID") continue;   // מפתח מת? עבור למפתח הבא
-            throw new Error(reason);
-          }
-
           const data = await response.json();
           if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
-            return data.candidates[0].content.parts[0].text;
+            const aiText = data.candidates[0].content.parts[0].text;
+            // תיעוד היסטורי
+            await supabase.from('saban_brain_history').insert([{ user_query: userPrompt, ai_response: aiText, model_used: model.name }]);
+            return aiText;
           }
-
-        } catch (err) {
-          continue; // ניסיון מודל/מפתח הבא
-        }
+        } catch (e) { continue; }
       }
     }
-    return "🚨 כל המפתחות ב-Pool נכשלו. המלשינון תיעד את התקלות ב-DB.";
+    return "אח שלי, יש עומס על המערכת. נסה שוב בעוד רגע.";
   }
 };
