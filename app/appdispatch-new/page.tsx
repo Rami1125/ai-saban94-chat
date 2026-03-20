@@ -55,7 +55,37 @@ export default function SabanMasterDispatch() {
     container_action: 'הובלה',
     status: 'פתוח'
   });
+const handleAiCommand = async () => {
+  if (!aiInput.trim() || isTyping) return;
+  
+  const userMsg = aiInput;
+  setAiInput("");
+  setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+  setIsTyping(true);
 
+  try {
+    // 🔥 במקום לפנות לגוגל, פונים ל-API המשוריין שלנו
+    const res = await fetch('/api/admin_pro/brain', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: userMsg })
+    });
+
+    const data = await res.json();
+    
+    if (data.answer) {
+      setMessages(prev => [...prev, { role: 'ai', content: data.answer }]);
+      toast.success("פקודה עובדה בשרת 🚀");
+    } else {
+      throw new Error(data.error || "שגיאה בשרת");
+    }
+  } catch (e) {
+    console.error("AI Error:", e);
+    toast.error("נתק בתקשורת מול המוח");
+  } finally {
+    setIsTyping(false);
+  }
+};
   const supabase = getSupabase();
 
   const fetchData = useCallback(async () => {
