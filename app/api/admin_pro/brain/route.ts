@@ -102,18 +102,22 @@ export async function POST(req: Request) {
     // 4. לוגיקת ביצוע (Execution Logic) - כתיבה לטבלאות SQL
     
     // א. זיהוי פתיחת הזמנה
-    const orderMatch = finalAnswer.match(/\[CREATE_ORDER:(.*?)\|(.*?)\|(.*?)\]/);
-    if (orderMatch) {
-      const [_, customer, hour, driver] = orderMatch;
-      await supabase.from('saban_requests').insert([{
-        customer_name: customer.trim(),
-        scheduled_hour: hour.trim(),
-        driver_name: driver.trim(),
-        status: 'pending',
-        doc_number: `AI-${Math.floor(1000 + Math.random() * 9000)}`,
-        created_at: new Date()
-      }]);
-    }
+const orderMatch = finalAnswer.match(/\[CREATE_ORDER:(.*?)\|(.*?)\|(.*?)\|(.*?)\|(.*?)\]/);
+if (orderMatch) {
+  const [_, customer, time, driver, warehouse, action] = orderMatch;
+  
+  await supabase.from('saban_master_dispatch').insert([{
+    customer_name: customer.trim(),
+    scheduled_time: time.trim(),
+    driver_name: driver.trim(),
+    warehouse_source: warehouse.trim(),
+    container_action: action.trim(),
+    status: driver.trim() === 'לא שובץ' ? 'פתוח' : 'אושר להפצה',
+    scheduled_date: new Date().toISOString().split('T')[0], // תאריך של היום
+    created_by: 'AI_BRAIN',
+    order_id_comax: `AI-${Math.floor(1000 + Math.random() * 9000)}`
+  }]);
+}
 
     // ב. זיהוי העברה בין סניפים
     const transferMatch = finalAnswer.match(/\[TRANSFER:(.*?)\|(.*?)\|(.*?)\|(.*?)\]/);
