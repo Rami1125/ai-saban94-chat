@@ -196,7 +196,7 @@ export default function App() {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/pro_brain', {
+      const res = await fetch('/api/admin_pro/brain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, query: q, history: messages.slice(-5) })
