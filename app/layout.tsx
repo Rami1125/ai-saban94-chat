@@ -51,29 +51,37 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           })();
         `}} />
         
-        <Script 
-          src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" 
-          strategy="afterInteractive"
-        />
-        <Script id="onesignal-init" strategy="afterInteractive">
-          {`
-            window.OneSignalDeferred.push(async function(OneSignal) {
-              if (window.isIndexedDBAvailable === false) {
-                console.warn("SabanOS: OneSignal disabled due to IndexedDB restriction.");
-                return;
-              }
-              
-              try {
-                await OneSignal.init({
-                  appId: "acc8a2bc-d54e-4261-b3d2-cc5c5f7b39d3",
-                  safari_web_id: "web.onesignal.auto.5f4f9ed9-fb2e-4d6a-935d-81aa46fccce0",
-                  notifyButton: { enable: true },
-                  allowLocalhostAsSecureOrigin: true
-                });
-              } catch (err) {}
-            });
-          `}
-        </Script>
+<Script id="onesignal-init" strategy="afterInteractive">
+  {`
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    window.OneSignalDeferred.push(async function(OneSignal) {
+      // בדיקה אם הדפדפן תומך ומאפשר
+      if (!window.indexedDB) {
+        console.warn("SabanOS: OneSignal disabled - No IndexedDB");
+        return;
+      }
+      
+      try {
+        await OneSignal.init({
+          appId: "acc8a2bc-d54e-4261-b3d2-cc5c5f7b39d3",
+          safari_web_id: "web.onesignal.auto.5f4f9ed9-fb2e-4d6a-935d-81aa46fccce0",
+          notifyButton: { enable: true },
+          allowLocalhostAsSecureOrigin: true,
+          serviceWorkerParam: { scope: "/" }, // מבטיח שהוורקר יירשם בנתיב הנכון
+          serviceWorkerPath: "OneSignalSDKWorker.js"
+        });
+
+        // וידוא שהוורקר מוכן לפני שליחת הודעות
+        const registration = await navigator.serviceWorker.ready;
+        console.log("SabanOS: OneSignal Service Worker is ready!", registration);
+        
+      } catch (err) {
+        console.error("SabanOS: OneSignal Init Error:", err);
+      }
+    });
+  `}
+</Script>
+      
       </head>
       <body className={`${heebo.variable} font-sans antialiased bg-slate-50`}>
         <BusinessConfigProvider>
