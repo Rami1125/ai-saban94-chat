@@ -1,42 +1,34 @@
 "use client";
 import React, { useEffect, useState, useCallback } from 'react';
 import { getSupabase } from "@/lib/supabase";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { 
-  Truck, Plus, X, Send, Clock, Warehouse, MapPin, 
-  Share2, UserCheck, Recycle, Menu, Edit2, Calendar, RefreshCw, Trash2, Brain
+  Truck, Plus, ChevronDown, Trash2, X, Send, 
+  Clock, Warehouse, MapPin, Share2, UserCheck, HardHat, Recycle, Menu, Edit2, Calendar, RefreshCw, CheckCircle2
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 import { toast, Toaster } from "sonner";
 
-/**
- * Saban Master Dispatch v6.6 - Ultra Resilience Edition
- * ---------------------------------------------------------
- * - פתרון סופי לשגיאות: Card is not defined, Input is not defined
- * - עיצוב בהיר, אותיות גדולות, תואם מובייל מלא
- */
-
-// --- רכיבי UI פנימיים (מובנים) למניעת שגיאות ReferenceError ---
-const LocalCard = ({ children, className = "", style = {} }: { children: React.ReactNode, className?: string, style?: React.CSSProperties }) => (
-  <div style={style} className={`bg-white border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden ${className}`}>{children}</div>
-);
-
-const LocalInput = (props: React.InputHTMLAttributes<HTMLInputElement>) => (
-  <input {...props} className={`w-full h-14 bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 font-black text-lg text-slate-900 outline-none focus:border-blue-500 focus:ring-4 ring-blue-50 transition-all ${props.className}`} />
-);
-
-const LocalButton = ({ children, onClick, className = "", disabled = false }: { children: React.ReactNode, onClick?: () => void, className?: string, disabled?: boolean }) => (
-  <button onClick={onClick} disabled={disabled} className={`flex items-center justify-center gap-2 font-black transition-all active:scale-95 disabled:opacity-50 border-none cursor-pointer ${className}`}>{children}</button>
-);
-
-// --- הגדרות נהגים ונתונים ---
 const drivers = [
-  { name: 'חכמת', type: 'מנוף 🏗️', color: '#0B2C63' },
-  { name: 'עלי', type: 'משאית 🚛', color: '#2563EB' },
-  { name: 'פינוי פסולת', type: 'מכולה ♻️', color: '#16a34a' }
+  { id: 'hakmat', name: 'חכמת', img: 'https://i.postimg.cc/d3S0NJJZ/Screenshot-20250623-200646-Facebook.jpg', color: '#0B2C63', defaultType: 'מנוף 🏗️' },
+  { id: 'ali', name: 'עלי', img: 'https://i.postimg.cc/tCNbgXK3/Screenshot-20250623-200744-Tik-Tok.jpg', color: '#2563EB', defaultType: 'משאית 🚛' },
+  { id: 'waste', name: 'פינוי פסולת', img: 'https://cdn-icons-png.flaticon.com/512/3299/3299935.png', color: '#16a34a', defaultType: 'מכולה ♻️' }
+];
+
+// סטטוסים מקצועיים לח. סבן
+const statusOptions = [
+  { label: 'פתוח', value: 'פתוח', color: 'bg-orange-100 text-orange-700 border-orange-200' },
+  { label: 'אושר להפצה', value: 'אושר להפצה', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+  { label: 'בביצוע', value: 'בביצוע', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+  { label: 'הושלם', value: 'הושלם', color: 'bg-slate-100 text-slate-700 border-slate-200' },
+  { label: 'בוטל', value: 'בוטל', color: 'bg-red-100 text-red-700 border-red-200' }
 ];
 
 const teamMembers = ['ראמי', 'יואב', 'איציק'];
-const warehouses = ['התלמיד (1)', 'החרש (4)', 'שארק (30)', 'כראדי (32)', 'שי שרון (40)'];
+const containerActions = ['הצבה', 'החלפה', 'הוצאה', 'הובלה'];
+const wasteWarehouses = ['שארק (30)', 'כראדי (32)', 'שי שרון (40)'];
+const standardWarehouses = ['התלמיד (1)', 'החרש (4)'];
 
 const timeSlots = Array.from({ length: 24 }, (_, i) => {
   const h = Math.floor(i / 2) + 6;
@@ -48,19 +40,19 @@ export default function SabanMasterDispatch() {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<any>(null);
   
   const [form, setForm] = useState({
     scheduled_date: new Date().toISOString().split('T')[0],
     scheduled_time: '07:00',
     customer_name: '',
-    order_id_comax: '',
+    warehouse_source: 'התלמיד (1)',
     driver_name: 'חכמת',
-    warehouse_source: 'החרש (4)',
-    container_action: 'הובלה',
-    address: '',
     created_by: 'ראמי',
+    order_id_comax: '',
+    address: '',
+    container_action: 'הובלה',
     status: 'פתוח'
   });
 
@@ -70,7 +62,11 @@ export default function SabanMasterDispatch() {
     try {
       const { data } = await supabase.from('saban_master_dispatch').select('*').order('scheduled_time', { ascending: true });
       setOrders(data || []);
-    } catch (err) { console.error(err); } finally { setLoading(false); }
+    } catch (err) {
+      console.error("Fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
   }, [supabase]);
 
   useEffect(() => {
@@ -79,178 +75,201 @@ export default function SabanMasterDispatch() {
     return () => { supabase.removeChannel(sub); };
   }, [fetchData, supabase]);
 
-  const saveOrder = async () => {
-    if (!form.customer_name || !form.order_id_comax) return toast.error("חובה למלא לקוח ומספר קומקס");
+  const generateWAMessage = (order: any) => {
+    const isMobile = typeof navigator !== 'undefined' && /iPhone|Android/i.test(navigator.userAgent);
+    const actionInfo = order.driver_name === 'פינוי פסולת' ? `\n♻️ *פעולה:* ${order.container_action}` : '';
     
-    const payload = { 
-      ...form, 
-      start_process_time: new Date().toISOString(),
-      status: (form.driver_name && form.driver_name !== 'לא שובץ') ? 'אושר להפצה' : 'פתוח'
-    };
+    if (!isMobile) {
+      return `סידור ח. סבן חומרי בניין\nעדכון הזמנה\nלקוח: ${order.customer_name}\nסטטוס: ${order.status}\nנהג: ${order.driver_name}\nשעה: ${order.scheduled_time}\nנציג: ${order.created_by}`;
+    }
+
+    return `📦 *סידור ח. סבן*\n---------------------------\n👤 *לקוח:* ${order.customer_name}\n🚦 *סטטוס:* ${order.status}\n🚛 *נהג:* ${order.driver_name}${actionInfo}\n⏰ *שעה:* ${order.scheduled_time}\n---------------------------\n_מעדכן: ${order.created_by}_`;
+  };
+
+  const saveOrder = async () => {
+    if (!form.customer_name || !form.order_id_comax) return toast.error("חסר נתונים");
+
+    const payload = { ...form, start_process_time: new Date().toISOString() };
     
     const { error } = editingOrder 
       ? await supabase.from('saban_master_dispatch').update(payload).eq('id', editingOrder.id)
       : await supabase.from('saban_master_dispatch').insert([payload]);
 
     if (!error) {
-      toast.success("סונכרן ב-SQL בהצלחה");
+      toast.success(editingOrder ? "עודכן בהצלחה!" : "הזמנה נשמרה בסידור!");
+      if (!editingOrder) window.open(`https://wa.me/?text=${encodeURIComponent(generateWAMessage(form))}`, '_blank');
       setShowForm(false);
       setEditingOrder(null);
-      setForm({ ...form, customer_name: '', order_id_comax: '', address: '' });
+      setForm({ ...form, customer_name: '', order_id_comax: '', address: '', status: 'פתוח' });
       fetchData();
+    } else {
+        toast.error("שגיאה בשמירה ל-SQL");
     }
   };
 
   const shareMorningReport = () => {
-    const report = `☀️ *דוח סידור ח. סבן*\n` + orders.map(o => `• ${o.scheduled_time} | ${o.customer_name} | ${o.driver_name}`).join('\n');
+    const report = `☀️ *דוח סידור ח. סבן - ${new Date().toLocaleDateString('he-IL')}*\n` +
+      orders.map(o => `• ${o.scheduled_time} | ${o.customer_name} | ${o.status}`).join('\n');
     window.open(`https://wa.me/?text=${encodeURIComponent(report)}`, '_blank');
   };
 
-  if (loading) return <div className="h-screen flex items-center justify-center font-black text-[#0B2C63] text-2xl animate-pulse">ח. סבן - מסנכרן נתוני מאסטר...</div>;
+  const getStatusStyle = (status: string) => {
+    return statusOptions.find(s => s.value === status)?.color || 'bg-slate-100 text-slate-700';
+  };
+
+  if (loading) return <div className="h-screen flex items-center justify-center font-black animate-pulse text-[#0B2C63] italic text-2xl uppercase tracking-tighter">Saban OS - Syncing...</div>;
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans text-right" dir="rtl">
+    <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans text-right" dir="rtl">
       <Toaster position="top-center" richColors />
 
-      {/* Navbar */}
-      <nav className="h-20 bg-[#0B2C63] text-white flex items-center justify-between px-6 sticky top-0 z-[60] shadow-2xl">
-        <div className="flex items-center gap-4">
-          <button onClick={() => setIsMobileMenuOpen(true)} className="md:hidden p-2 hover:bg-white/10 rounded-lg border-none text-white transition-all cursor-pointer"><Menu size={28}/></button>
-          <div className="flex flex-col">
-            <h1 className="text-xl font-black italic tracking-tighter uppercase leading-none">SABAN <span className="text-blue-400">MASTER</span></h1>
-            <p className="text-[10px] font-bold text-blue-200 uppercase tracking-widest mt-1">Operational Core</p>
-          </div>
+      {/* Header */}
+      <div className="bg-[#0B2C63] text-white p-6 rounded-b-[2.5rem] shadow-2xl mb-8 flex justify-between items-center relative z-50">
+        <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 bg-white/10 rounded-xl border-none text-white transition-all">
+          {isMenuOpen ? <X size={28}/> : <Menu size={28}/>}
+        </button>
+        <div className="text-center">
+            <h1 className="text-xl font-black italic tracking-tighter leading-tight text-white uppercase">ח.סבן</h1>
+            <p className="text-[10px] font-bold text-blue-300 uppercase tracking-widest">Master Dispatch</p>
         </div>
-        <LocalButton onClick={() => { setEditingOrder(null); setShowForm(true); }} className="bg-blue-500 hover:bg-blue-400 px-6 py-2.5 rounded-xl text-sm shadow-lg text-white">חדש +</LocalButton>
-      </nav>
-
-      {/* Mobile Drawer */}
-      <AnimatePresence>
-        {isMobileMenuOpen && (
-          <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} className="fixed inset-0 z-[100] bg-white p-6 flex flex-col md:hidden">
-            <div className="flex justify-between items-center mb-8 border-b pb-4">
-              <h2 className="font-black text-2xl italic uppercase">תפריט ניהול</h2>
-              <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 bg-slate-100 rounded-full border-none"><X size={24}/></button>
-            </div>
-            <LocalButton onClick={shareMorningReport} className="w-full h-16 bg-green-600 text-white rounded-2xl mb-4 text-lg"><Share2 size={20}/> שלח דוח בוקר</LocalButton>
-            <LocalButton onClick={fetchData} className="w-full h-16 bg-slate-100 text-slate-600 rounded-2xl text-lg"><RefreshCw size={20}/> רענן לוח</LocalButton>
-          </motion.div>
+        <Button onClick={() => { setEditingOrder(null); setShowForm(true); }} className="bg-blue-600 rounded-xl font-black h-10 px-4 border-none shadow-lg text-white">חדש +</Button>
+        
+        {isMenuOpen && (
+          <div className="absolute top-24 right-6 left-6 bg-white rounded-[2rem] shadow-2xl p-4 border border-slate-100 animate-in slide-in-from-top-4">
+             <button onClick={shareMorningReport} className="w-full flex items-center gap-3 p-5 hover:bg-slate-50 rounded-2xl text-[#0B2C63] font-black border-none text-right transition-colors">
+                <Share2 size={22} className="text-blue-600"/> שלח דוח סידור בוקר
+             </button>
+          </div>
         )}
-      </AnimatePresence>
+      </div>
 
-      <div className="max-w-[1800px] mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="max-w-[1800px] mx-auto px-4 grid grid-cols-1 lg:grid-cols-3 gap-8">
         {drivers.map((driver) => (
-          <div key={driver.name} className="space-y-6">
-            <LocalCard className="p-6 border-b-[10px]" style={{ borderBottomColor: driver.color }}>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-black italic">{driver.name}</h2>
-                <span className="bg-slate-100 px-3 py-1 rounded-lg text-[10px] font-black text-slate-500 uppercase tracking-widest">{driver.type}</span>
-              </div>
-              <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                {timeSlots.map(time => {
-                  const hasOrder = orders.some(o => o.driver_name === driver.name && o.scheduled_time === time);
-                  return (
-                    <div key={time} className="flex flex-col items-center gap-1 min-w-[50px]">
-                      <div className={`w-12 h-14 rounded-2xl border-2 flex items-center justify-center transition-all ${hasOrder ? 'bg-[#0B2C63] border-blue-400' : 'bg-slate-50 border-slate-100'}`}>
-                        {hasOrder ? <Truck size={20} className="text-white animate-pulse" /> : <Clock size={16} className="text-slate-300" />}
-                      </div>
-                      <span className="text-[10px] font-black text-slate-400">{time}</span>
+          <div key={driver.id} className="space-y-6">
+            <Card className="bg-white p-6 rounded-[2.5rem] shadow-xl border-none relative overflow-hidden">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-4">
+                    <img src={driver.img} className="w-16 h-16 rounded-2xl object-cover shadow-lg border-2 border-white" />
+                    <div>
+                      <h2 className="text-2xl font-black text-slate-800 leading-tight">{driver.name}</h2>
+                      <Badge className="bg-slate-50 text-slate-500 border-none font-bold text-[10px] uppercase">{driver.defaultType}</Badge>
                     </div>
-                  );
-                })}
-              </div>
-            </LocalCard>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                  {timeSlots.map(time => {
+                    const hasOrder = orders.some(o => o.driver_name === driver.name && o.scheduled_time === time);
+                    return (
+                      <div key={time} onClick={() => { setForm({...form, driver_name: driver.name, scheduled_time: time}); setEditingOrder(null); setShowForm(true); }}
+                           className="flex flex-col items-center gap-2 cursor-pointer group min-w-[50px]">
+                        <div className={`w-12 h-16 rounded-2xl border-2 flex items-center justify-center transition-all ${hasOrder ? 'bg-[#0B2C63] border-blue-400 shadow-md' : 'bg-slate-50 border-slate-100 hover:border-blue-300'}`}>
+                          {hasOrder ? <Truck size={20} className="text-white animate-pulse" /> : <Plus size={16} className="text-slate-300" />}
+                        </div>
+                        <span className="text-[10px] font-black text-slate-400">{time}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+            </Card>
 
             <div className="space-y-4">
               {orders.filter(o => o.driver_name === driver.name).map((order) => (
-                <LocalCard key={order.id} className="p-7 relative group border-r-[12px]" style={{ borderRightColor: driver.color }}>
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="flex gap-4">
-                      <div className="bg-[#0B2C63] text-white px-3 py-2 rounded-xl text-sm font-black italic shadow-md">{order.scheduled_time}</div>
-                      <div>
-                        <h3 className="font-black text-2xl leading-none mb-1">{order.customer_name}</h3>
-                        <p className="text-blue-600 font-bold text-xs uppercase tracking-tighter">COMAX: #{order.order_id_comax}</p>
-                      </div>
+                <Card key={order.id} className="p-6 rounded-[2rem] bg-white shadow-lg border-none relative group border-r-8 border-r-[#0B2C63]">
+                    <div className="flex justify-between items-start mb-4">
+                        <div className="flex items-center gap-4">
+                            <div className="bg-[#0B2C63] text-white px-3 py-2 rounded-xl text-xs font-black italic shadow-inner">{order.scheduled_time}</div>
+                            <div className="text-right">
+                                <div className="font-black text-slate-800 text-xl leading-tight">{order.customer_name}</div>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <Badge className={`border-none font-black text-[9px] uppercase px-2 py-0.5 ${getStatusStyle(order.status)}`}>
+                                        {order.status}
+                                    </Badge>
+                                    <span className="text-slate-400 font-bold text-[10px]">#{order.order_id_comax}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                             <button onClick={() => { setEditingOrder(order); setForm(order); setShowForm(true); }} className="p-2 bg-blue-50 text-blue-600 rounded-lg border-none cursor-pointer"><Edit2 size={16}/></button>
+                             <button onClick={() => { if(confirm('למחוק הזמנה?')) supabase.from('saban_master_dispatch').delete().eq('id', order.id).then(fetchData); }} className="p-2 bg-red-50 text-red-500 rounded-lg border-none cursor-pointer"><Trash2 size={16}/></button>
+                        </div>
                     </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                       <button onClick={() => { setEditingOrder(order); setForm(order); setShowForm(true); }} className="p-2 bg-blue-50 text-blue-600 rounded-lg border-none cursor-pointer hover:bg-blue-100"><Edit2 size={16}/></button>
-                       <button onClick={() => { if(confirm('למחוק הזמנה?')) supabase.from('saban_master_dispatch').delete().eq('id', order.id).then(fetchData); }} className="p-2 bg-red-50 text-red-500 rounded-lg border-none cursor-pointer hover:bg-red-100"><Trash2 size={16}/></button>
+
+                    <div className="grid grid-cols-2 gap-4 mt-2 pt-4 border-t border-slate-50 text-[11px] font-bold text-slate-500 uppercase">
+                        <div className="flex items-center gap-2 truncate"><MapPin size={14} className="text-red-400"/> {order.address || 'איסוף עצמי'}</div>
+                        <div className="flex items-center gap-2"><Warehouse size={14} className="text-blue-400"/> {order.warehouse_source}</div>
+                        <div className="flex items-center gap-2"><UserCheck size={14} className="text-orange-400"/> {order.created_by}</div>
+                        {order.driver_name === 'פינוי פסולת' && <div className="flex items-center gap-2"><Recycle size={14} className="text-green-500"/> {order.container_action}</div>}
                     </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 mt-2 pt-4 border-t border-slate-100 text-[11px] font-black text-slate-500 uppercase tracking-tight">
-                    <div className="flex items-center gap-2"><MapPin size={16} className="text-red-400"/> {order.address || 'לא צוינה כתובת'}</div>
-                    <div className="flex items-center gap-2"><Warehouse size={16} className="text-blue-400"/> {order.warehouse_source}</div>
-                    <div className="flex items-center gap-2"><UserCheck size={16} className="text-orange-400"/> {order.created_by}</div>
-                    <div className={`px-3 py-1 rounded-full w-fit text-[10px] font-black ${order.status === 'אושר להפצה' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{order.status}</div>
-                  </div>
-                </LocalCard>
+                </Card>
               ))}
             </div>
           </div>
         ))}
       </div>
 
-      {/* Form Overlay */}
-      <AnimatePresence>
-        {showForm && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[110] flex items-center justify-center p-4">
-            <LocalCard className="bg-white w-full max-w-xl rounded-[3rem] p-10 md:p-14 shadow-2xl relative border-none overflow-y-auto max-h-[90vh]">
-              <button onClick={() => setShowForm(false)} className="absolute top-8 left-8 p-2 hover:bg-slate-100 rounded-full border-none cursor-pointer"><X size={32} className="text-slate-400"/></button>
-              <h2 className="text-3xl font-black text-[#0B2C63] italic mb-10 border-r-8 border-blue-600 pr-5 uppercase tracking-tighter text-right">הזנת נתוני שטח</h2>
-              
-              <div className="space-y-8 text-right">
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-black text-slate-400 px-2 uppercase tracking-widest">תאריך ביצוע</label>
-                    <input type="date" value={form.scheduled_date} onChange={e => setForm({...form, scheduled_date: e.target.value})} className="w-full h-14 bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 font-black text-right text-lg outline-none focus:border-blue-500" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-black text-slate-400 px-2 uppercase tracking-widest">שעת הגעה</label>
-                    <select value={form.scheduled_time} onChange={e => setForm({...form, scheduled_time: e.target.value})} className="w-full h-14 bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 font-black text-right text-lg outline-none focus:border-blue-500 appearance-none bg-white">
-                      {timeSlots.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </div>
-                </div>
+      {showForm && (
+        <div className="fixed inset-0 bg-[#0B2C63]/95 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <Card className="bg-white w-full max-w-lg rounded-[3rem] p-10 space-y-6 shadow-2xl border-none text-right overflow-y-auto max-h-[90vh]">
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="text-2xl font-black text-[#0B2C63] italic uppercase border-r-4 border-blue-600 pr-3">{editingOrder ? 'עריכת משימה' : 'הזמנה חדשה'}</h2>
+              <button onClick={() => { setShowForm(false); setEditingOrder(null); }} className="bg-slate-100 p-2 rounded-full border-none text-slate-400 hover:text-black transition-colors"><X size={24}/></button>
+            </div>
+            
+            <div className="grid grid-cols-3 gap-2 mb-2">
+                {teamMembers.map(m => (
+                    <button key={m} onClick={() => setForm({...form, created_by: m})}
+                            className={`py-3 rounded-2xl text-[10px] font-black border-none transition-all ${form.created_by === m ? 'bg-blue-600 text-white shadow-lg scale-105' : 'bg-slate-100 text-slate-400'}`}>
+                        {m}
+                    </button>
+                ))}
+            </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-black text-slate-400 px-2 uppercase tracking-widest">שם לקוח (חובה)</label>
-                    <LocalInput placeholder="הקלד שם..." value={form.customer_name} onChange={e => setForm({...form, customer_name: e.target.value})} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-black text-slate-400 px-2 uppercase tracking-widest">מספר קומקס (חובה)</label>
-                    <LocalInput placeholder="לדוגמה: 621000" value={form.order_id_comax} onChange={e => setForm({...form, order_id_comax: e.target.value})} />
-                  </div>
+            <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 mr-2 uppercase tracking-widest">תאריך</label>
+                    <input type="date" value={form.scheduled_date} onChange={e => setForm({...form, scheduled_date: e.target.value})} className="w-full h-12 px-4 rounded-xl border-2 border-slate-100 font-bold outline-none focus:border-blue-500 text-right" />
                 </div>
-
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-black text-slate-400 px-2 uppercase tracking-widest">נהג משויך</label>
-                    <select value={form.driver_name} onChange={e => setForm({...form, driver_name: e.target.value})} className="w-full h-14 bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 font-black text-right text-lg outline-none focus:border-blue-500 appearance-none bg-white">
-                      {drivers.map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
+                <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 mr-2 uppercase tracking-widest">שעה</label>
+                    <select value={form.scheduled_time} onChange={e => setForm({...form, scheduled_time: e.target.value})} className="w-full h-12 px-4 rounded-xl border-2 border-slate-100 font-bold bg-white outline-none focus:border-blue-500 text-right">
+                        {timeSlots.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-black text-slate-400 px-2 uppercase tracking-widest">סניף/מקור</label>
-                    <select value={form.warehouse_source} onChange={e => setForm({...form, warehouse_source: e.target.value})} className="w-full h-14 bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 font-black text-right text-lg outline-none focus:border-blue-500 appearance-none bg-white">
-                      {warehouses.map(w => <option key={w} value={w}>{w}</option>)}
-                    </select>
-                  </div>
                 </div>
+            </div>
 
+            <div className="space-y-2">
+                <label className="text-[10px] font-black text-blue-600 mr-2 uppercase tracking-widest">סטטוס לוגיסטי</label>
+                <select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-blue-100 font-black text-right outline-none focus:border-blue-500 bg-white shadow-sm">
+                    {statusOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                </select>
+            </div>
+
+            <input placeholder="שם הלקוח" value={form.customer_name} onChange={e => setForm({...form, customer_name: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-slate-100 font-black text-lg text-right outline-none focus:border-blue-500 transition-all focus:bg-blue-50/30" />
+            <input placeholder="מספר קומקס" value={form.order_id_comax} onChange={e => setForm({...form, order_id_comax: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-slate-100 font-black text-lg text-right outline-none focus:border-blue-500 transition-all focus:bg-blue-50/30" />
+            <input placeholder="כתובת אספקה" value={form.address} onChange={e => setForm({...form, address: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-slate-100 font-bold text-right outline-none focus:border-blue-500 transition-all focus:bg-blue-50/30" />
+
+            <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-[11px] font-black text-slate-400 px-2 uppercase tracking-widest">כתובת אספקה</label>
-                  <LocalInput placeholder="כתובת מלאה..." value={form.address} onChange={e => setForm({...form, address: e.target.value})} />
+                    <label className="text-[10px] font-black text-slate-400 mr-2 uppercase">נהג</label>
+                    <select value={form.driver_name} onChange={e => setForm({...form, driver_name: e.target.value})} className="w-full h-14 px-4 rounded-xl border-2 border-slate-100 font-bold text-right outline-none focus:border-blue-500 bg-white">
+                        {drivers.map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
+                    </select>
                 </div>
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 mr-2 uppercase">מחסן</label>
+                    <select value={form.warehouse_source} onChange={e => setForm({...form, warehouse_source: e.target.value})} className="w-full h-14 px-4 rounded-xl border-2 border-slate-100 font-bold text-right outline-none focus:border-blue-500 bg-white">
+                        {standardWarehouses.concat(wasteWarehouses).map(w => <option key={w} value={w}>{w}</option>)}
+                    </select>
+                </div>
+            </div>
 
-                <LocalButton onClick={saveOrder} className="w-full h-20 bg-blue-600 hover:bg-blue-700 text-white rounded-[2.5rem] text-2xl shadow-2xl mt-6">
-                  {editingOrder ? 'עדכן סידור עבודה ✍️' : 'שמור ושגר ל-SQL 🚀'}
-                </LocalButton>
-              </div>
-            </LocalCard>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            <Button onClick={saveOrder} className="w-full h-18 bg-green-600 hover:bg-green-700 text-white rounded-[2rem] font-black text-xl shadow-xl transition-all border-none active:scale-95 shadow-green-200 cursor-pointer">
+              {editingOrder ? 'עדכן שינויים ✍️' : 'שמור ושגר לוואטסאפ 🚀'}
+            </Button>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
