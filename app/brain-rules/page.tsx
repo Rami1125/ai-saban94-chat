@@ -1,146 +1,197 @@
 "use client";
-import React, { useState, useEffect } from 'react';
-import { getSupabase } from "@/lib/supabase";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { 
-  BookOpen, Plus, Save, Trash2, ShieldCheck, 
-  AlertCircle, Scale, Brain, Zap, Loader2 
-} from "lucide-react";
-import { toast, Toaster } from "sonner";
 
-export default function BrainRulesStudio() {
+import React, { useState, useEffect } from 'react';
+import { 
+  Save, Plus, Trash2, Brain, ShieldCheck, 
+  AlertCircle, Loader2, ChevronLeft, Zap 
+} from 'lucide-react';
+import { supabase } from "@/lib/supabase";
+import { toast, Toaster } from "sonner";
+import { motion, AnimatePresence } from 'framer-motion';
+
+/**
+ * Saban OS - Brain Rules Manager
+ * ניהול חוקי המוח והנחיות ה-AI של ח.סבן
+ */
+
+export default function BrainRulesPage() {
   const [rules, setRules] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  
-  const [newRule, setNewRule] = useState({
-    rule_name: '',
-    rule_description: '',
-    category: 'logistics',
-    priority: 1
-  });
 
-  const supabase = getSupabase();
-
-  useEffect(() => { fetchRules(); }, []);
+  useEffect(() => {
+    fetchRules();
+  }, []);
 
   const fetchRules = async () => {
-    setLoading(true);
-    const { data } = await supabase.from('saban_brain_rules').select('*').order('priority', { ascending: false });
-    setRules(data || []);
-    setLoading(false);
+    try {
+      const { data, error } = await supabase
+        .from('ai_rules')
+        .select('*')
+        .order('priority', { ascending: false });
+      
+      if (error) throw error;
+      setRules(data || []);
+    } catch (e) {
+      toast.error("שגיאה בטעינת החוקים");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const saveRule = async () => {
-    if (!newRule.rule_name || !newRule.rule_description) return toast.error("מלא שם ותיאור לחוק");
+  const addRule = () => {
+    const newRule = {
+      id: `temp-${Date.now()}`,
+      content: "",
+      category: "general",
+      is_active: true,
+      priority: 1
+    };
+    setRules([newRule, ...rules]);
+  };
+
+  const saveRules = async () => {
     setSaving(true);
-    const { error } = await supabase.from('saban_brain_rules').insert([newRule]);
-    if (!error) {
-      toast.success("החוק נוסף לספר החוקים");
-      setNewRule({ rule_name: '', rule_description: '', category: 'logistics', priority: 1 });
+    try {
+      // סינון חוקים זמניים ושמירה ל-Supabase
+      const rulesToSave = rules.map(({ id, ...rest }) => ({
+        ...rest,
+        updated_at: new Date()
+      })).filter(r => r.content.trim() !== "");
+
+      const { error } = await supabase
+        .from('ai_rules')
+        .upsert(rulesToSave);
+
+      if (error) throw error;
+      toast.success("חוקי המוח עודכנו בהצלחה! המוח לומד...");
       fetchRules();
+    } catch (e) {
+      toast.error("שגיאה בשמירת החוקים");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   const deleteRule = async (id: string) => {
-    const { error } = await supabase.from('saban_brain_rules').delete().eq('id', id);
-    if (!error) {
-      toast.success("החוק נמחק");
-      fetchRules();
+    if (id.startsWith('temp-')) {
+      setRules(rules.filter(r => r.id !== id));
+      return;
+    }
+    
+    try {
+      const { error } = await supabase.from('ai_rules').delete().eq('id', id);
+      if (error) throw error;
+      setRules(rules.filter(r => r.id !== id));
+      toast.success("החוק הוסר");
+    } catch (e) {
+      toast.error("שגיאה במחיקה");
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-8 font-sans text-right" dir="rtl">
+    <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-10" dir="rtl">
       <Toaster position="top-center" richColors />
       
-      {/* Header */}
-      <div className="max-w-4xl mx-auto flex justify-between items-center mb-10">
-        <div className="flex items-center gap-4">
-          <div className="p-4 bg-[#0B2C63] rounded-[2rem] text-white shadow-xl">
-            <BookOpen size={30} />
-          </div>
-          <div>
-            <h1 className="text-3xl font-black text-[#0B2C63]">ספר החוקים של SabanOS</h1>
-            <p className="text-slate-400 font-bold">הנחיות הפעולה של המוח הדיגיטלי</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-2xl border shadow-sm">
-           <Brain className="text-blue-500 animate-pulse" size={20}/>
-           <span className="font-black text-sm text-slate-700">המוח מסונכרן</span>
-        </div>
-      </div>
-
-      <div className="max-w-4xl mx-auto grid gap-8">
-        {/* טופס הוספת חוק חדש */}
-        <Card className="p-8 rounded-[2.5rem] border-none shadow-xl bg-white">
-          <h2 className="text-xl font-black mb-6 flex items-center gap-2 text-slate-800">
-            <Plus size={20} className="text-blue-600"/> הוספת הנחיה חדשה
-          </h2>
-          <div className="grid gap-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input 
-                placeholder="שם החוק (למשל: תעדוף דחיפות)" 
-                value={newRule.rule_name}
-                onChange={e => setNewRule({...newRule, rule_name: e.target.value})}
-                className="h-14 rounded-2xl border-slate-100 bg-slate-50 font-bold"
-              />
-              <select 
-                value={newRule.category}
-                onChange={e => setNewRule({...newRule, category: e.target.value})}
-                className="h-14 rounded-2xl border-slate-100 bg-slate-50 font-bold px-4 outline-none">
-                <option value="logistics">לוגיסטיקה/סידור נהגים</option>
-                <option value="logistics">לוגיסטיקה ושיבוץ (AI Automation)</option>
-                <option value="urgent">מקרים דחופים</option>
-                <option value="customer_service">שירות לקוחות</option>
-              </select>
+      <div className="max-w-5xl mx-auto space-y-8">
+        {/* Header */}
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200">
+              <Brain className="text-white" size={32} />
             </div>
-            <Textarea 
-              placeholder="כתוב כאן את ההנחיה המדויקת למוח..." 
-              value={newRule.rule_description}
-              onChange={e => setNewRule({...newRule, rule_description: e.target.value})}
-              className="h-32 rounded-2xl border-slate-100 bg-slate-50 font-medium p-4"
-            />
-            <Button onClick={saveRule} disabled={saving} className="h-14 bg-[#0B2C63] hover:bg-blue-900 rounded-2xl font-black text-lg gap-2 shadow-lg">
-              {saving ? <Loader2 className="animate-spin"/> : <Save size={20}/>}
-              שמור חוק במערכת
-            </Button>
+            <div>
+              <h1 className="text-3xl font-black text-slate-900 italic tracking-tighter">ניהול חוקי מוח</h1>
+              <p className="text-slate-500 font-bold flex items-center gap-2">
+                <ShieldCheck size={16} className="text-emerald-500" /> המוח הלוגיסטי Ai-ח.סבן
+              </p>
+            </div>
           </div>
-        </Card>
+          
+          <div className="flex gap-3 w-full md:w-auto">
+            <button 
+              onClick={addRule}
+              className="flex-1 md:flex-none bg-white border-2 border-slate-200 px-6 py-3 rounded-xl font-bold text-slate-700 hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
+            >
+              <Plus size={20} /> חוק חדש
+            </button>
+            <button 
+              onClick={saveRules}
+              disabled={saving}
+              className="flex-1 md:flex-none bg-blue-600 text-white px-8 py-3 rounded-xl font-black shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all flex items-center justify-center gap-2 active:scale-95"
+            >
+              {saving ? <Loader2 className="animate-spin" /> : <Save size={20} />}
+              שמור שינויים
+            </button>
+          </div>
+        </header>
 
-        {/* רשימת החוקים הקיימים */}
+        {/* Info Card */}
+        <div className="bg-blue-50 border border-blue-100 p-6 rounded-[25px] flex gap-4 items-start">
+          <AlertCircle className="text-blue-600 shrink-0 mt-1" size={24} />
+          <p className="text-blue-800 font-bold leading-relaxed">
+            כאן אתה מגדיר ל-AI איך להתנהג. כל חוק שתוסיף כאן מוזרק ישירות ל-"מחשבה" של המוח לפני שהוא עונה ללקוח או לנהג. השתמש בשפה ברורה ומדויקת.
+          </p>
+        </div>
+
+        {/* Rules List */}
         <div className="space-y-4">
-          <h3 className="font-black text-slate-500 px-2 flex items-center gap-2 uppercase text-xs tracking-widest">
-            <ShieldCheck size={16}/> הנחיות פעילות ({rules.length})
-          </h3>
           {loading ? (
-            <div className="text-center py-10 text-slate-400 font-bold italic">טוען ספר חוקים...</div>
-          ) : rules.map((rule) => (
-            <Card key={rule.id} className="p-6 rounded-[2rem] border-none shadow-sm bg-white group hover:shadow-md transition-all">
-              <div className="flex justify-between items-start">
-                <div className="flex gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-blue-600">
-                    <Scale size={24}/>
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-black text-lg text-slate-800">{rule.rule_name}</span>
-                      <Badge className="bg-blue-50 text-blue-600 border-none text-[10px]">{rule.category}</Badge>
+            <div className="flex justify-center p-20"><Loader2 className="animate-spin text-blue-600" size={40} /></div>
+          ) : (
+            <AnimatePresence mode="popLayout">
+              {rules.map((rule, idx) => (
+                <motion.div 
+                  layout
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  key={rule.id}
+                  className="bg-white border border-slate-200 p-6 rounded-[30px] shadow-sm hover:shadow-md transition-all group"
+                >
+                  <div className="flex justify-between items-start gap-4">
+                    <div className="flex-1 space-y-4">
+                      <div className="flex items-center gap-3">
+                        <span className="bg-slate-100 text-slate-500 text-[10px] font-black uppercase px-3 py-1 rounded-full">
+                          עדיפות: {rule.priority || 1}
+                        </span>
+                        <select 
+                          className="bg-transparent text-xs font-bold text-blue-600 outline-none cursor-pointer"
+                          value={rule.category}
+                          onChange={(e) => {
+                            const newRules = [...rules];
+                            newRules[idx].category = e.target.value;
+                            setRules(newRules);
+                          }}
+                        >
+                          <option value="general">כללי</option>
+                          <option value="logistics">לוגיסטיקה</option>
+                          <option value="sales">מכירות</option>
+                          <option value="behavior">התנהגות</option>
+                        </select>
+                      </div>
+                      <textarea 
+                        value={rule.content}
+                        onChange={(e) => {
+                          const newRules = [...rules];
+                          newRules[idx].content = e.target.value;
+                          setRules(newRules);
+                        }}
+                        placeholder="כתוב את החוק כאן... (למשל: תמיד תציע משלוח מעל 10 משטחים)"
+                        className="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold text-slate-800 focus:ring-2 focus:ring-blue-100 outline-none min-h-[100px] resize-none"
+                      />
                     </div>
-                    <p className="text-slate-500 font-medium leading-relaxed max-w-2xl">{rule.rule_description}</p>
+                    <button 
+                      onClick={() => deleteRule(rule.id)}
+                      className="p-3 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                    >
+                      <Trash2 size={20} />
+                    </button>
                   </div>
-                </div>
-                <Button onClick={() => deleteRule(rule.id)} variant="ghost" className="text-slate-300 hover:text-red-500 rounded-xl">
-                  <Trash2 size={20}/>
-                </Button>
-              </div>
-            </Card>
-          ))}
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          )}
         </div>
       </div>
     </div>
