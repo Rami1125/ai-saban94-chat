@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { 
   Truck, Package, MapPin, Clock, CheckCircle2, 
-  Send, Loader2, BellRing
+  Send, Loader2, BellRing, AlertTriangle
 } from "lucide-react";
 import { useParams } from 'next/navigation';
 import { toast, Toaster } from "sonner";
@@ -14,26 +14,43 @@ export default function SabanCustomerTracking() {
   const { orderId } = useParams();
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [newNote, setNewNote] = useState("");
   const supabase = getSupabase();
   const audioPlayer = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    if (!orderId) return;
+    if (!orderId) {
+        setError("מספר הזמנה חסר בכתובת");
+        setLoading(false);
+        return;
+    }
 
     const fetchOrder = async () => {
-      setLoading(true);
-      const cleanId = orderId.toString().replace(/[\[\]]/g, '');
+      // ניקוי ה-ID מתווים מיותרים
+      const cleanId = orderId.toString().replace(/[\[\]]/g, '').trim();
+      console.log("SabanOS: Fetching Order ID ->", cleanId);
+
       try {
-        const { data, error } = await supabase
+        const { data, error: sbError } = await supabase
           .from('saban_master_dispatch')
           .select('*')
           .eq('order_id_comax', cleanId)
-          .single();
-        if (error) throw error;
-        setOrder(data);
-      } catch (err) {
-        toast.error("הזמנה לא נמצאה.");
+          .maybeSingle(); // maybeSingle מונע שגיאת 406 אם אין תוצאה
+
+        if (sbError) {
+            console.error("SabanOS: Supabase Error ->", sbError);
+            throw sbError;
+        }
+
+        if (!data) {
+            console.warn("SabanOS: No order found for ID ->", cleanId);
+            setError("הזמנה לא נמצאה במערכת");
+        } else {
+            setOrder(data);
+        }
+      } catch (err: any) {
+        setError(err.message || "שגיאת תקשורת עם השרת");
       } finally {
         setLoading(false);
       }
@@ -41,45 +58,16 @@ export default function SabanCustomerTracking() {
 
     fetchOrder();
 
-    // האזנה לשינויים בזמן אמת
-    const channel = supabase
-      .channel(`track_${orderId}`)
-      .on('postgres_changes', 
-        { event: 'UPDATE', schema: 'public', table: 'saban_master_dispatch' }, 
-        (payload) => {
-          const cleanId = orderId.toString().replace(/[\[\]]/g, '');
-          if (payload.new.order_id_comax === cleanId) {
-            const oldStatus = order?.status;
-            const newStatus = payload.new.status;
-            
-            setOrder(payload.new);
-
-            // אם הסטטוס השתנה - מפעילים התראה וצליל
-            if (oldStatus && oldStatus !== newStatus) {
-                // 1. צליל
-                if (audioPlayer.current) {
-                    audioPlayer.current.play().catch(() => {});
-                }
-
-                // 2. הודעת Toast על המסך
-                toast.info(`עדכון מח. סבן: הסטטוס שונה ל-${newStatus}`, {
-                    icon: <BellRing className="text-blue-600" />,
-                });
-
-                // 3. שליחת התראה דרך OneSignal (אם המשתמש אישר)
-                if (typeof window !== "undefined" && (window as any).OneSignal) {
-                    (window as any).OneSignal.push(function() {
-                        (window as any).OneSignal.displaySelfHostedInAppMessage(`סטטוס ההזמנה שלך עודכן ל: ${newStatus}`);
-                    });
-                }
-            }
-          }
+    // הגנה: אם אחרי 10 שניות עדיין בטעינה, נשחרר את המסך
+    const timeout = setTimeout(() => {
+        if (loading) {
+            setLoading(false);
+            setError("זמן ההמתנה פג. נסה לרענן.");
         }
-      )
-      .subscribe();
+    }, 10000);
 
-    return () => { supabase.removeChannel(channel); };
-  }, [orderId, order, supabase]);
+    return () => clearTimeout(timeout);
+  }, [orderId, supabase]);
 
   const sendUpdate = async () => {
     if (!newNote.trim() || order.status !== 'פתוח') return;
@@ -101,7 +89,19 @@ export default function SabanCustomerTracking() {
     </div>
   );
 
-  if (!order) return <div className="p-10 text-center font-black">הזמנה לא נמצאה</div>;
+  if (error || !order) return (
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center gap-4 font-black">
+      <AlertTriangle size={64} className="text-amber-500" />
+      <h1 className="text-2xl text-slate-800">אופס! משהו לא עבד</h1>
+      <p className="text-slate-500">{error || "הזמנה לא נמצאה"}</p>
+      <button 
+        onClick={() => window.location.reload()} 
+        className="bg-blue-600 text-white px-8 py-3 rounded-2xl shadow-lg active:scale-95 transition-all"
+      >
+        נסה שוב
+      </button>
+    </div>
+  );
 
   const steps = ['פתוח', 'אושר להפצה', 'בביצוע', 'הושלם'];
   const currentStepIndex = steps.indexOf(order.status);
@@ -109,7 +109,6 @@ export default function SabanCustomerTracking() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans p-4 pb-24 text-right" dir="rtl">
       <Toaster position="top-center" richColors />
-      {/* צליל התראה - וודא שהלינק תקין */}
       <audio ref={audioPlayer} src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" preload="auto" />
       
       <div className="text-center py-6">
@@ -150,21 +149,21 @@ export default function SabanCustomerTracking() {
         </Card>
         <Card className="bg-white border-none p-5 rounded-[2rem] shadow-sm flex flex-col items-center text-center gap-2">
             <div className="bg-blue-50 p-2 rounded-xl text-blue-500"><Clock size={20}/></div>
-            <p className="text-[9px] font-black text-slate-400 uppercase italic">שעה מתוכננת</p>
+            <p className="text-[9px] font-black text-slate-400 uppercase italic">שעה</p>
             <p className="font-bold text-xs text-slate-700 leading-tight">{order.scheduled_time}</p>
         </Card>
       </div>
 
       {order.status === 'פתוח' && (
         <div className="fixed bottom-6 left-6 right-6 z-[100]">
-          <Card className="bg-white/80 backdrop-blur-md rounded-[2.5rem] p-3 shadow-2xl border border-white flex gap-2 ring-1 ring-black/5">
+          <Card className="bg-white/90 backdrop-blur-md rounded-[2.5rem] p-3 shadow-2xl border border-white flex gap-2 ring-1 ring-black/5">
                 <input 
                     value={newNote}
                     onChange={(e) => setNewNote(e.target.value)}
-                    placeholder="צריך להוסיף משהו? כתוב כאן..."
-                    className="flex-1 bg-slate-50 border-none rounded-2xl px-4 py-3 text-slate-700 font-bold outline-none text-xs text-right placeholder:text-slate-300"
+                    placeholder="הוסף הערה לסידור..."
+                    className="flex-1 bg-slate-50 border-none rounded-2xl px-4 py-3 text-slate-700 font-bold outline-none text-xs text-right"
                 />
-                <button onClick={sendUpdate} className="bg-blue-600 text-white p-4 rounded-2xl shadow-lg shadow-blue-200 active:scale-95 transition-transform">
+                <button onClick={sendUpdate} className="bg-blue-600 text-white p-4 rounded-2xl active:scale-95 transition-transform shadow-lg shadow-blue-100">
                     <Send size={20}/>
                 </button>
           </Card>
