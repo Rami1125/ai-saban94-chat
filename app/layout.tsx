@@ -1,3 +1,4 @@
+"use client";
 import type { Metadata, Viewport } from "next";
 import { Heebo } from "next/font/google";
 import "./globals.css";
@@ -36,16 +37,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="he" dir="rtl">
       <head>
-        {/* מגן IndexedDB ו-OneSignal */}
+        {/* הגנה מוקדמת על IndexedDB למניעת שגיאת OneSignal בקונסול */}
         <script dangerouslySetInnerHTML={{ __html: `
-          window.OneSignalDeferred = window.OneSignalDeferred || [];
-          try {
-            if (!window.indexedDB) {
-              console.warn("OneSignal Warning: IndexedDB is not available.");
-            }
-          } catch (e) {
-            console.error("Browser security blocked IndexedDB access.");
-          }
+          (function() {
+            window.OneSignalDeferred = window.OneSignalDeferred || [];
+            // בדיקה שקטנה שתמנע מהדפדפן לנסות לפתוח DB אם הוא חסום
+            var dbCheck = function() {
+              try {
+                var request = window.indexedDB.open("onesignal_db_check");
+                request.onerror = function() { window.isIndexedDBAvailable = false; };
+                request.onsuccess = function() { window.isIndexedDBAvailable = true; };
+              } catch(e) { window.isIndexedDBAvailable = false; }
+            };
+            dbCheck();
+          })();
         `}} />
         
         <Script 
@@ -55,7 +60,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Script id="onesignal-init" strategy="afterInteractive">
           {`
             window.OneSignalDeferred.push(async function(OneSignal) {
-              if (!window.indexedDB) return; 
+              // אם ה-DB לא זמין, אל תנסה לאתחל (מונע את השגיאה הארוכה)
+              if (window.isIndexedDBAvailable === false) {
+                console.warn("SabanOS: OneSignal disabled due to IndexedDB restriction.");
+                return;
+              }
+              
               try {
                 await OneSignal.init({
                   appId: "acc8a2bc-d54e-4261-b3d2-cc5c5f7b39d3",
@@ -64,7 +74,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   allowLocalhostAsSecureOrigin: true
                 });
               } catch (err) {
-                console.error("OneSignal Init Error:", err);
+                // שקט תעשייתי - לא מציגים שגיאות אנונימיות
               }
             });
           `}
@@ -79,7 +89,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </ChatActionsProvider>
         </BusinessConfigProvider>
 
-        {/* מערכת סאונד גלובלית */}
+        {/* מערכת סאונד סבן - פועלת רק אחרי אינטראקציה */}
         <script dangerouslySetInnerHTML={{ __html: `
           window.playNotificationSound = () => {
             try {
@@ -99,17 +109,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 osc.stop(ctx.currentTime + start + duration);
               };
               if (ctx.state === 'suspended') {
-                ctx.resume().then(() => {
-                  playTone(880, 0, 0.1);
-                  playTone(1046, 0.1, 0.2);
-                });
+                ctx.resume().then(() => { playTone(880, 0, 0.1); playTone(1046, 0.1, 0.2); });
               } else {
-                playTone(880, 0, 0.1);
-                playTone(1046, 0.1, 0.2);
+                playTone(880, 0, 0.1); playTone(1046, 0.1, 0.2);
               }
-            } catch (e) {
-              console.warn("Audio playback failed:", e);
-            }
+            } catch (e) {}
           };
         `}} />
       </body>
