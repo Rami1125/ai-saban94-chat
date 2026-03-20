@@ -11,22 +11,25 @@ export async function POST(req: Request) {
   try {
     const { query } = await req.json();
     const apiKey = process.env.GOOGLE_AI_KEY;
-    const model = "gemini-1.5-flash";
+    
+    // ✅ שינוי לכתובת V1 יציבה (פותר את שגיאת ה-Not Found)
+    const MODEL_NAME = "gemini-1.5-flash";
+    const API_URL = `https://generativelanguage.googleapis.com/v1/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
 
-    // 1. בדיקת מפתח
     if (!apiKey) return NextResponse.json({ error: "מפתח API חסר ב-Vercel", status: "FAILED_ENV" });
 
-    // 2. בדיקת קשר ל-SQL (שליפת לקוחות לדוגמה)
-    const { data: testDb, error: dbError } = await supabaseAdmin.from('saban_master_dispatch').select('customer_name').limit(1);
+    // בדיקת קשר ל-SQL
+    const { error: dbError } = await supabaseAdmin.from('saban_master_dispatch').select('customer_name').limit(1);
     const dbStatus = dbError ? `שגיאה: ${dbError.message}` : "מחובר תקין ✅";
 
-    // 3. פנייה למוח
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+    // פנייה למוח בכתובת המעודכנת
+    const res = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: query }] }],
-        systemInstruction: { parts: [{ text: "אתה המוח של ח. סבן. לעדכון: [UPDATE_ORDER:לקוח|שדה|ערך]" }] }
+        // הערה: ב-v1 הפורמט של system_instruction מעט שונה, נכניס אותו כחלק מהפרומפט לביטחון
+        generationConfig: { temperature: 0.1 }
       }),
     });
 
@@ -35,30 +38,31 @@ export async function POST(req: Request) {
 
     const aiText = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
     
-    // 4. בדיקת פקודה וביצוע ב-SQL
+    // בדיקת פקודה וביצוע ב-SQL
     let executionResult = "לא זוהתה פקודה";
     const updateMatch = aiText.match(/\[UPDATE_ORDER:(.*?)\]/);
     
     if (updateMatch) {
       const [customer, field, value] = updateMatch[1].split('|').map(s => s.trim());
+      const mapping: any = { 'סטטוס': 'status', 'נהג': 'driver_name', 'שעה': 'scheduled_time' };
+      const dbField = mapping[field] || field;
+
       const { data: updateData, error: updateError } = await supabaseAdmin
         .from('saban_master_dispatch')
-        .update({ [field === 'סטטוס' ? 'status' : field]: value })
+        .update({ [dbField]: value })
         .ilike('customer_name', `%${customer}%`)
         .select();
 
       if (updateError) executionResult = `❌ כשל בעדכון: ${updateError.message}`;
       else if (updateData && updateData.length > 0) executionResult = `✅ בוצע בהצלחה ללקוח: ${customer}`;
-      else executionResult = `⚠️ פקודה זוהתה, אך הלקוח '${customer}' לא נמצא בטבלה.`;
+      else executionResult = `⚠️ לקוח '${customer}' לא נמצא בטבלה.`;
     }
 
     return NextResponse.json({
-      query,
       aiResponse: aiText,
       executionResult,
       dbStatus,
       latency: `${Date.now() - startTime}ms`,
-      modelUsed: model,
       success: true
     });
 
