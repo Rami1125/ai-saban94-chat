@@ -68,7 +68,7 @@ export default function SabanWhatsAppAI() {
       </header>
 
       {/* Chat Area */}
-      <main className="flex-1 overflow-y-auto p-4 space-y-2 no-scrollbar bg-[url('https://ai-saban94-chat.vercel.app/icon-192x192.png.png')] bg-repeat">
+      <main className="flex-1 overflow-y-auto p-4 space-y-2 no-scrollbar bg-[url('https://scontent.ftlv20-3.fna.fbcdn.net/v/t1.6435-9/39514714_2143148892402705_566003284326744064_n.jpg?_nc_cat=105&ccb=1-7&_nc_sid=13d280&_nc_ohc=cYIqefn1-SUQ7kNvwHABLI_&_nc_oc=AdogShMh-hBjH6eGx3sMNYJch-swTc3Q284DKZfwXYlWONAMOr3s1cKuMWZLRIp_HDo&_nc_zt=23&_nc_ht=scontent.ftlv20-3.fna&_nc_gid=KYc2ursViOmq3yFTJPKVIg&_nc_ss=7a30f&oh=00_Afw2oqQldUgc0JilE8qA7ArQpvcyOBCB4-WvN0gdfZUXHA&oe=69E4D882">
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
             <div className={`relative max-w-[85%] p-2 px-3 rounded-lg shadow-sm text-sm ${
