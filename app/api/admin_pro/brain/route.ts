@@ -1,13 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-/**
- * Saban OS V60.1 - Master Dispatch API
- * -----------------------------------
- * - FIX: Proper Syntax closing
- * - Auto-Generation of Comax ID
- */
-
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -22,7 +15,6 @@ export async function POST(req: Request) {
   try {
     const { query, history, customerId } = await req.json();
 
-    // 1. שליפת קונטקסט של הזמנות קיימות
     const { data: allOrders } = await supabase
       .from('saban_master_dispatch')
       .select('*')
@@ -31,22 +23,17 @@ export async function POST(req: Request) {
 
     const ordersContext = allOrders?.map(o => 
       `[${o.scheduled_time} | ${o.customer_name} | נהג: ${o.driver_name} | סטטוס: ${o.status}]`
-    ).join("\n") || "אין הזמנות פעילות";
+    ).join("\n") || "אין הזמנות";
 
     const systemPrompt = `
-      אתה המוח של ח. סבן. המנהל: ראמי הבוס.
-      
-      מצב הזמנות נוכחי ב-SQL:
-      ${ordersContext}
-
-      חוקי שליטה:
-      - פתיחת הזמנה: חובה להחזיר [CREATE_ORDER:לקוח|שעה|נהג|מחסן|פעולה|כתובת]
-      - שליפת נתון: ענה לראמי על סמך רשימת ההזמנות למעלה.
-      - ענה בעברית מקצועית, קצרה וחדה.
-      חתימה: ראמי, הכל מסונכרן ב-100%. 🦾
+      אתה המוח של ח. סבן. המנהל: ראמי.
+      מצב נוכחי: ${ordersContext}
+      חוקים: 
+      1. פתיחה: [CREATE_ORDER:לקוח|שעה|נהג|מחסן|פעולה|כתובת]
+      2. עדכון: [UPDATE_ORDER:לקוח|שדה|ערך] (שדה: סטטוס/נהג/שעה)
+      חתימה: ראמי, הכל מוכן לביצוע. 🦾
     `.trim();
 
-    // 2. הפעלת AI
     let finalAnswer = "";
     let success = false;
     const apiKeys = (process.env.GOOGLE_AI_KEY_POOL || "").split(",").map(k => k.trim());
@@ -54,7 +41,6 @@ export async function POST(req: Request) {
     for (const entry of DISCOVERY_MATRIX) {
       if (success) break;
       for (const key of apiKeys) {
-        if (success) break;
         try {
           const url = `https://generativelanguage.googleapis.com/v1beta/models/${entry.name}:generateContent?key=${key}`;
           const res = await fetch(url, {
@@ -63,10 +49,9 @@ export async function POST(req: Request) {
             body: JSON.stringify({
               contents: [{ role: "user", parts: [{ text: query }] }],
               systemInstruction: { parts: [{ text: systemPrompt }] },
-              generationConfig: { temperature: 0.1, maxOutputTokens: 800 }
+              generationConfig: { temperature: 0.1 }
             })
           });
-
           if (res.ok) {
             const data = await res.json();
             finalAnswer = data.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -76,63 +61,37 @@ export async function POST(req: Request) {
       }
     }
 
-    if (!success) return NextResponse.json({ answer: "ראמי אחי, המוח עמוס. נסה שוב. 🦾" });
-// זיהוי פקודת עדכון מהמוח
-const updateMatch = finalAnswer.match(/\[UPDATE_ORDER:(.*?)\]/);
+    if (!success) return NextResponse.json({ answer: "ראמי, המוח עמוס. נסה שוב. 🦾" });
 
-if (updateMatch) {
-  const parts = updateMatch[1].split('|');
-  const customer = parts[0]?.trim();
-  const fieldLabel = parts[1]?.trim();
-  const newValue = parts[2]?.trim();
+    // --- לוגיקת ביצוע UPDATE ---
+    const updateMatch = finalAnswer.match(/\[UPDATE_ORDER:(.*?)\]/);
+    if (updateMatch) {
+      const [customer, field, value] = updateMatch[1].split('|');
+      const fieldMapping: any = { 'סטטוס': 'status', 'נהג': 'driver_name', 'שעה': 'scheduled_time' };
+      const dbField = fieldMapping[field.trim()] || field.trim();
 
-  // מילון תרגום מעברית לשמות העמודות ב-SQL
-  const fieldMapping: { [key: string]: string } = {
-    'סטטוס': 'status',
-    'נהג': 'driver_name',
-    'שעה': 'scheduled_time',
-    'מחסן': 'warehouse_source',
-    'כתובת': 'address'
-  };
+      await supabase
+        .from('saban_master_dispatch')
+        .update({ [dbField]: value.trim() })
+        .ilike('customer_name', `%${customer.trim()}%`);
+    }
 
-  const dbField = fieldMapping[fieldLabel] || fieldLabel;
-
-  // ביצוע העדכון עם חיפוש גמיש (ilike) כדי להתגבר על חוסר ב-י' או ה'
-  const { error } = await supabase
-    .from('saban_master_dispatch')
-    .update({ [dbField]: newValue })
-    .ilike('customer_name', `%${customer}%`); // מחפש חלק מהשם, למשל "אדר בניה"
-
-  if (error) {
-    console.error("❌ שגיאת עדכון SQL:", error.message);
-  } else {
-    console.log(`✅ עודכן שדה ${dbField} לערך ${newValue} עבור ${customer}`);
-  }
-}
-    // 3. לוגיקת כתיבה ל-SQL (Insert)
+    // --- לוגיקת ביצוע CREATE ---
     const orderMatch = finalAnswer.match(/\[CREATE_ORDER:(.*?)\]/);
     if (orderMatch) {
-      const params = orderMatch[1].split('|');
-      const [customer, time, driver, warehouse, action, address] = params;
-
-      const { error } = await supabase.from('saban_master_dispatch').insert([{
-        customer_name: customer?.trim() || "לקוח כללי",
-        scheduled_time: time?.trim() || "08:00",
-        driver_name: driver?.trim() || "לא שובץ",
-        warehouse_source: warehouse?.trim() || "החרש (4)",
-        container_action: action?.trim() || "הובלה",
-        address: address?.trim() || "לא צוינה",
+      const [cust, time, driver, wh, act, addr] = orderMatch[1].split('|');
+      await supabase.from('saban_master_dispatch').insert([{
+        customer_name: cust?.trim(),
+        scheduled_time: time?.trim(),
+        driver_name: driver?.trim(),
+        warehouse_source: wh?.trim() || "החרש (4)",
         order_id_comax: `AI-${Math.floor(100000 + Math.random() * 900000)}`,
         status: (driver && driver.trim() !== 'לא שובץ') ? 'אושר להפצה' : 'פתוח',
-        scheduled_date: new Date().toISOString().split('T')[0],
-        created_by: 'SABAN_AI_BRAIN'
+        scheduled_date: new Date().toISOString().split('T')[0]
       }]);
-
-      if (error) console.error("❌ SQL Insert Failed:", error.message);
     }
 
     return NextResponse.json({ answer: finalAnswer });
-
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
