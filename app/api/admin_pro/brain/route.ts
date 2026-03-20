@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     const apiKey = process.env.GOOGLE_AI_KEY;
     
     // ✅ עדכון למודל שמופיע אצלך כזמין (3.1 Flash Lite)
-// ✅ השם המדויק לפי התיעוד המעודכן ל-2026
+    // ✅ השם המדויק לפי התיעוד המעודכן ל-2026
     const MODEL_NAME = "gemini-3.1-flash-lite-001";
     const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
 
