@@ -1,3 +1,10 @@
+"use client";
+import React, { useEffect, useState, useCallback } from 'react';
+import { getSupabase } from "@/lib/supabase";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+
 const [newCustomerPhone, setNewCustomerPhone] = useState("");
 const [newCustomerName, setNewCustomerName] = useState("");
 const [showAddCustomer, setShowAddCustomer] = useState(false);
