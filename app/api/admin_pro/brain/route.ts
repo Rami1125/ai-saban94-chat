@@ -1,73 +1,116 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// 1. יצירת Client "על-חלל" (עוקף RLS בשרת בלבד)
+/**
+ * SABAN OS PRO - V9.0 (Armor Edition)
+ * -----------------------------------
+ * - Bypass RLS: Using SUPABASE_SERVICE_ROLE_KEY
+ * - Key Rotation: Prevents 429 Errors
+ * - Wait Logic: Confirms DB update before response
+ */
+
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // 🔥 המפתח הסודי שלך ב-Vercel
+  process.env.SUPABASE_SERVICE_ROLE_KEY! // 🔥 חובה להגדיר ב-Vercel!
 );
+
+const STABLE_MODELS = ["gemini-1.5-flash", "gemini-1.5-pro"];
 
 export async function POST(req: Request) {
   try {
     const { query } = await req.json();
-    
-    // 2. ניהול מפתחות Gemini (Rotation & Fallback)
     const API_KEYS = (process.env.GOOGLE_AI_KEY_POOL || "").split(",").map(k => k.trim());
-    const MODEL = "gemini-1.5-flash"; // מודל יציב בלבד (מונע 404)
+    
+    // 1. שליפת שמות לקוחות קיימים לצורך התאמה מדויקת (Fuzzy Match Prevention)
+    const { data: currentOrders } = await supabaseAdmin
+      .from('saban_master_dispatch')
+      .select('customer_name')
+      .limit(15);
+    
+    const contextStr = currentOrders?.map(o => o.customer_name).join(", ") || "אין הזמנות";
 
-    let aiText = "";
-    let success = false;
+    const systemPrompt = `
+      אתה המוח הלוגיסטי של ח. סבן. המנהל: ראמי.
+      שמות לקוחות בסידור כרגע (חובה לדייק בשמות!): ${contextStr}
+      
+      חוקי ביצוע (חובה להחזיר תג בסוף):
+      - עדכון: [UPDATE_ORDER:לקוח|שדה|ערך] (שדה: סטטוס/נהג/שעה)
+      - יצירה: [CREATE_ORDER:לקוח|שעה|נהג|מחסן|פעולה|כתובת]
+      חתימה: ראמי, הכל מוכן לביצוע. 🦾
+    `;
 
-    for (let i = 0; i < API_KEYS.length; i++) {
-      try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEYS[i]}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: query }] }],
-            systemInstruction: { parts: [{ text: "אתה המוח של ח. סבן. לעדכון: [UPDATE_ORDER:לקוח|שדה|ערך]" }] }
-          }),
-        });
+    // 2. מנגנון Fallback & Rotation (פותר שגיאות 429)
+    let aiResponseText = "";
+    let successAI = false;
 
-        if (res.status === 429) continue; // אם המפתח חסום, דלג לבא
-        if (!res.ok) throw new Error(`Gemini Error: ${res.status}`);
+    for (const key of API_KEYS) {
+      if (successAI) break;
+      for (const model of STABLE_MODELS) {
+        try {
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ role: "user", parts: [{ text: query }] }],
+              systemInstruction: { parts: [{ text: systemPrompt }] }
+            })
+          });
 
-        const data = await res.json();
-        aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        if (aiText) { success = true; break; }
-      } catch (err) { continue; }
+          if (res.status === 429) continue; // מפתח חסום, נסה מפתח הבא
+          if (!res.ok) continue; // מודל לא קיים (404), נסה מודל הבא
+
+          const data = await res.json();
+          aiResponseText = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          if (aiResponseText) { successAI = true; break; }
+        } catch (e) { continue; }
+      }
     }
 
-    if (!success) return NextResponse.json({ answer: "ראמי, כל הקווים תפוסים. נסה בעוד דקה. 🦾" });
+    if (!successAI) return NextResponse.json({ answer: "ראמי, הקווים עמוסים מדי. נסה שוב בעוד דקה. 🦾" });
 
-    // 3. לוגיקת ביצוע חכמה (Execution Layer)
-    let executionStatus = "";
-    const updateMatch = aiText.match(/\[UPDATE_ORDER:(.*?)\|(.*?)\|(.*?)\]/);
+    // 3. לוגיקת ביצוע ב-SQL (Execution Layer)
+    let sqlReport = "";
+    const updateMatch = aiResponseText.match(/\[UPDATE_ORDER:(.*?)\|(.*?)\|(.*?)\]/);
+    const createMatch = aiResponseText.match(/\[CREATE_ORDER:(.*?)\]/);
 
+    // ביצוע עדכון (Update)
     if (updateMatch) {
-      const [_, customer, fieldLabel, newValue] = updateMatch;
+      const [_, customer, field, newValue] = updateMatch;
       const mapping: any = { 'סטטוס': 'status', 'נהג': 'driver_name', 'שעה': 'scheduled_time' };
-      const dbField = mapping[fieldLabel.trim()] || fieldLabel.trim();
+      const dbField = mapping[field.trim()] || field.trim();
 
-      // 🔥 מחכים ל-DB באמת (await)
       const { data, error } = await supabaseAdmin
         .from('saban_master_dispatch')
         .update({ [dbField]: newValue.trim() })
         .ilike('customer_name', `%${customer.trim()}%`)
         .select();
 
-      if (error) {
-        executionStatus = `❌ שגיאת SQL: ${error.message}`;
-      } else if (data && data.length > 0) {
-        executionStatus = `✅ עודכן בהצלחה ב-SQL!`;
-      } else {
-        executionStatus = `⚠️ לקוח '${customer}' לא נמצא בטבלה.`;
-      }
+      if (error) sqlReport = `❌ שגיאת SQL: ${error.message}`;
+      else if (data && data.length > 0) sqlReport = `✅ עודכן בהצלחה בסידור!`;
+      else sqlReport = `⚠️ לא נמצא לקוח בשם '${customer}' בסידור.`;
     }
 
-    // 4. החזרת תשובה רק אחרי סיום הפעולה
+    // ביצוע יצירה (Create)
+    if (createMatch) {
+      const [cust, time, driver, wh, act, addr] = createMatch[1].split('|').map(s => s.trim());
+      const { error } = await supabaseAdmin.from('saban_master_dispatch').insert([{
+        customer_name: cust,
+        scheduled_time: time,
+        driver_name: driver,
+        warehouse_source: wh || "החרש (4)",
+        container_action: act || "הובלה",
+        address: addr,
+        order_id_comax: `AI-${Math.floor(100000 + Math.random() * 900000)}`,
+        status: (driver && driver !== 'לא שובץ') ? 'אושר להפצה' : 'פתוח',
+        scheduled_date: new Date().toISOString().split('T')[0]
+      }]);
+      
+      sqlReport = error ? `❌ יצירה נכשלה: ${error.message}` : `✅ הזמנה חדשה הופיעה בלוח!`;
+    }
+
+    // 4. החזרת תשובה סופית (רק אחרי שה-SQL הסתיים)
     return NextResponse.json({ 
-      answer: `${aiText}\n\n---\n**סטטוס ביצוע:** ${executionStatus}` 
+      answer: `${aiResponseText}\n\n---\n**סינכרון SQL:** ${sqlReport}` 
     });
 
   } catch (error: any) {
