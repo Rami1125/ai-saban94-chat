@@ -7,23 +7,32 @@ const supabaseAdmin = createClient(
 );
 
 export async function POST(req: Request) {
+  const startTime = Date.now();
   try {
     const { query } = await req.json();
     const apiKey = process.env.GOOGLE_AI_KEY;
     
-    // ✅ זה השם המדויק למודל שמופיע אצלך בטבלה כפעיל (Gemini 3 Flash)
-    const MODEL_NAME = "gemini-3-flash"; 
+    // ✅ השם המדויק מהטבלה של Tier 1 ששלחת
+    // אנחנו משתמשים בגרסת ה-Flash-Lite שהיא הכי מהירה ויציבה
+    const MODEL_NAME = "gemini-3.1-flash-lite-preview"; 
     const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
 
     if (!apiKey) return NextResponse.json({ error: "Missing API Key", dbStatus: "מחובר תקין ✅" });
 
-    // פנייה למוח
+    // פנייה למוח בפורמט Tier 1
     const res = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: query }] }],
-        systemInstruction: { parts: [{ text: "אתה המוח של ח. סבן. לעדכון: [UPDATE_ORDER:לקוח|שדה|ערך]" }] }
+        // הוספת הדרכה מערכתית ישירות בתוך הגוף (תואם Tier 1)
+        systemInstruction: { 
+          parts: [{ text: "אתה המוח של ח. סבן. פקודות: [UPDATE_ORDER:לקוח|שדה|ערך]" }] 
+        },
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 800,
+        }
       }),
     });
 
@@ -31,8 +40,9 @@ export async function POST(req: Request) {
     
     if (!res.ok) {
       return NextResponse.json({ 
-        error: aiData.error?.message, 
+        error: aiData.error?.message || "Gemini API Error", 
         status: "FAILED_GEMINI",
+        tier: "Tier 1 Detected",
         dbStatus: "מחובר תקין ✅"
       });
     }
@@ -62,6 +72,7 @@ export async function POST(req: Request) {
       aiResponse: aiText,
       executionResult,
       dbStatus: "מחובר תקין ✅",
+      latency: `${Date.now() - startTime}ms`,
       success: true
     });
 
