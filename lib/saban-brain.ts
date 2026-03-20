@@ -1,54 +1,42 @@
-import { getSupabase } from "./supabase";
+// app/layout.tsx
+import type { Metadata, Viewport } from "next";
+import { Heebo } from "next/font/google";
+import "./globals.css";
+import { ClientProviders } from "@/components/ClientProviders"; // ניצור אותו מיד
 
-const DISCOVERY_MATRIX = [
-  { name: "gemini-3.1-pro-preview", versions: ["v1beta"] },
-  { name: "gemini-3.1-flash-preview", versions: ["v1beta"] },
-  { name: "gemini-2.5-pro", versions: ["v1"] }
-];
+const heebo = Heebo({ subsets: ["hebrew"], variable: "--font-heebo" });
 
-const getKeyPool = () => {
-  const pool = process.env.NEXT_PUBLIC_GOOGLE_AI_KEY_POOL || "";
-  return pool.split(",").map(key => key.trim()).filter(Boolean);
+export const metadata: Metadata = {
+  title: "סידור ח.סבן",
+  description: "מערכת ניהול ולוגיסטיקה חכמה",
+  icons: {
+    icon: 'data:image/x-icon;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A',
+    apple: "/icon-192.png",
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "סידור",
+  },
+  manifest: "/manifest.json",
 };
 
-export const SabanBrain = {
-  // פונקציית העל לשאילתות מורכבות
-  ask: async (userPrompt: string) => {
-    const supabase = getSupabase();
-    const keys = getKeyPool();
-    if (keys.length === 0) return "שגיאה: חסר מפתח API ב-Pool";
-
-    // שליפת חוקים בזמן אמת
-    const { data: rules } = await supabase.from('saban_brain_rules').select('*').eq('is_active', true);
-    const systemRules = rules?.map(r => `- ${r.rule_name}: ${r.rule_description}`).join("\n") || "";
-
-    const finalPrompt = `
-      אתה המוח התפעולי של ח.סבן. 
-      הנחיות עבודה (ספר חוקים):
-      ${systemRules}
-      
-      משימה נוכחית: ${userPrompt}
-      ענה בצורה מקצועית, תמציתית ובשפה של מנהל עבודה (אח/שותף).
-    `;
-
-    for (const key of keys) {
-      for (const model of DISCOVERY_MATRIX) {
-        try {
-          const response = await fetch(`https://generativelanguage.googleapis.com/${model.versions[0]}/models/${model.name}:generateContent?key=${key}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: finalPrompt }] }] })
-          });
-          const data = await response.json();
-          if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
-            const aiText = data.candidates[0].content.parts[0].text;
-            // תיעוד היסטורי
-            await supabase.from('saban_brain_history').insert([{ user_query: userPrompt, ai_response: aiText, model_used: model.name }]);
-            return aiText;
-          }
-        } catch (e) { continue; }
-      }
-    }
-    return "אח שלי, יש עומס על המערכת. נסה שוב בעוד רגע.";
-  }
+export const viewport: Viewport = {
+  themeColor: "#0B2C63",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="he" dir="rtl">
+      <body className={`${heebo.variable} font-sans antialiased bg-slate-50`}>
+        <ClientProviders>
+          {children}
+        </ClientProviders>
+      </body>
+    </html>
+  );
+}
