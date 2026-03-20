@@ -2,11 +2,10 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 /**
- * Saban OS V57.0 - Discovery Core Brain
+ * Saban OS V57.1 - Execution Core Brain
  * -------------------------------------------
- * - Discovery Mode: Automatically probes v1/v1beta and various model names.
- * - Resilience: Instant key rotation on 429 and intelligent skip on 404.
- * - Context: Full SQL Cart & Inventory integration.
+ * - Logistics: Auto-inserts to saban_requests & inventory_transfers.
+ * - Discovery Mode: Robust key rotation & model probing.
  */
 
 const supabase = createClient(
@@ -14,7 +13,6 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// מטריצת המודלים לסריקה (ממויינת לפי מהירות ויציבות)
 const DISCOVERY_MATRIX = [
   { name: "gemini-2.0-flash-lite", versions: ["v1beta", "v1"] },
   { name: "gemini-1.5-flash-002", versions: ["v1", "v1beta"] },
@@ -28,7 +26,7 @@ export async function POST(req: Request) {
     const { query, history, customerId } = await req.json();
     if (!query) return NextResponse.json({ error: "Missing query" }, { status: 400 });
 
-    // 1. שליפת קונטקסט (זהה ל-V56)
+    // 1. שליפת קונטקסט (מלאי, סל ופרופיל)
     const [inventoryRes, cartRes, profileRes] = await Promise.all([
       supabase.from('inventory').select('*').or(`product_name.ilike.%${query}%,sku.ilike.%${query}%`).limit(3),
       supabase.from('shopping_carts').select('*').eq('user_id', customerId),
@@ -44,13 +42,18 @@ export async function POST(req: Request) {
       פרויקט: ${profile?.main_project || 'כללי'}.
       מצב סל ב-SQL: ${cartContext}.
 
-      חוקי הזרקה (DNA):
-      - מוצר: [GALLERY: url] [QUICK_ADD:SKU].
-      - אם בסל: "אחי, כבר דאגנו לזה בסל...".
+      יכולות ביצוע (DNA):
+      1. פתיחת הזמנה: אם המשתמש מבקש לפתוח הזמנה/סידור, החזר בתגובה: [CREATE_ORDER:customer_name|hour|driver_name].
+      2. העברה בין סניפים: אם מבקשים להעביר סחורה, החזר: [TRANSFER:item_name|qty|from_branch|to_branch].
+      3. הזרקת מוצר: [GALLERY: url] [QUICK_ADD:SKU].
+
+      חוקים:
+      - אם המוצר כבר בסל: "אחי, כבר דאגנו לזה בסל...".
+      - ענה בעברית חדה, מקצועית וישירה.
       חתימה: ראמי, הכל מוכן לביצוע. 🦾
     `.trim();
 
-    // 2. הכנת בריכת מפתחות נקייה
+    // 2. הכנת בריכת מפתחות
     const apiKeys = (process.env.GOOGLE_AI_KEY_POOL || "")
       .split(",")
       .map(k => k.trim())
@@ -59,19 +62,15 @@ export async function POST(req: Request) {
     let finalAnswer = "";
     let success = false;
 
-    // 3. אלגוריתם הזרקה רב-שכבתי (Discovery Loop)
+    // 3. Discovery Loop (רוטציה חכמה)
     for (const entry of DISCOVERY_MATRIX) {
       if (success) break;
-
       for (const version of entry.versions) {
         if (success) break;
-
         for (const key of apiKeys) {
           if (success) break;
-
           try {
             const url = `https://generativelanguage.googleapis.com/${version}/models/${entry.name}:generateContent?key=${key}`;
-            
             const res = await fetch(url, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -86,31 +85,48 @@ export async function POST(req: Request) {
               const data = await res.json();
               finalAnswer = data.candidates?.[0]?.content?.parts?.[0]?.text;
               if (finalAnswer) {
-                console.log(`Saban Brain Discovery: Worked with ${entry.name} (${version})`);
                 success = true;
                 break;
               }
-            } else if (res.status === 429) {
-              console.warn(`Saban Brain: Key ***${key.slice(-4)} Quota Exceeded. Rotating...`);
-              continue; // מנסה מפתח אחר לאותו מודל
-            } else if (res.status === 404) {
-              // המודל לא קיים בגרסה הזו - דלג לגרסה/מודל הבא
-              break; 
-            } else {
-              const errJson = await res.json();
-              console.error(`Saban Brain: ${entry.name} Status ${res.status}:`, errJson.error?.message);
-            }
-          } catch (e) {
-            continue;
-          }
+            } else if (res.status === 429) continue;
+            else if (res.status === 404) break;
+          } catch (e) { continue; }
         }
       }
     }
 
     if (!success) {
-      return NextResponse.json({ 
-answer: "ראמי אחי, יש כרגע 'חסימת עורקים' במנועי ה-AI העולמיים. סרקתי את כל הנתיבים והם עמוסים. נסה לשלוח שוב בעוד 10 שניות, אני מאפס את המערכת. 🦾"    
-      });
+      return NextResponse.json({ answer: "ראמי אחי, יש כרגע עומס במנועי ה-AI. נסה שוב בעוד כמה שניות. 🦾" });
+    }
+
+    // 4. לוגיקת ביצוע (Execution Logic) - כתיבה לטבלאות SQL
+    
+    // א. זיהוי פתיחת הזמנה
+    const orderMatch = finalAnswer.match(/\[CREATE_ORDER:(.*?)\|(.*?)\|(.*?)\]/);
+    if (orderMatch) {
+      const [_, customer, hour, driver] = orderMatch;
+      await supabase.from('saban_requests').insert([{
+        customer_name: customer.trim(),
+        scheduled_hour: hour.trim(),
+        driver_name: driver.trim(),
+        status: 'pending',
+        doc_number: `AI-${Math.floor(1000 + Math.random() * 9000)}`,
+        created_at: new Date()
+      }]);
+    }
+
+    // ב. זיהוי העברה בין סניפים
+    const transferMatch = finalAnswer.match(/\[TRANSFER:(.*?)\|(.*?)\|(.*?)\|(.*?)\]/);
+    if (transferMatch) {
+      const [_, item, qty, fromB, toB] = transferMatch;
+      await supabase.from('inventory_transfers').insert([{
+        item_name: item.trim(),
+        quantity: parseInt(qty),
+        from_branch: fromB.trim(),
+        to_branch: toB.trim(),
+        status: 'scheduled',
+        created_at: new Date()
+      }]);
     }
 
     return NextResponse.json({ answer: finalAnswer });
