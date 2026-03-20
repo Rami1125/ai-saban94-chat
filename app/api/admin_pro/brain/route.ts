@@ -6,93 +6,85 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-const DISCOVERY_MATRIX = [
-  { name: "gemini-2.0-flash-lite", versions: ["v1beta", "v1"] },
-  { name: "gemini-1.5-flash-002", versions: ["v1"] }
-];
-
 export async function POST(req: Request) {
+  let debugLog = ""; // צובר לוגים להצגה למשתמש
+  
   try {
-    const { query, history, customerId } = await req.json();
+    const { query } = await req.json();
 
-    const { data: allOrders } = await supabase
-      .from('saban_master_dispatch')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    const ordersContext = allOrders?.map(o => 
-      `[${o.scheduled_time} | ${o.customer_name} | נהג: ${o.driver_name} | סטטוס: ${o.status}]`
-    ).join("\n") || "אין הזמנות";
+    // 1. שליפת קונטקסט (בשביל שהמוח יכיר את השמות המדויקים ב-SQL)
+    const { data: currentOrders } = await supabase.from('saban_master_dispatch').select('customer_name, status, scheduled_time').limit(10);
+    const contextStr = currentOrders?.map(o => `${o.customer_name} (${o.status})`).join(", ") || "אין הזמנות";
 
     const systemPrompt = `
-      אתה המוח של ח. סבן. המנהל: ראמי.
-      מצב נוכחי: ${ordersContext}
-      חוקים: 
-      1. פתיחה: [CREATE_ORDER:לקוח|שעה|נהג|מחסן|פעולה|כתובת]
-      2. עדכון: [UPDATE_ORDER:לקוח|שדה|ערך] (שדה: סטטוס/נהג/שעה)
-      חתימה: ראמי, הכל מוכן לביצוע. 🦾
-    `.trim();
+      אתה המוח של ח. סבן. 
+      הזמנות קיימות ב-SQL (חובה להשתמש בשמות אלו בדיוק!): ${contextStr}
+      
+      חוקי ביצוע:
+      - לעדכון: [UPDATE_ORDER:שם לקוח מדויק|שדה|ערך]
+      - השדות המותרים: סטטוס, נהג, שעה, מחסן.
+      - דוגמה: [UPDATE_ORDER:א.מ. אדר בניה|סטטוס|בביצוע]
+    `;
 
-    let finalAnswer = "";
-    let success = false;
-    const apiKeys = (process.env.GOOGLE_AI_KEY_POOL || "").split(",").map(k => k.trim());
+    // 2. קריאה ל-Gemini (מקוצר לצורך הדוגמה, השתמש בלוגיקת ה-Discovery שלך)
+    const apiKeys = (process.env.GOOGLE_AI_KEY_POOL || "").split(",");
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKeys[0].trim()}`;
+    
+    const aiRes = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: query }] }],
+        systemInstruction: { parts: [{ text: systemPrompt }] }
+      })
+    });
 
-    for (const entry of DISCOVERY_MATRIX) {
-      if (success) break;
-      for (const key of apiKeys) {
-        try {
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/${entry.name}:generateContent?key=${key}`;
-          const res = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ role: "user", parts: [{ text: query }] }],
-              systemInstruction: { parts: [{ text: systemPrompt }] },
-              generationConfig: { temperature: 0.1 }
-            })
-          });
-          if (res.ok) {
-            const data = await res.json();
-            finalAnswer = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (finalAnswer) { success = true; break; }
-          }
-        } catch (e) { continue; }
-      }
-    }
+    const aiData = await aiRes.json();
+    let finalAnswer = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
-    if (!success) return NextResponse.json({ answer: "ראמי, המוח עמוס. נסה שוב. 🦾" });
-
-    // --- לוגיקת ביצוע UPDATE ---
+    // 3. לוגיקת ה-Update עם דיאגנוסטיקה
     const updateMatch = finalAnswer.match(/\[UPDATE_ORDER:(.*?)\]/);
+    
     if (updateMatch) {
-      const [customer, field, value] = updateMatch[1].split('|');
+      debugLog += "🔍 זיהיתי פקודת UPDATE מהמוח...\n";
+      const [customer, field, value] = updateMatch[1].split('|').map(s => s.trim());
+      
       const fieldMapping: any = { 'סטטוס': 'status', 'נהג': 'driver_name', 'שעה': 'scheduled_time' };
-      const dbField = fieldMapping[field.trim()] || field.trim();
+      const dbField = fieldMapping[field] || field;
 
-      await supabase
+      debugLog += `⚙️ מנסה לעדכן את השדה '${dbField}' לערך '${value}' עבור הלקוח '${customer}'\n`;
+
+      // בדיקה אם הלקוח בכלל קיים לפני העדכון
+      const { data: checkCust } = await supabase
         .from('saban_master_dispatch')
-        .update({ [dbField]: value.trim() })
-        .ilike('customer_name', `%${customer.trim()}%`);
+        .select('id, customer_name')
+        .ilike('customer_name', `%${customer}%`);
+
+      if (!checkCust || checkCust.length === 0) {
+        debugLog += `❌ שגיאה: לא נמצא לקוח בשם '${customer}' ב-SQL! וודא שהשם מדויק.\n`;
+      } else {
+        debugLog += `✅ נמצא לקוח תואם: ${checkCust[0].customer_name}\n`;
+        
+        const { error: updateErr } = await supabase
+          .from('saban_master_dispatch')
+          .update({ [dbField]: value })
+          .eq('id', checkCust[0].id);
+
+        if (updateErr) {
+          debugLog += `❌ שגיאת SQL במעמד העדכון: ${updateErr.message}\n`;
+        } else {
+          debugLog += `🚀 העדכון בוצע בהצלחה בטבלה!\n`;
+        }
+      }
+    } else {
+      debugLog += "⚠️ המוח לא הוציא פקודת [UPDATE_ORDER], הוא רק ענה בטקסט.\n";
     }
 
-    // --- לוגיקת ביצוע CREATE ---
-    const orderMatch = finalAnswer.match(/\[CREATE_ORDER:(.*?)\]/);
-    if (orderMatch) {
-      const [cust, time, driver, wh, act, addr] = orderMatch[1].split('|');
-      await supabase.from('saban_master_dispatch').insert([{
-        customer_name: cust?.trim(),
-        scheduled_time: time?.trim(),
-        driver_name: driver?.trim(),
-        warehouse_source: wh?.trim() || "החרש (4)",
-        order_id_comax: `AI-${Math.floor(100000 + Math.random() * 900000)}`,
-        status: (driver && driver.trim() !== 'לא שובץ') ? 'אושר להפצה' : 'פתוח',
-        scheduled_date: new Date().toISOString().split('T')[0]
-      }]);
-    }
+    // החזרת התשובה יחד עם הלוגים לראמי
+    const combinedAnswer = `${finalAnswer}\n\n---\n**דיאגנוסטיקה (ראמי):**\n${debugLog}`;
+    return NextResponse.json({ answer: combinedAnswer });
 
-    return NextResponse.json({ answer: finalAnswer });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: `שגיאת מערכת: ${error.message}` }, { status: 500 });
   }
 }
