@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Truck, Plus, ChevronDown, Trash2, X, Send, 
   Clock, Warehouse, MapPin, Share2, UserCheck, HardHat, Recycle, Menu, Edit2, Calendar, RefreshCw, CheckCircle2,
-  Brain, Loader2 // הוספתי אייקונים למוח ולטעינה
+  Brain, Loader2 
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 
@@ -26,9 +26,8 @@ const statusOptions = [
 ];
 
 const teamMembers = ['ראמי', 'יואב', 'איציק'];
-const containerActions = ['הצבה', 'החלפה', 'הוצאה', 'הובלה'];
-const wasteWarehouses = ['שארק (30)', 'כראדי (32)', 'שי שרון (40)'];
 const standardWarehouses = ['התלמיד (1)', 'החרש (4)'];
+const wasteWarehouses = ['שארק (30)', 'כראדי (32)', 'שי שרון (40)'];
 
 const timeSlots = Array.from({ length: 24 }, (_, i) => {
   const h = Math.floor(i / 2) + 6;
@@ -43,7 +42,7 @@ export default function SabanMasterDispatch() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<any>(null);
   
-  // 🔥 משתנים חדשים למוח של ח. סבן
+  // 🔥 סנכרון AI Brain
   const [aiInput, setAiInput] = useState("");
   const [messages, setMessages] = useState<any[]>([]);
   const [isTyping, setIsTyping] = useState(false);
@@ -75,7 +74,7 @@ export default function SabanMasterDispatch() {
     }
   }, [supabase]);
 
-  // 🔥 פונקציית ה-AI המתוקנת
+  // 🔥 פקודה לשרת - שיטה משוריינת
   const handleAiCommand = async () => {
     if (!aiInput.trim() || isTyping) return;
     
@@ -91,20 +90,20 @@ export default function SabanMasterDispatch() {
         body: JSON.stringify({ query: userMsg })
       });
 
+      if (!res.ok) throw new Error("API Route Failure");
+
       const data = await res.json();
       
       if (data.answer) {
         setMessages(prev => [...prev, { role: 'ai', content: data.answer }]);
+        // אם המוח אישר ביצוע ב-SQL, נרענן את הלוח מיד
         if (data.answer.includes("✅")) {
-          fetchData(); // ריענון אוטומטי של הלוח אם בוצע שינוי
-          toast.success("סידור עודכן בהצלחה! 🦾");
+          fetchData(); 
+          toast.success("סידור סונכרן בהצלחה 🦾");
         }
-      } else {
-        throw new Error(data.error || "שגיאה בשרת");
       }
     } catch (e) {
-      console.error("AI Error:", e);
-      toast.error("נתק בתקשורת מול המוח");
+      toast.error("נתק מול המוח בשרת");
     } finally {
       setIsTyping(false);
     }
@@ -117,10 +116,7 @@ export default function SabanMasterDispatch() {
   }, [fetchData, supabase]);
 
   const generateWAMessage = (order: any) => {
-    const isMobile = typeof navigator !== 'undefined' && /iPhone|Android/i.test(navigator.userAgent);
-    const actionInfo = order.driver_name === 'פינוי פסולת' ? `\n♻️ *פעולה:* ${order.container_action}` : '';
-    const text = `📦 *סידור ח. סבן*\n---------------------------\n👤 *לקוח:* ${order.customer_name}\n🚦 *סטטוס:* ${order.status}\n🚛 *נהג:* ${order.driver_name}${actionInfo}\n⏰ *שעה:* ${order.scheduled_time}\n---------------------------\n_מעדכן: ${order.created_by}_`;
-    return text;
+    return `📦 *סידור ח. סבן*\n---------------------------\n👤 *לקוח:* ${order.customer_name}\n🚦 *סטטוס:* ${order.status}\n🚛 *נהג:* ${order.driver_name}\n⏰ *שעה:* ${order.scheduled_time}\n---------------------------\n_מעדכן: ${order.created_by}_`;
   };
 
   const saveOrder = async () => {
@@ -131,14 +127,12 @@ export default function SabanMasterDispatch() {
       : await supabase.from('saban_master_dispatch').insert([payload]);
 
     if (!error) {
-      toast.success(editingOrder ? "עודכן בהצלחה!" : "הזמנה נשמרה בסידור!");
+      toast.success("נשמר בסידור!");
       if (!editingOrder) window.open(`https://wa.me/?text=${encodeURIComponent(generateWAMessage(form))}`, '_blank');
       setShowForm(false);
       setEditingOrder(null);
       setForm({ ...form, customer_name: '', order_id_comax: '', address: '', status: 'פתוח' });
       fetchData();
-    } else {
-      toast.error("שגיאה בשמירה ל-SQL");
     }
   };
 
@@ -152,7 +146,7 @@ export default function SabanMasterDispatch() {
     return statusOptions.find(s => s.value === status)?.color || 'bg-slate-100 text-slate-700';
   };
 
-  if (loading) return <div className="h-screen flex items-center justify-center font-black animate-pulse text-[#0B2C63] italic text-2xl uppercase tracking-tighter">Saban OS - Syncing...</div>;
+  if (loading) return <div className="h-screen flex items-center justify-center font-black animate-pulse text-[#0B2C63] italic text-2xl uppercase">Syncing Saban OS...</div>;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans text-right" dir="rtl">
@@ -164,18 +158,18 @@ export default function SabanMasterDispatch() {
           {isMenuOpen ? <X size={28}/> : <Menu size={28}/>}
         </button>
         <div className="text-center">
-            <h1 className="text-xl font-black italic tracking-tighter leading-tight text-white uppercase">ח.סבן</h1>
+            <h1 className="text-xl font-black italic tracking-tighter text-white uppercase">ח.סבן</h1>
             <p className="text-[10px] font-bold text-blue-300 uppercase tracking-widest">Master Dispatch</p>
         </div>
         <div className="flex gap-2">
           <Button onClick={() => setShowAiChat(!showAiChat)} className="bg-white/10 border-none rounded-xl text-white hover:bg-white/20">
             <Brain size={20} className={isTyping ? "animate-bounce" : ""} />
           </Button>
-          <Button onClick={() => { setEditingOrder(null); setShowForm(true); }} className="bg-blue-600 rounded-xl font-black h-10 px-4 border-none shadow-lg text-white">חדש +</Button>
+          <Button onClick={() => { setEditingOrder(null); setShowForm(true); }} className="bg-blue-600 rounded-xl font-black h-10 px-4 border-none text-white">חדש +</Button>
         </div>
         
         {isMenuOpen && (
-          <div className="absolute top-24 right-6 left-6 bg-white rounded-[2rem] shadow-2xl p-4 border border-slate-100 animate-in slide-in-from-top-4">
+          <div className="absolute top-24 right-6 left-6 bg-white rounded-[2rem] shadow-2xl p-4 border border-slate-100">
              <button onClick={shareMorningReport} className="w-full flex items-center gap-3 p-5 hover:bg-slate-50 rounded-2xl text-[#0B2C63] font-black border-none text-right transition-colors cursor-pointer">
                 <Share2 size={22} className="text-blue-600"/> שלח דוח סידור בוקר
              </button>
@@ -183,18 +177,17 @@ export default function SabanMasterDispatch() {
         )}
       </div>
 
+      {/* Main Grid */}
       <div className="max-w-[1800px] mx-auto px-4 grid grid-cols-1 lg:grid-cols-3 gap-8">
         {drivers.map((driver) => (
           <div key={driver.id} className="space-y-6">
             <Card className="bg-white p-6 rounded-[2.5rem] shadow-xl border-none relative overflow-hidden">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 mb-6 text-right">
                     <img src={driver.img} className="w-16 h-16 rounded-2xl object-cover shadow-lg border-2 border-white" />
                     <div>
-                      <h2 className="text-2xl font-black text-slate-800 leading-tight">{driver.name}</h2>
+                      <h2 className="text-2xl font-black text-slate-800">{driver.name}</h2>
                       <Badge className="bg-slate-50 text-slate-500 border-none font-bold text-[10px] uppercase">{driver.defaultType}</Badge>
                     </div>
-                  </div>
                 </div>
 
                 <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
@@ -202,7 +195,7 @@ export default function SabanMasterDispatch() {
                     const hasOrder = orders.some(o => o.driver_name === driver.name && o.scheduled_time === time);
                     return (
                       <div key={time} onClick={() => { setForm({...form, driver_name: driver.name, scheduled_time: time}); setEditingOrder(null); setShowForm(true); }}
-                           className="flex flex-col items-center gap-2 cursor-pointer group min-w-[50px]">
+                           className="flex flex-col items-center gap-2 cursor-pointer min-w-[50px]">
                         <div className={`w-12 h-16 rounded-2xl border-2 flex items-center justify-center transition-all ${hasOrder ? 'bg-[#0B2C63] border-blue-400 shadow-md' : 'bg-slate-50 border-slate-100 hover:border-blue-300'}`}>
                           {hasOrder ? <Truck size={20} className="text-white animate-pulse" /> : <Plus size={16} className="text-slate-300" />}
                         </div>
@@ -217,14 +210,12 @@ export default function SabanMasterDispatch() {
               {orders.filter(o => o.driver_name === driver.name).map((order) => (
                 <Card key={order.id} className="p-6 rounded-[2rem] bg-white shadow-lg border-none relative group border-r-8 border-r-[#0B2C63]">
                     <div className="flex justify-between items-start mb-4">
-                        <div className="flex items-center gap-4">
-                            <div className="bg-[#0B2C63] text-white px-3 py-2 rounded-xl text-xs font-black italic shadow-inner">{order.scheduled_time}</div>
-                            <div className="text-right">
+                        <div className="flex items-center gap-4 text-right">
+                            <div className="bg-[#0B2C63] text-white px-3 py-2 rounded-xl text-xs font-black shadow-inner">{order.scheduled_time}</div>
+                            <div>
                                 <div className="font-black text-slate-800 text-xl leading-tight">{order.customer_name}</div>
                                 <div className="flex items-center gap-2 mt-1">
-                                    <Badge className={`border-none font-black text-[9px] uppercase px-2 py-0.5 ${getStatusStyle(order.status)}`}>
-                                        {order.status}
-                                    </Badge>
+                                    <Badge className={`border-none font-black text-[9px] uppercase px-2 py-0.5 ${getStatusStyle(order.status)}`}>{order.status}</Badge>
                                     <span className="text-slate-400 font-bold text-[10px]">#{order.order_id_comax}</span>
                                 </div>
                             </div>
@@ -248,22 +239,22 @@ export default function SabanMasterDispatch() {
         ))}
       </div>
 
-      {/* 🔥 ממשק הצאט של המוח - Saban Brain Interface */}
+      {/* 🔥 Saban Brain Chat UI */}
       {showAiChat && (
         <div className="fixed bottom-24 left-6 right-6 z-[90] animate-in slide-in-from-bottom-8">
           <Card className="bg-white/95 backdrop-blur-xl border-2 border-blue-100 rounded-[2.5rem] shadow-2xl p-6 h-[400px] flex flex-col">
             <div className="flex justify-between items-center mb-4 border-b pb-4 border-slate-100">
               <div className="flex items-center gap-3">
                 <div className="bg-blue-600 p-2 rounded-xl text-white"><Brain size={20} /></div>
-                <h3 className="font-black text-[#0B2C63] italic">SABAN BRAIN V1</h3>
+                <h3 className="font-black text-[#0B2C63] italic">SABAN BRAIN OS</h3>
               </div>
-              <button onClick={() => setShowAiChat(false)} className="bg-slate-100 p-1 rounded-full border-none text-slate-400"><X size={20}/></button>
+              <button onClick={() => setShowAiChat(false)} className="bg-slate-100 p-1 rounded-full border-none text-slate-400 cursor-pointer"><X size={20}/></button>
             </div>
             
             <div className="flex-1 overflow-y-auto space-y-4 mb-4 p-2 no-scrollbar text-right">
               {messages.length === 0 && (
                 <div className="text-center text-slate-400 font-bold text-sm py-10 italic">
-                  ראמי, אני מחכה לפקודה. נסה: "תשנה סטטוס לאדר בניה ל'בביצוע'"
+                  ראמי, מה הפקודה?
                 </div>
               )}
               {messages.map((m, i) => (
@@ -276,7 +267,7 @@ export default function SabanMasterDispatch() {
               {isTyping && (
                 <div className="flex justify-end">
                   <div className="bg-blue-50 text-blue-600 p-4 rounded-3xl rounded-br-none animate-pulse flex items-center gap-2 font-black italic">
-                    <Loader2 size={16} className="animate-spin" /> מסנכרן SQL...
+                    <Loader2 size={16} className="animate-spin" /> מעדכן SQL...
                   </div>
                 </div>
               )}
@@ -303,14 +294,14 @@ export default function SabanMasterDispatch() {
         <div className="fixed inset-0 bg-[#0B2C63]/95 backdrop-blur-md z-[100] flex items-center justify-center p-4">
           <Card className="bg-white w-full max-w-lg rounded-[3rem] p-10 space-y-6 shadow-2xl border-none text-right overflow-y-auto max-h-[90vh]">
             <div className="flex justify-between items-center mb-2">
-              <h2 className="text-2xl font-black text-[#0B2C63] italic uppercase border-r-4 border-blue-600 pr-3">{editingOrder ? 'עריכת משימה' : 'הזמנה חדשה'}</h2>
-              <button onClick={() => { setShowForm(false); setEditingOrder(null); }} className="bg-slate-100 p-2 rounded-full border-none text-slate-400 hover:text-black transition-colors"><X size={24}/></button>
+              <h2 className="text-2xl font-black text-[#0B2C63] italic border-r-4 border-blue-600 pr-3">{editingOrder ? 'עריכה' : 'חדש'}</h2>
+              <button onClick={() => { setShowForm(false); setEditingOrder(null); }} className="bg-slate-100 p-2 rounded-full border-none text-slate-400 cursor-pointer"><X size={24}/></button>
             </div>
             
-            <div className="grid grid-cols-3 gap-2 mb-2">
+            <div className="grid grid-cols-3 gap-2">
                 {teamMembers.map(m => (
                     <button key={m} onClick={() => setForm({...form, created_by: m})}
-                            className={`py-3 rounded-2xl text-[10px] font-black border-none transition-all cursor-pointer ${form.created_by === m ? 'bg-blue-600 text-white shadow-lg scale-105' : 'bg-slate-100 text-slate-400'}`}>
+                            className={`py-3 rounded-2xl text-[10px] font-black border-none transition-all cursor-pointer ${form.created_by === m ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}>
                         {m}
                     </button>
                 ))}
@@ -318,45 +309,45 @@ export default function SabanMasterDispatch() {
 
             <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1 text-right">
-                    <label className="text-[10px] font-black text-slate-400 mr-2 uppercase tracking-widest">תאריך</label>
-                    <input type="date" value={form.scheduled_date} onChange={e => setForm({...form, scheduled_date: e.target.value})} className="w-full h-12 px-4 rounded-xl border-2 border-slate-100 font-bold outline-none focus:border-blue-500 text-right" />
+                    <label className="text-[10px] font-black text-slate-400 mr-2 uppercase">תאריך</label>
+                    <input type="date" value={form.scheduled_date} onChange={e => setForm({...form, scheduled_date: e.target.value})} className="w-full h-12 px-4 rounded-xl border-2 border-slate-100 font-bold outline-none text-right" />
                 </div>
                 <div className="space-y-1 text-right">
-                    <label className="text-[10px] font-black text-slate-400 mr-2 uppercase tracking-widest">שעה</label>
-                    <select value={form.scheduled_time} onChange={e => setForm({...form, scheduled_time: e.target.value})} className="w-full h-12 px-4 rounded-xl border-2 border-slate-100 font-bold bg-white outline-none focus:border-blue-500 text-right">
+                    <label className="text-[10px] font-black text-slate-400 mr-2 uppercase">שעה</label>
+                    <select value={form.scheduled_time} onChange={e => setForm({...form, scheduled_time: e.target.value})} className="w-full h-12 px-4 rounded-xl border-2 border-slate-100 font-bold bg-white text-right">
                         {timeSlots.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                 </div>
             </div>
 
             <div className="space-y-2 text-right">
-                <label className="text-[10px] font-black text-blue-600 mr-2 uppercase tracking-widest">סטטוס לוגיסטי</label>
-                <select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-blue-100 font-black text-right outline-none focus:border-blue-500 bg-white shadow-sm">
+                <label className="text-[10px] font-black text-blue-600 mr-2 uppercase">סטטוס</label>
+                <select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-blue-100 font-black text-right outline-none bg-white">
                     {statusOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                 </select>
             </div>
 
-            <input placeholder="שם הלקוח" value={form.customer_name} onChange={e => setForm({...form, customer_name: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-slate-100 font-black text-lg text-right outline-none focus:border-blue-500 transition-all focus:bg-blue-50/30" />
-            <input placeholder="מספר קומקס" value={form.order_id_comax} onChange={e => setForm({...form, order_id_comax: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-slate-100 font-black text-lg text-right outline-none focus:border-blue-500 transition-all focus:bg-blue-50/30" />
-            <input placeholder="כתובת אספקה" value={form.address} onChange={e => setForm({...form, address: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-slate-100 font-bold text-right outline-none focus:border-blue-500 transition-all focus:bg-blue-50/30" />
+            <input placeholder="שם הלקוח" value={form.customer_name} onChange={e => setForm({...form, customer_name: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-slate-100 font-black text-lg text-right outline-none" />
+            <input placeholder="קומקס" value={form.order_id_comax} onChange={e => setForm({...form, order_id_comax: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-slate-100 font-black text-lg text-right outline-none" />
+            <input placeholder="כתובת" value={form.address} onChange={e => setForm({...form, address: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-slate-100 font-bold text-right outline-none" />
 
             <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2 text-right">
                     <label className="text-[10px] font-black text-slate-400 mr-2 uppercase">נהג</label>
-                    <select value={form.driver_name} onChange={e => setForm({...form, driver_name: e.target.value})} className="w-full h-14 px-4 rounded-xl border-2 border-slate-100 font-bold text-right outline-none focus:border-blue-500 bg-white">
+                    <select value={form.driver_name} onChange={e => setForm({...form, driver_name: e.target.value})} className="w-full h-14 px-4 rounded-xl border-2 border-slate-100 font-bold text-right outline-none bg-white">
                         {drivers.map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
                     </select>
                 </div>
                 <div className="space-y-2 text-right">
                     <label className="text-[10px] font-black text-slate-400 mr-2 uppercase">מחסן</label>
-                    <select value={form.warehouse_source} onChange={e => setForm({...form, warehouse_source: e.target.value})} className="w-full h-14 px-4 rounded-xl border-2 border-slate-100 font-bold text-right outline-none focus:border-blue-500 bg-white">
+                    <select value={form.warehouse_source} onChange={e => setForm({...form, warehouse_source: e.target.value})} className="w-full h-14 px-4 rounded-xl border-2 border-slate-100 font-bold text-right outline-none bg-white">
                         {standardWarehouses.concat(wasteWarehouses).map(w => <option key={w} value={w}>{w}</option>)}
                     </select>
                 </div>
             </div>
 
-            <Button onClick={saveOrder} className="w-full h-18 bg-green-600 hover:bg-green-700 text-white rounded-[2rem] font-black text-xl shadow-xl transition-all border-none active:scale-95 shadow-green-200 cursor-pointer">
-              {editingOrder ? 'עדכן שינויים ✍️' : 'שמור ושגר לוואטסאפ 🚀'}
+            <Button onClick={saveOrder} className="w-full h-18 bg-green-600 hover:bg-green-700 text-white rounded-[2rem] font-black text-xl shadow-xl border-none cursor-pointer">
+              {editingOrder ? 'עדכן ✍️' : 'שמור 🚀'}
             </Button>
           </Card>
         </div>
