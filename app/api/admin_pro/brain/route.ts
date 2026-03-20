@@ -12,24 +12,23 @@ export async function POST(req: Request) {
     const { query } = await req.json();
     const apiKey = process.env.GOOGLE_AI_KEY;
     
-    // ✅ שינוי לכתובת V1 יציבה (פותר את שגיאת ה-Not Found)
-    const MODEL_NAME = "gemini-1.5-flash";
-    const API_URL = `https://generativelanguage.googleapis.com/v1/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
+    // ✅ עדכון למודל שמופיע אצלך כזמין (3.1 Flash Lite)
+    const MODEL_NAME = "gemini-3.1-flash-lite"; 
+    const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
 
-    if (!apiKey) return NextResponse.json({ error: "מפתח API חסר ב-Vercel", status: "FAILED_ENV" });
+    if (!apiKey) return NextResponse.json({ error: "Missing API Key", status: "FAILED_ENV" });
 
     // בדיקת קשר ל-SQL
     const { error: dbError } = await supabaseAdmin.from('saban_master_dispatch').select('customer_name').limit(1);
     const dbStatus = dbError ? `שגיאה: ${dbError.message}` : "מחובר תקין ✅";
 
-    // פנייה למוח בכתובת המעודכנת
+    // פנייה למוח
     const res = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: query }] }],
-        // הערה: ב-v1 הפורמט של system_instruction מעט שונה, נכניס אותו כחלק מהפרומפט לביטחון
-        generationConfig: { temperature: 0.1 }
+        systemInstruction: { parts: [{ text: "אתה המוח של ח. סבן. פקודות: [UPDATE_ORDER:לקוח|שדה|ערך]" }] }
       }),
     });
 
@@ -38,10 +37,9 @@ export async function POST(req: Request) {
 
     const aiText = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
     
-    // בדיקת פקודה וביצוע ב-SQL
+    // ביצוע ב-SQL
     let executionResult = "לא זוהתה פקודה";
     const updateMatch = aiText.match(/\[UPDATE_ORDER:(.*?)\]/);
-    
     if (updateMatch) {
       const [customer, field, value] = updateMatch[1].split('|').map(s => s.trim());
       const mapping: any = { 'סטטוס': 'status', 'נהג': 'driver_name', 'שעה': 'scheduled_time' };
@@ -53,9 +51,9 @@ export async function POST(req: Request) {
         .ilike('customer_name', `%${customer}%`)
         .select();
 
-      if (updateError) executionResult = `❌ כשל בעדכון: ${updateError.message}`;
+      if (updateError) executionResult = `❌ כשל: ${updateError.message}`;
       else if (updateData && updateData.length > 0) executionResult = `✅ בוצע בהצלחה ללקוח: ${customer}`;
-      else executionResult = `⚠️ לקוח '${customer}' לא נמצא בטבלה.`;
+      else executionResult = `⚠️ לקוח '${customer}' לא נמצא.`;
     }
 
     return NextResponse.json({
@@ -67,6 +65,6 @@ export async function POST(req: Request) {
     });
 
   } catch (error: any) {
-    return NextResponse.json({ error: error.message, status: "CRITICAL_ERROR" }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
