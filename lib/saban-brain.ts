@@ -2,8 +2,8 @@ import { getSupabase } from "./supabase";
 
 // מטריצת מודלים מעודכנת למרץ 2026
 const DISCOVERY_MATRIX = [
-  { name: "gemini-3.1-pro-preview", versions: ["v1beta"] },
-  { name: "gemini-3.1-flash-preview", versions: ["v1beta"] },
+  { name: "gemini-2.0-flash-lite", versions: ["v1beta"] },
+  { name: "gemini-1.5-flash-002", versions: ["v1beta"] },
   { name: "gemini-3-flash-preview", versions: ["v1beta"] },
   { name: "gemini-2.5-pro", versions: ["v1"] },
   { name: "gemini-2.5-flash", versions: ["v1"] }
