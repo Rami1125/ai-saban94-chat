@@ -154,7 +154,7 @@ export default function SabanMasterOS() {
         </div>
         <div className="text-center">
             <h1 className="text-xl font-black italic text-white uppercase leading-none">ח.סבן</h1>
-            <p className="text-[10px] font-bold text-blue-300 uppercase tracking-widest italic">Unified Master OS</p>
+            <p className="text-[10px] font-bold text-blue-300 uppercase tracking-widest italic">לוח סידור</p>
         </div>
         <div className="flex gap-2">
             <Button onClick={() => setActiveView(activeView === 'dispatch' ? 'customers' : 'dispatch')} className="bg-white/10 rounded-xl font-black h-10 border-none px-4 text-white">
