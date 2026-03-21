@@ -594,3 +594,157 @@
   animation: text-blur-intro 1.5s cubic-bezier(0.16, 1, 0.3, 1) 0.3s forwards;
   opacity: 0;
 }
+
+/* ===== SABAN PORTAL - Glassmorphism & Chameleon Effects ===== */
+
+/* Portal glassmorphism card */
+.portal-glass-card {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.08);
+}
+
+/* Chameleon chat context transitions */
+.chat-context-default {
+  background: linear-gradient(135deg, rgba(248, 250, 252, 0.5) 0%, rgba(241, 245, 249, 0.5) 100%);
+  border-color: rgba(226, 232, 240, 0.5);
+}
+
+.chat-context-success {
+  background: linear-gradient(135deg, rgba(236, 253, 245, 0.6) 0%, rgba(209, 250, 229, 0.4) 100%);
+  border-color: rgba(167, 243, 208, 0.5);
+}
+
+.chat-context-active {
+  background: linear-gradient(135deg, rgba(255, 247, 237, 0.6) 0%, rgba(254, 243, 199, 0.4) 100%);
+  border-color: rgba(253, 230, 138, 0.5);
+}
+
+.chat-context-urgent {
+  background: linear-gradient(135deg, rgba(254, 242, 242, 0.6) 0%, rgba(254, 226, 226, 0.4) 100%);
+  border-color: rgba(252, 165, 165, 0.5);
+}
+
+/* Typing indicator animation */
+@keyframes typing-dot {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-6px);
+    opacity: 1;
+  }
+}
+
+.typing-dot-1 { animation: typing-dot 1.2s ease-in-out infinite 0ms; }
+.typing-dot-2 { animation: typing-dot 1.2s ease-in-out infinite 150ms; }
+.typing-dot-3 { animation: typing-dot 1.2s ease-in-out infinite 300ms; }
+
+/* Button press feedback */
+.portal-btn-press {
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.portal-btn-press:active {
+  transform: scale(0.96);
+}
+
+/* Quick action tile hover glow */
+.quick-action-tile {
+  position: relative;
+  overflow: hidden;
+}
+
+.quick-action-tile::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(255,255,255,0.8) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.quick-action-tile:active::before {
+  opacity: 1;
+}
+
+/* Truck animation for tracking */
+@keyframes truck-bounce {
+  0%, 100% {
+    transform: translateY(0) translateX(0);
+  }
+  25% {
+    transform: translateY(-2px) translateX(2px);
+  }
+  50% {
+    transform: translateY(0) translateX(4px);
+  }
+  75% {
+    transform: translateY(-1px) translateX(2px);
+  }
+}
+
+.truck-animate {
+  animation: truck-bounce 1.5s ease-in-out infinite;
+}
+
+/* Status pulse ring */
+@keyframes status-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(249, 115, 22, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(249, 115, 22, 0);
+  }
+}
+
+.status-pulse {
+  animation: status-pulse 2s ease-out infinite;
+}
+
+/* Hide scrollbar for chat */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Message bubble entrance */
+@keyframes message-slide-in {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.message-enter {
+  animation: message-slide-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Soft neumorphism shadow for cards */
+.neu-shadow {
+  box-shadow: 
+    8px 8px 16px rgba(0, 0, 0, 0.05),
+    -8px -8px 16px rgba(255, 255, 255, 0.8);
+}
+
+/* Premium gradient text */
+.text-premium {
+  background: linear-gradient(135deg, #0B2C63 0%, #1a4a8f 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
