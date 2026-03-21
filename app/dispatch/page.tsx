@@ -10,6 +10,7 @@ import {
   Users, CheckCircle2, Package, Layout, Bell, Phone, Hash
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
+import { ..., Hash, ChevronRight, ... } from "lucide-react";
 
 // --- הגדרות ליבה ---
 const drivers = [
@@ -315,7 +316,3 @@ export default function SabanMasterOS() {
     </div>
   );
 }
-
-// קומפוננטת עזר
-const ChevronRight = ({ size }: { size: number }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>;
-const Hash = ({ size }: { size: number }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>;
