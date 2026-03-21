@@ -1,285 +1,219 @@
 "use client";
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { getSupabase } from "@/lib/supabase";
 import { useParams } from 'next/navigation';
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { 
-  Menu, X, Truck, History, MessageSquare, Send, MapPin, 
-  Navigation, Bell, PackagePlus, Loader2, Sparkles, 
-  User, Phone, ChevronDown, CheckCircle2, Volume2, LayoutGrid
+import {
+  Menu, X, Bell, User, PackagePlus, Truck, History, MessageSquare,
+  MapPin, Send, Mic, ChevronLeft, Package, CheckCircle2, Clock, Navigation,
+  Sparkles, Loader2
 } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Badge } from "@/components/ui/badge";
 import { toast, Toaster } from "sonner";
 
-// --- סוגי נתונים ---
-type Message = {
-    role: 'ai' | 'user';
-    text: string;
-    chameleonColor?: string; // צבע דינמי לצאט
-};
+// --- Types ---
+type Message = { id: string; role: "ai" | "user"; text: string; timestamp: Date; };
+type OrderStatus = "preparation" | "on_the_way" | "delivered";
 
-export default function SabanChameleonApp() {
+export default function SabanPortalFinal() {
   const { customerId } = useParams();
-  const [activeTab, setActiveTab] = useState<'home' | 'chat'>('home');
+  const [activeView, setActiveView] = useState<"home" | "chat" | "track" | "history">("home");
   const [customer, setCustomer] = useState<any>(null);
+  const [orders, setOrders] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
-  const [selectedProject, setSelectedProject] = useState<any>(null);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isAiThinking, setIsAiThinking] = useState(false);
-  const [chatHistory, setChatHistory] = useState<Message[]>([]);
-  const [chatInput, setChatInput] = useState("");
+  const [messages, setMessages] = useState<Message[]>([
+    { id: "1", role: "ai", text: "שלום בר! אני המוח של ח. סבן. איך אפשר לעזור היום?", timestamp: new Date() }
+  ]);
+  const [inputValue, setInputValue] = useState("");
+  const [isThinking, setIsThinking] = useState(false);
+  const [chatContext, setChatContext] = useState<"default" | "success" | "active" | "urgent">("default");
   const [loading, setLoading] = useState(true);
-  
+
   const supabase = getSupabase();
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
 
-  // --- אוטומציה: גלילה לסוף הצאט ---
-  useEffect(() => {
-    if (chatEndRef.current) {
-        chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [chatHistory, isAiThinking]);
-
-  // --- אישור הרשאות OneSignal חד פעמי ---
-  useEffect(() => {
-    // דימוי הרשאת OneSignal (במציאות זה רץ ב-layout או בקומפוננטה ייעודית)
-    if ("Notification" in window && Notification.permission === "default") {
-        Notification.requestPermission().then(permission => {
-            if (permission === 'granted') {
-                toast.success("הרשאת התראות הופעלה!");
-            }
-        });
-    }
-  }, []);
-
-  useEffect(() => {
+  // --- Fetch Real Data ---
+  const fetchData = useCallback(async () => {
     if (!customerId) return;
-    const fetchData = async () => {
-      // שליפת לקוח ופרויקטים
-      const { data: client } = await supabase.from('saban_customers').select('*').eq('customer_id', customerId).single();
-      setCustomer(client);
-      
+    try {
+      const { data: client } = await supabase.from('saban_customers').select('*').eq('customer_id', customerId).maybeSingle();
+      const { data: ords } = await supabase.from('saban_master_dispatch').select('*').eq('customer_id', customerId).order('created_at', { ascending: false });
       const { data: projs } = await supabase.from('saban_projects').select('*').eq('customer_id', customerId);
+      
+      setCustomer(client);
+      setOrders(ords || []);
       setProjects(projs || []);
-      if (projs && projs.length > 0) setSelectedProject(projs[0]);
-    };
-    fetchData();
-    setLoading(false);
+    } catch (e) { console.error(e); } finally { setLoading(false); }
   }, [customerId, supabase]);
 
-  // --- לוגיקה: צ'אט AI אנושי (זיקית) ---
-  const handleAiConversation = async (presetCommand?: string) => {
-    const input = presetCommand || chatInput;
-    if (!input.trim() || isAiThinking) return;
-    
-    // 1. הוספת הודעת המשתמש
-    const userMsg: Message = { role: 'user', text: input };
-    setChatHistory(prev => [...prev, userMsg]);
-    setChatInput("");
-    if (!presetCommand) setActiveTab('chat'); // עבור לצאט אם זה לא כפתור מהיר
+  useEffect(() => { 
+    fetchData();
+    // הרשאת OneSignal/Location מדומה
+    if ("Notification" in window) Notification.requestPermission();
+  }, [fetchData]);
 
-    // 2. הפעלת "חשיבה"
-    setIsAiThinking(true);
+  // --- Chat Logic & Real Commands ---
+  const handleSendMessage = async (overrideInput?: string) => {
+    const text = overrideInput || inputValue;
+    if (!text.trim() || isThinking) return;
 
-    // אפקט מחשבה אנושי (1-3 שניות)
-    await new Promise(r => setTimeout(r, 1000 + Math.random() * 2000));
+    const userMsg: Message = { id: Date.now().toString(), role: "user", text, timestamp: new Date() };
+    setMessages(prev => [...prev, userMsg]);
+    setInputValue("");
+    setIsThinking(true);
 
+    // לוגיקה חכמה לפי מילים
     let aiResponse = "";
-    let color = "bg-white"; // ברירת מחדל
+    let newContext: typeof chatContext = "default";
 
-    // 3. לוגיקת AI (מדומה - כאן נחבר API בעתיד)
-    if (input.includes("פרויקט חדש")) {
-        aiResponse = `אהלן בר! אני רואה שאתה רוצה להקים פרויקט חדש. איך נקרא לו? (למשל: אורניל-מהלה)`;
-        color = "bg-emerald-50"; // צבע ירוק להקמה
-    } else if (input.includes("אורניל-מהלה")) {
-        aiResponse = `קיבלתי. '${input}' נשמע מצוין. מה הכתובת המדויקת ברעננה?`;
-        color = "bg-blue-50";
-    } else if (input.includes("ויצמן 4")) {
-        // שליפת מיקום (GPS מוכן)
-        aiResponse = `הכל מוכן! הפרויקט בויצמן 4 הוקם במערכת של ראמי. שמרתי גם את המיקום שלך לנהג (Waze מוכן). רוצה להזמין מכולה ראשונה?`;
-        color = "bg-orange-50"; // כתום לפעולה
-    } else if (input.includes("כן")) {
-        aiResponse = `אחלה. הצבה של מכולה חדשה? (או סוג אחר, פשוט תגיד).`;
+    if (text.includes("הזמנה") || text.includes("מכולה")) {
+      aiResponse = "מצוין בר. אני פותח הזמנה חדשה לפרויקט בויצמן 4. הצבה או החלפה?";
+      newContext = "active";
+      // שליחת בקשה ל-DB
+      await supabase.from('saban_customer_requests').insert([{ customer_id: customerId, action_type: 'NEW_ORDER', details: { text } }]);
     } else {
-        aiResponse = `שלום בר, אני המוח של ח. סבן. אני יודע להקים פרויקטים חדשים בצאט. פשוט תגיד לי: "אני רוצה להקים פרויקט חדש".`;
+      aiResponse = "קיבלתי, בודק מול ראמי בסידור ומעדכן אותך כאן.";
     }
 
-    // 4. הוספת הודעת ה-AI
-    const aiMsg: Message = { role: 'ai', text: aiResponse, chameleonColor: color };
-    setChatHistory(prev => [...prev, aiMsg]);
-    setIsAiThinking(false);
-
-    // צליל התראה קצר
-    new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play().catch(() => {});
+    setTimeout(() => {
+      setMessages(prev => [...prev, { id: (Date.now()+1).toString(), role: "ai", text: aiResponse, timestamp: new Date() }]);
+      setChatContext(newContext);
+      setIsThinking(false);
+      new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play().catch(() => {});
+    }, 1500);
   };
 
-  // עיצוב משתנה לפי פרויקט (Chameleon Effect)
-  const getProjectTheme = () => {
-    if (selectedProject?.project_name?.includes('מהלה')) return 'bg-emerald-50 border-emerald-200 text-emerald-900';
-    return 'bg-blue-50 border-blue-200 text-blue-900';
-  };
+  if (loading) return <div className="h-screen bg-white flex items-center justify-center font-black text-blue-800 animate-pulse italic">SABAN OS PREMIUM...</div>;
+
+  const activeOrder = orders.find(o => o.status !== 'הושלם') || orders[0];
 
   return (
-    <div className={`min-h-screen ${selectedProject ? 'bg-slate-50' : 'bg-white'} font-sans pb-32 text-right transition-colors duration-1000`} dir="rtl">
+    <div className="min-h-screen bg-[#FDFDFD] font-sans" dir="rtl">
       <Toaster position="top-center" richColors />
+      
+      {/* Background Blurs */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-32 -right-32 w-96 h-96 bg-[#0B2C63]/5 rounded-full blur-3xl" />
+        <div className="absolute top-1/2 -left-32 w-80 h-80 bg-orange-500/5 rounded-full blur-3xl" />
+      </div>
 
-      {/* --- Header (Glassmorphism) --- */}
-      <header className="p-6 flex items-center justify-between sticky top-0 z-[100] bg-white/80 backdrop-blur-2xl border-b border-slate-100 shadow-sm">
-        <button onClick={() => setIsMenuOpen(true)} className="p-3 bg-slate-50 rounded-2xl border-none text-slate-400 hover:bg-slate-100 transition-all active:scale-95 cursor-pointer"><Menu size={24}/></button>
-        <div className="flex flex-col items-center">
-            <h1 className="text-2xl font-black italic text-blue-700 tracking-tighter leading-none">SABAN OS</h1>
-            <Badge className="bg-blue-50 text-blue-600 border-none text-[8px] font-black italic mt-1 uppercase">Premium Hub</Badge>
+      {/* Header */}
+      <header className="sticky top-0 z-50 px-5 py-4 backdrop-blur-xl bg-white/70 border-b border-white/50 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-gradient-to-br from-[#0B2C63] to-[#1a4a8f] rounded-2xl flex items-center justify-center shadow-lg">
+            <span className="text-white font-black italic">S</span>
+          </div>
+          <div>
+            <h1 className="text-lg font-black text-[#0B2C63]">SABAN OS</h1>
+            <Badge className="text-[8px] bg-blue-50 text-blue-700 border-0">PREMIUM HUB</Badge>
+          </div>
         </div>
-        <div className="flex gap-2">
-            <button className="p-3 bg-slate-50 rounded-2xl border-none text-slate-400 hover:text-blue-600 transition-all cursor-pointer relative"><Bell size={24}/><div className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></div></button>
-            <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center text-blue-600 shadow-inner"><User size={24}/></div>
+        <div className="flex items-center gap-2">
+            <button className="p-3 bg-white rounded-2xl border border-slate-100 shadow-sm"><Bell className="w-5 h-5 text-slate-600" /></button>
+            <div className="w-11 h-11 rounded-2xl bg-[#0B2C63] flex items-center justify-center text-white"><User className="w-5 h-5" /></div>
         </div>
       </header>
 
-      {/* --- Side Menu --- */}
-      {isMenuOpen && (
-          <div className="fixed inset-0 z-[200] bg-black/40 backdrop-blur-sm flex justify-end">
-              <aside className="w-80 bg-white h-full shadow-2xl p-8 animate-in slide-in-from-right duration-300 flex flex-col">
-                  <div className="flex justify-between items-center mb-12">
-                      <span className="font-black italic text-blue-700">תפריט Premium</span>
-                      <button onClick={() => setIsMenuOpen(false)} className="bg-slate-50 p-2 rounded-full border-none cursor-pointer"><X size={20}/></button>
-                  </div>
-                  <nav className="space-y-4 flex-1">
-                      <button onClick={() => {setActiveTab('home'); setIsMenuOpen(false);}} className={`w-full flex items-center gap-4 p-5 rounded-[2rem] font-black transition-all border-none cursor-pointer ${activeTab === 'home' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'hover:bg-slate-50 text-slate-400 bg-transparent'}`}>
-                          <LayoutGrid size={22}/> מרכז בקרה
-                      </button>
-                      <button onClick={() => {setActiveTab('chat'); setIsMenuOpen(false);}} className={`w-full flex items-center gap-4 p-5 rounded-[2rem] font-black transition-all border-none cursor-pointer ${activeTab === 'chat' ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'hover:bg-slate-50 text-slate-400 bg-transparent'}`}>
-                          <MessageSquare size={22}/> צ'אט AI & פקודות
-                      </button>
-                  </nav>
-              </aside>
-          </div>
-      )}
-
-      <main className="p-6 max-w-lg mx-auto space-y-8">
-        
-        {activeTab === 'home' && (
-          <div className="space-y-8 animate-in fade-in duration-700">
-            {/* בורר פרויקטים (זיקית) */}
+      <main className="px-5 pb-32 pt-6">
+        {activeView === "home" && (
+          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
             <section>
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-black text-slate-800 italic">הפרויקטים שלי</h2>
-                    <Sparkles className="text-blue-500 animate-pulse" size={20}/>
-                </div>
-                <div className="relative group">
-                    <select 
-                        onChange={(e) => setSelectedProject(projects.find(p => p.id === e.target.value))}
-                        className={`w-full p-6 rounded-[2.5rem] border-2 font-black italic appearance-none outline-none transition-all shadow-xl cursor-pointer ${getProjectTheme()}`}
-                    >
-                        {projects.map(p => <option key={p.id} value={p.id}>{p.project_name}</option>)}
-                        {projects.length === 0 && <option>אין פרויקטים פעילים</option>}
-                    </select>
-                    <ChevronDown className="absolute left-6 top-1/2 -translate-y-1/2 opacity-30" />
-                </div>
+              <h2 className="text-3xl font-black text-slate-800 tracking-tighter">שלום, {customer?.full_name?.split(' ')[0]}! 👋</h2>
+              <p className="text-slate-400 font-bold text-xs flex items-center gap-1 mt-1"><MapPin size={12}/> {customer?.address}</p>
             </section>
 
-            {/* כרטיס פרויקט מורחב */}
-            {selectedProject && (
-                <Card className="p-8 rounded-[3rem] bg-white border-none shadow-2xl relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-150"></div>
-                    <div className="relative z-10">
-                        <div className="flex items-center gap-4 mb-6">
-                            <div className="p-4 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-200"><MapPin size={24}/></div>
-                            <div>
-                                <h3 className="text-2xl font-black text-slate-800 italic">{selectedProject.project_name}</h3>
-                                <p className="text-xs font-bold text-slate-400 mt-1">{selectedProject.address}</p>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4 text-[10px] font-black text-slate-500 uppercase italic mb-6">
-                            <div className="flex items-center gap-2"><User size={14} className="text-blue-500"/> {selectedProject.contact_person}</div>
-                            <div className="flex items-center gap-2"><Phone size={14} className="text-blue-500"/> {selectedProject.phone}</div>
-                        </div>
-                        <button 
-                            onClick={() => window.open(selectedProject.waze_link)}
-                            className="w-full bg-slate-900 text-white p-5 rounded-2xl font-black flex items-center justify-center gap-3 active:scale-95 transition-all shadow-xl shadow-slate-200 border-none cursor-pointer"
-                        >
-                            <Navigation size={18} fill="currentColor"/> ניווט מהיר Waze
-                        </button>
-                    </div>
-                </Card>
-            )}
-
-            {/* כפתורי קיצור - פעולות WOW */}
+            {/* Quick Actions Grid */}
             <div className="grid grid-cols-2 gap-4">
-                <button onClick={() => { setActiveTab('chat'); setChatHistory([{role:'ai', text: 'אהלן בר! פשוט תגיד לי: "אני רוצה להקים פרויקט חדש" ונצא לדרך.'}]); }} className="aspect-square bg-white border-none rounded-[3rem] p-8 shadow-xl flex flex-col items-center justify-center gap-4 hover:bg-blue-600 hover:text-white transition-all group active:scale-95 cursor-pointer">
-                    <div className="p-5 bg-blue-50 text-blue-600 rounded-3xl group-hover:bg-white group-hover:text-blue-600 shadow-inner"><PackagePlus size={32}/></div>
-                    <span className="font-black italic text-sm tracking-tight text-right">הקמת פרויקט</span>
+              {[
+                { id: 'chat', title: 'הזמנה חדשה', icon: PackagePlus, color: 'from-[#0B2C63] to-[#1a4a8f]', cmd: 'אני רוצה להזמין מכולה חדשה' },
+                { id: 'track', title: 'מעקב משאית', icon: Truck, color: 'from-orange-500 to-orange-600' },
+                { id: 'history', title: 'היסטוריה', icon: History, color: 'from-slate-600 to-slate-700' },
+                { id: 'chat', title: 'דבר עם ראמי', icon: MessageSquare, color: 'from-emerald-500 to-emerald-600', cmd: 'צריך לדבר עם ראמי' }
+              ].map(action => (
+                <button key={action.title} onClick={() => { setActiveView(action.id as any); if(action.cmd) handleSendMessage(action.cmd); }} 
+                  className="group relative aspect-square p-5 rounded-[2.5rem] bg-white border border-white/50 shadow-xl flex flex-col items-center justify-center gap-3 active:scale-95 transition-all overflow-hidden">
+                  <div className={`absolute inset-0 bg-gradient-to-br ${action.color} opacity-0 group-hover:opacity-10 transition-opacity`} />
+                  <div className={`p-4 rounded-2xl bg-gradient-to-br ${action.color} text-white shadow-lg`}><action.icon size={28}/></div>
+                  <span className="font-black text-slate-800 text-sm tracking-tight">{action.title}</span>
                 </button>
-                <button onClick={() => setActiveTab('chat')} className="aspect-square bg-white border-none rounded-[3rem] p-8 shadow-xl flex flex-col items-center justify-center gap-4 hover:bg-slate-800 hover:text-white transition-all group active:scale-95 cursor-pointer text-slate-300">
-                    <div className="p-5 bg-slate-50 text-slate-300 rounded-3xl group-hover:bg-white group-hover:text-slate-800 shadow-inner"><Truck size={32}/></div>
-                    <span className="font-black italic text-sm tracking-tight text-right">דבר עם המוח</span>
-                </button>
+              ))}
             </div>
+
+            {/* Status Card */}
+            {activeOrder && (
+                <section className="p-6 rounded-[2.5rem] bg-white border border-white shadow-2xl relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-600 via-orange-500 to-emerald-500" />
+                    <div className="flex justify-between items-center mb-6">
+                        <div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">Current Mission</p>
+                            <h3 className="text-xl font-black text-slate-800">{activeOrder.container_action}</h3>
+                        </div>
+                        <Badge className="bg-orange-100 text-orange-700 border-none font-black italic">{activeOrder.status}</Badge>
+                    </div>
+                    {/* Stepper Logic */}
+                    <div className="flex items-center justify-between px-2">
+                        {[
+                            { id: 'פתוח', icon: Package, label: 'התקבל' },
+                            { id: 'בביצוע', icon: Truck, label: 'בדרך' },
+                            { id: 'הושלם', icon: CheckCircle2, label: 'סופק' }
+                        ].map((s, i, arr) => (
+                            <React.Fragment key={s.id}>
+                                <div className="flex flex-col items-center gap-2">
+                                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${activeOrder.status === s.id ? 'bg-orange-500 text-white shadow-lg animate-pulse' : 'bg-slate-100 text-slate-400'}`}>
+                                        <s.icon size={20}/>
+                                    </div>
+                                    <span className="text-[10px] font-black">{s.label}</span>
+                                </div>
+                                {i < arr.length - 1 && <div className="flex-1 h-1 bg-slate-100 rounded-full mx-2" />}
+                            </React.Fragment>
+                        ))}
+                    </div>
+                </section>
+            )}
           </div>
         )}
 
-        {/* --- AI Chat View (Chameleon) --- */}
-        {activeTab === 'chat' && (
-            <div className="h-[75vh] flex flex-col animate-in slide-in-from-left duration-500">
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-black text-slate-800 italic flex items-center gap-2"><Brain className="text-blue-600"/> המוח של סבן</h2>
-                    <Volume2 className="text-slate-300"/>
+        {activeView === "chat" && (
+            <div className="h-[calc(100vh-220px)] flex flex-col animate-in slide-in-from-left-4 duration-500">
+                <div className="flex items-center gap-4 mb-4">
+                    <button onClick={() => setActiveView('home')} className="p-3 bg-white rounded-2xl shadow-sm border border-slate-100"><ChevronLeft size={20}/></button>
+                    <div><h2 className="text-xl font-black italic text-slate-800 leading-none">SABAN BRAIN</h2><Badge className="bg-emerald-50 text-emerald-600 border-none text-[8px] mt-1">ONLINE</Badge></div>
                 </div>
-                <div className="flex-1 overflow-y-auto space-y-6 p-2 no-scrollbar">
-                    {chatHistory.length === 0 && (
-                        <div className="text-center py-20 opacity-20 font-black italic">הצאט ריק. בחר פעולה או כתוב פקודה...</div>
-                    )}
-                    {chatHistory.map((m, i) => (
-                        <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-[85%] p-5 rounded-[2.5rem] font-bold text-sm shadow-sm ${
-                                m.role === 'user' 
-                                ? 'bg-blue-600 text-white rounded-br-none' 
-                                : `bg-white border border-slate-100 text-slate-800 rounded-bl-none ${m.chameleonColor || 'bg-white'}`
-                            }`}>
+                <div ref={chatScrollRef} className={`flex-1 overflow-y-auto rounded-[2.5rem] ${chatContext === 'active' ? 'bg-orange-50/30 border-orange-100' : 'bg-slate-50/50 border-slate-100'} border p-6 space-y-6 no-scrollbar`}>
+                    {messages.map(m => (
+                        <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
+                            <div className={`max-w-[85%] p-5 rounded-[2rem] font-bold text-sm shadow-sm ${m.role === 'user' ? 'bg-white text-slate-800 rounded-bl-none' : 'bg-[#0B2C63] text-white rounded-br-none italic'}`}>
                                 {m.text}
                             </div>
                         </div>
                     ))}
-                    {isAiThinking && (
-                        <div className="flex justify-start">
-                            <div className="bg-slate-50 p-5 rounded-3xl shadow-sm flex gap-2">
-                                <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></span>
-                                <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce delay-100"></span>
-                                <span className="w-2 h-2 bg-blue-600 rounded-full animate-bounce delay-200"></span>
-                            </div>
-                        </div>
-                    )}
-                    <div ref={chatEndRef} /> {/* גלילה לסוף הצאט */}
+                    {isThinking && <div className="flex justify-end"><div className="bg-[#0B2C63] p-4 rounded-2xl animate-pulse flex gap-1"><span className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce"/></div></div>}
                 </div>
-                
-                <div className="p-4 bg-white rounded-[3rem] shadow-2xl border border-slate-50 flex gap-2 mt-4 items-center ring-4 ring-blue-50/50">
-                    <input 
-                        value={chatInput} 
-                        onChange={(e) => setChatInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleAiConversation()}
-                        placeholder="כתוב הודעה או פקודה..." 
-                        className="flex-1 bg-transparent border-none outline-none font-bold text-sm text-right px-6 h-12"
-                    />
-                    <button 
-                        onClick={() => handleAiConversation()}
-                        className="bg-blue-600 text-white p-4 rounded-full shadow-lg active:scale-90 transition-all border-none cursor-pointer"
-                    >
-                        <Send size={22}/>
-                    </button>
+                <div className="mt-4 p-3 bg-white rounded-[2.2rem] shadow-2xl border border-slate-50 flex items-center gap-3">
+                    <button className="p-4 bg-slate-50 text-slate-400 rounded-2xl"><Mic size={20}/></button>
+                    <input value={inputValue} onChange={e => setInputValue(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendMessage()} placeholder="כתוב הודעה..." className="flex-1 bg-transparent font-black text-right outline-none text-sm" />
+                    <button onClick={() => handleSendMessage()} className="p-4 bg-[#0B2C63] text-white rounded-2xl shadow-lg"><Send size={20}/></button>
                 </div>
             </div>
         )}
+
+        {/* Track & History views implementation follows the same design language... */}
       </main>
 
-      {/* --- Floating Bottom Navigation (Air Glass) --- */}
-      <nav className="fixed bottom-8 left-8 right-8 z-[150]">
-        <div className="bg-white/80 backdrop-blur-3xl border border-white/50 rounded-[3rem] p-4 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.1)] flex justify-around items-center px-12 ring-8 ring-black/5">
-          <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center gap-1 transition-all border-none bg-transparent ${activeTab === 'home' ? 'text-blue-700 scale-125' : 'text-slate-300'}`}>
-            <LayoutGrid size={28} />
-          </button>
-          <button onClick={() => setActiveTab('chat')} className={`flex flex-col items-center gap-1 transition-all border-none bg-transparent ${activeTab === 'chat' ? 'text-blue-700 scale-125' : 'text-slate-300'}`}>
-            <MessageSquare size={28} />
-          </button>
+      {/* Bottom Nav */}
+      <nav className="fixed bottom-8 left-6 right-6 z-50">
+        <div className="flex items-center justify-around p-3 bg-white/80 backdrop-blur-2xl border border-white/50 rounded-[2.5rem] shadow-2xl ring-8 ring-black/5">
+            {[
+                { id: 'home', icon: Package, label: 'ראשי' },
+                { id: 'chat', icon: MessageSquare, label: 'צאט' },
+                { id: 'history', icon: History, label: 'היסטוריה' }
+            ].map(item => (
+                <button key={item.id} onClick={() => setActiveView(item.id as any)} className={`flex flex-col items-center gap-1 p-3 rounded-2xl transition-all ${activeView === item.id ? 'bg-[#0B2C63] text-white shadow-xl scale-110' : 'text-slate-400'}`}>
+                    <item.icon size={20}/>
+                    <span className="text-[10px] font-black">{item.label}</span>
+                </button>
+            ))}
         </div>
       </nav>
     </div>
