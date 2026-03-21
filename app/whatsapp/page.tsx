@@ -134,15 +134,25 @@ export default function SabanEliteUnified() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-8 space-y-6 pb-32 no-scrollbar">
-          {messages.map((m, i) => (
-            <div key={i} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
-              <div className={`max-w-[75%] p-6 rounded-[35px] shadow-sm ${m.role === 'user' ? 'bg-slate-100 text-slate-800 rounded-br-none border border-slate-200' : 'bg-[#0B2C63] text-white rounded-bl-none shadow-xl'}`}>
-                <p className="font-bold leading-relaxed whitespace-pre-wrap">{m.content.replace(/\[.*?\]/g, '')}</p>
-              </div>
-            </div>
-          ))}
-          <div ref={scrollRef} />
-        </div>
+  {messages.map((m, i) => (
+    <div key={i} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
+      <div className={`max-w-[75%] p-6 rounded-[35px] shadow-sm ${
+        m.role === 'user' 
+          ? 'bg-slate-100 text-slate-800 rounded-br-none border border-slate-200' 
+          : 'bg-[#0B2C63] text-white rounded-bl-none shadow-xl'
+      }`}>
+        <p className="font-bold leading-relaxed whitespace-pre-wrap">
+          {/* 🛡️ הגנה מפני קריסה: מוודאים שיש תוכן לפני שמנקים תגיות */}
+          {m.content 
+            ? m.content.replace(/\[.*?\]/g, '') 
+            : m.role === 'assistant' ? "מעבד נתונים... ⏳" : ""
+          }
+        </p>
+      </div>
+    </div>
+  ))}
+  <div ref={scrollRef} />
+</div>
 
         <div className="absolute bottom-8 left-0 right-0 px-10">
           <div className="max-w-4xl mx-auto bg-white border border-slate-100 p-2 rounded-[30px] shadow-2xl flex items-center gap-3">
