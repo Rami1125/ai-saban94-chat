@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { getSupabase } from "@/lib/supabase";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,26 +7,37 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Truck, Plus, Trash2, X, Send, Clock, Warehouse, MapPin, Share2, UserCheck, 
   Recycle, Menu, Edit2, Calendar, RefreshCw, Brain, Loader2, Terminal, Activity,
-  Users, Bell, CheckCircle2, Phone, ChevronDown, ChevronUp, Zap, Layout, Hash,
-  MessageSquare, Search, CheckCircle, Package, Map, PlayCircle
+  Users, CheckCircle2, Package, Layout, Bell, Phone, Hash
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 
-// --- הגדרות סטטוסים וצבעים ---
-const orderStatuses = [
-  { id: 'הזמנה התקבלה', color: 'bg-orange-500', icon: <Bell size={12}/> },
-  { id: 'בהכנה', color: 'bg-blue-500', icon: <Package size={12}/> },
-  { id: 'בדרך', color: 'bg-purple-500', icon: <Truck size={12}/> },
-  { id: 'סופקה', color: 'bg-green-600', icon: <CheckCircle size={12}/> }
-];
-
+// --- הגדרות ליבה ---
 const drivers = [
   { id: 'hakmat', name: 'חכמת', img: 'https://i.postimg.cc/d3S0NJJZ/Screenshot-20250623-200646-Facebook.jpg', color: '#0B2C63', defaultType: 'מנוף 🏗️' },
   { id: 'ali', name: 'עלי', img: 'https://i.postimg.cc/tCNbgXK3/Screenshot-20250623-200744-Tik-Tok.jpg', color: '#2563EB', defaultType: 'משאית 🚛' },
   { id: 'waste', name: 'פינוי פסולת', img: 'https://cdn-icons-png.flaticon.com/512/3299/3299935.png', color: '#16a34a', defaultType: 'מכולה ♻️' }
 ];
 
-export default function SabanUnifiedMasterOS() {
+const teamMembers = ['ראמי', 'יואב', 'איציק'];
+const containerActions = ['הצבה', 'החלפה', 'הוצאה'];
+const wasteWarehouses = ['שארק (30)', 'כראדי (32)', 'שי שרון (40)'];
+const standardWarehouses = ['התלמיד (1)', 'החרש (4)'];
+
+// סטטוסים חדשים
+const orderStatuses = [
+  { id: 'הזמנה התקבלה', color: 'bg-orange-500', icon: <Bell size={12}/> },
+  { id: 'בהכנה', color: 'bg-blue-500', icon: <Package size={12}/> },
+  { id: 'בדרך', color: 'bg-purple-500', icon: <Truck size={12}/> },
+  { id: 'סופקה', color: 'bg-green-600', icon: <CheckCircle2 size={12}/> }
+];
+
+const timeSlots = Array.from({ length: 24 }, (_, i) => {
+  const h = Math.floor(i / 2) + 6;
+  const m = i % 2 === 0 ? "00" : "30";
+  return `${h.toString().padStart(2, '0')}:${m}`;
+});
+
+export default function SabanMasterOS() {
   const [orders, setOrders] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [requests, setRequests] = useState<any[]>([]);
@@ -35,21 +46,25 @@ export default function SabanUnifiedMasterOS() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<any>(null);
   const [activeView, setActiveView] = useState<'dispatch' | 'customers'>('dispatch');
+  
+  // 🔥 AI Brain States
   const [aiInput, setAiInput] = useState("");
+  const [aiMessages, setAiMessages] = useState<any[]>([]);
   const [isAiTyping, setIsAiTyping] = useState(false);
-  const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
+  const [aiReport, setAiReport] = useState<any>(null);
+  const [showAiMobile, setShowAiMobile] = useState(false);
 
   const [form, setForm] = useState({
-    customer_id: '',
+    scheduled_date: new Date().toISOString().split('T')[0],
+    scheduled_time: '07:00',
     customer_name: '',
+    warehouse_source: 'התלמיד (1)',
+    driver_name: 'חכמת',
+    created_by: 'ראמי',
     order_id_comax: '',
     address: '',
-    scheduled_time: '07:00',
-    driver_name: 'חכמת',
-    warehouse_source: 'התלמיד (1)',
     container_action: 'הצבה',
-    status: 'הזמנה התקבלה',
-    created_by: 'ראמי'
+    status: 'הזמנה התקבלה'
   });
 
   const supabase = getSupabase();
@@ -67,208 +82,240 @@ export default function SabanUnifiedMasterOS() {
 
   useEffect(() => {
     fetchData();
-    const sub = supabase.channel('master_v3').on('postgres_changes', { event: '*', schema: 'public', table: 'saban_master_dispatch' }, fetchData).on('postgres_changes', { event: '*', schema: 'public', table: 'saban_customer_requests' }, fetchData).subscribe();
+    const sub = supabase.channel('master_live').on('postgres_changes', { event: '*', schema: 'public', table: 'saban_master_dispatch' }, fetchData).on('postgres_changes', { event: '*', schema: 'public', table: 'saban_customer_requests' }, fetchData).subscribe();
     return () => { supabase.removeChannel(sub); };
-  }, [fetchData]);
+  }, [fetchData, supabase]);
 
-  // --- לוגיקה: שליפה חכמה תוך כדי הקלדה ---
-  const handleCustomerSearch = (val: string) => {
-    setForm(prev => ({ ...prev, customer_name: val }));
-    const found = customers.find(c => c.full_name.includes(val) || c.customer_id.includes(val));
-    if (found && val.length > 2) {
-      setForm(prev => ({ 
-        ...prev, 
-        customer_id: found.customer_id, 
-        customer_name: found.full_name, 
-        address: found.address 
-      }));
-      toast.info(`נשלפו פרטים עבור ${found.full_name}`, { duration: 1000 });
-    }
+  // 🔥 פונקציית שיתוף דוח בוקר
+  const shareMorningReport = () => {
+    const openOrders = orders.filter(o => o.status !== 'סופקה');
+    let reportText = `🌅 *דוח בוקר - ח. סבן חומרי בניין*\n---------------------------\n`;
+    openOrders.forEach(o => {
+      reportText += `📍 *${o.customer_name}* | ${o.scheduled_time} | ${o.status}\n`;
+    });
+    reportText += `\n---------------------------\n_סה"כ הזמנות פתוחות: ${openOrders.length}_`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(reportText)}`, '_blank');
   };
 
-  // --- לוגיקה: אישור פנייה והפיכה להזמנה ---
-  const approveRequest = async (req: any) => {
-    toast.loading("הופך פנייה להזמנה חי בלוח...");
-    const client = customers.find(c => c.customer_id === req.customer_id);
-    
-    // 1. סגירת הפנייה
-    await supabase.from('saban_customer_requests').update({ status: 'approved' }).eq('id', req.id);
-    
-    // 2. יצירת ההזמנה
-    const newOrder = {
-      customer_id: req.customer_id,
-      customer_name: client?.full_name || 'לקוח מערכת',
-      order_id_comax: '62122110', // מספר שהגדרת כברירת מחדל
-      address: req.details?.address || client?.address,
-      status: 'הזמנה התקבלה',
-      container_action: req.action_type === 'EXCHANGE' ? 'החלפה' : 'הצבה',
-      driver_name: 'פינוי פסולת',
-      scheduled_time: '08:00',
-      warehouse_source: 'כראדי (32)'
-    };
+  // 🔥 הפעלת המוח
+  const handleAiCommand = async () => {
+    if (!aiInput.trim() || isAiTyping) return;
+    const userMsg = aiInput;
+    setAiInput("");
+    setAiMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+    setIsAiTyping(true);
 
-    const { error } = await supabase.from('saban_master_dispatch').insert([newOrder]);
-    if (!error) {
-      toast.dismiss();
-      toast.success("בוצע! ההזמנה מופיעה כעת בסטטוס 'התקבלה'");
-      fetchData();
-    }
+    try {
+      const res = await fetch('/api/admin_pro/brain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: userMsg })
+      });
+      const data = await res.json();
+      setAiReport(data);
+      if (data.aiResponse) {
+        setAiMessages(prev => [...prev, { role: 'ai', content: data.aiResponse }]);
+        if (data.executionResult?.includes('✅')) fetchData();
+      }
+    } catch (e) { toast.error("נתק במוח"); } finally { setIsAiTyping(false); }
+  };
+
+  const generateWAMessage = (order: any) => {
+    const emoji = order.driver_name === 'פינוי פסולת' ? '♻️' : '📦';
+    return `${emoji} *סידור ח. סבן חומרי בניין*\n---------------------------\n👤 *לקוח:* ${order.customer_name}\n🆔 *מספר:* ${order.order_id_comax}\n🚛 *נהג:* ${order.driver_name}\n⏰ *שעה:* ${order.scheduled_time}\n🏭 *מחסן:* ${order.warehouse_source}\n---------------------------\n_נציג מעדכן: ${order.created_by}_`;
   };
 
   const saveOrder = async () => {
+    if (!form.customer_name || !form.order_id_comax) return toast.error("חסר נתונים");
     const { error } = editingOrder 
       ? await supabase.from('saban_master_dispatch').update(form).eq('id', editingOrder.id)
       : await supabase.from('saban_master_dispatch').insert([form]);
 
     if (!error) {
-      toast.success("נשמר בהצלחה");
+      toast.success("נשמר!");
       setShowForm(false);
+      setEditingOrder(null);
       fetchData();
     }
   };
 
+  if (loading) return <div className="h-screen flex items-center justify-center font-black animate-pulse text-[#0B2C63] italic text-2xl">ח. סבן - מסנכרן סידור...</div>;
+
   return (
-    <div className="min-h-screen bg-[#F4F7FA] pb-24 font-sans text-right" dir="rtl">
+    <div className="min-h-screen bg-[#F8FAFC] pb-24 font-sans text-right" dir="rtl">
       <Toaster position="top-center" richColors />
 
       {/* Header */}
-      <div className="bg-[#0B2C63] text-white p-6 rounded-b-[3rem] shadow-2xl mb-8 flex justify-between items-center sticky top-0 z-[100]">
-        <div className="flex gap-3">
-          <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-3 bg-white/10 rounded-2xl text-white border-none cursor-pointer"><Menu size={28}/></button>
-          <div className="hidden lg:flex gap-2">
-            <Button onClick={() => setActiveView('dispatch')} className={`rounded-xl font-black h-12 border-none px-6 ${activeView === 'dispatch' ? 'bg-blue-600' : 'bg-white/10'}`}>לוח סידור</Button>
-            <Button onClick={() => setActiveView('customers')} className={`rounded-xl font-black h-12 border-none px-6 ${activeView === 'customers' ? 'bg-blue-600' : 'bg-white/10'}`}>לקוחות {requests.length > 0 && <span className="mr-2 w-2 h-2 bg-red-500 rounded-full animate-ping"></span>}</Button>
-          </div>
+      <div className="bg-[#0B2C63] text-white p-6 rounded-b-[2.5rem] shadow-2xl mb-8 flex justify-between items-center relative z-100">
+        <div className="flex gap-2">
+          <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 bg-white/10 rounded-xl border-none text-white cursor-pointer"><Menu size={28}/></button>
+          <button onClick={shareMorningReport} className="p-2 bg-green-500/30 rounded-xl border-none text-white cursor-pointer"><Share2 size={28}/></button>
+          <button onClick={() => setShowAiMobile(true)} className="lg:hidden p-2 bg-blue-500/30 rounded-xl border-none text-white cursor-pointer"><Brain size={28}/></button>
         </div>
         <div className="text-center">
-            <h1 className="text-3xl font-black italic tracking-tighter uppercase leading-none">ח.סבן</h1>
-            <p className="text-[10px] font-bold text-blue-300 uppercase tracking-[0.4em] mt-1">Real-time Command</p>
+            <h1 className="text-xl font-black italic text-white uppercase leading-none">ח.סבן</h1>
+            <p className="text-[10px] font-bold text-blue-300 uppercase tracking-widest italic">Unified Master OS</p>
         </div>
-        <Button onClick={() => { setEditingOrder(null); setShowForm(true); }} className="bg-green-600 hover:bg-green-500 rounded-xl font-black h-12 border-none px-8 shadow-xl text-white">+ חדש</Button>
+        <div className="flex gap-2">
+            <Button onClick={() => setActiveView(activeView === 'dispatch' ? 'customers' : 'dispatch')} className="bg-white/10 rounded-xl font-black h-10 border-none px-4 text-white">
+                {activeView === 'dispatch' ? <Users size={20}/> : <Layout size={20}/>}
+            </Button>
+            <Button onClick={() => { setEditingOrder(null); setShowForm(true); }} className="bg-blue-600 rounded-xl font-black h-10 px-4 shadow-lg text-white">חדש +</Button>
+        </div>
       </div>
 
-      {/* --- לוח סידור עם סטטוסים דינמיים --- */}
+      {/* --- Dispatch View --- */}
       {activeView === 'dispatch' && (
         <div className="max-w-[1800px] mx-auto px-4 grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12 animate-in fade-in">
             {drivers.map((driver) => (
             <div key={driver.id} className="space-y-6">
-                <Card className="bg-white p-6 rounded-[2.5rem] shadow-xl border-none">
+                <Card className="bg-white p-6 rounded-[2.5rem] shadow-xl border-none relative overflow-hidden">
                     <div className="flex items-center gap-4 mb-6">
-                        <img src={driver.img} className="w-16 h-16 rounded-2xl object-cover border-2 border-white shadow-md" />
-                        <h2 className="text-2xl font-black text-slate-800">{driver.name}</h2>
+                    <img src={driver.img} className="w-16 h-16 rounded-2xl object-cover shadow-lg border-2 border-white" />
+                    <h2 className="text-2xl font-black text-slate-800">{driver.name}</h2>
                     </div>
-                    {/* ציר זמן מהיר */}
-                </Card>
-                <div className="space-y-4">
-                    {orders.filter(o => o.driver_name === driver.name).map((order) => {
-                        const currentStatus = orderStatuses.find(s => s.id === order.status) || orderStatuses[0];
+                    <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                    {timeSlots.map(time => {
+                        const hasOrder = orders.some(o => o.driver_name === driver.name && o.scheduled_time === time);
                         return (
-                            <Card key={order.id} className="p-6 rounded-[2.5rem] bg-white shadow-lg border-none relative group border-r-8 border-r-[#0B2C63]">
-                                <div className="flex justify-between items-start mb-4">
-                                    <div className="flex items-center gap-4 text-right">
-                                        <div className="bg-[#0B2C63] text-white px-3 py-2 rounded-xl text-xs font-black italic">{order.scheduled_time}</div>
-                                        <div>
-                                            <div className="font-black text-slate-800 text-xl leading-none mb-1">{order.customer_name}</div>
-                                            <Badge className={`${currentStatus.color} text-white border-none font-black text-[10px] italic flex items-center gap-1`}>
-                                                {currentStatus.icon} {order.status}
-                                            </Badge>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                                        <button onClick={() => { setEditingOrder(order); setForm(order); setShowForm(true); }} className="p-2 bg-blue-50 text-blue-600 rounded-xl border-none"><Edit2 size={16}/></button>
-                                    </div>
-                                </div>
-                                <div className="text-[11px] font-bold text-slate-400 border-t border-slate-50 pt-4 flex justify-between">
-                                    <span className="flex items-center gap-1"><MapPin size={12}/> {order.address}</span>
-                                    <span className="font-black text-blue-600">#{order.order_id_comax}</span>
-                                </div>
-                            </Card>
+                        <div key={time} onClick={() => { setForm({...form, driver_name: driver.name, scheduled_time: time}); setShowForm(true); }}
+                            className="flex flex-col items-center gap-2 cursor-pointer">
+                            <div className={`w-12 h-16 rounded-2xl border-2 flex items-center justify-center transition-all ${hasOrder ? 'bg-[#0B2C63] border-blue-400 shadow-md' : 'bg-slate-50 border-slate-100'}`}>
+                            {hasOrder ? <Truck size={20} className="text-white animate-pulse" /> : <Plus size={16} className="text-slate-300" />}
+                            </div>
+                            <span className="text-[10px] font-black text-slate-400">{time}</span>
+                        </div>
                         );
                     })}
+                    </div>
+                </Card>
+
+                <div className="space-y-4">
+                {orders.filter(o => o.driver_name === driver.name).map((order) => {
+                    const statusObj = orderStatuses.find(s => s.id === order.status) || orderStatuses[0];
+                    return (
+                        <Card key={order.id} className="p-6 rounded-[2rem] bg-white shadow-lg border-none relative group border-r-8 border-r-[#0B2C63] hover:scale-[1.01] transition-all">
+                            <div className="flex justify-between items-start mb-4">
+                                <div className="flex items-center gap-4">
+                                    <div className="bg-[#0B2C63] text-white px-3 py-2 rounded-xl text-xs font-black italic">{order.scheduled_time}</div>
+                                    <div className="text-right">
+                                        <div className="font-black text-slate-800 text-xl">{order.customer_name}</div>
+                                        <Badge className={`${statusObj.color} text-white border-none text-[9px] font-black px-2 mt-1 flex items-center gap-1`}>
+                                            {statusObj.icon} {order.status}
+                                        </Badge>
+                                    </div>
+                                </div>
+                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                    <button onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(generateWAMessage(order))}`, '_blank')} className="p-2 bg-green-50 text-green-600 rounded-lg border-none cursor-pointer"><RefreshCw size={16}/></button>
+                                    <button onClick={() => { setEditingOrder(order); setForm(order); setShowForm(true); }} className="p-2 bg-blue-50 text-blue-600 rounded-lg border-none cursor-pointer"><Edit2 size={16}/></button>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4 mt-2 pt-4 border-t border-slate-50 text-[11px] font-bold text-slate-500">
+                                <div className="flex items-center gap-2 truncate"><MapPin size={14} className="text-red-400"/> {order.address || 'לא צוינה כתובת'}</div>
+                                <div className="flex items-center gap-2"><Warehouse size={14} className="text-blue-400"/> {order.warehouse_source}</div>
+                            </div>
+                        </Card>
+                    );
+                })}
                 </div>
             </div>
             ))}
         </div>
       )}
 
-      {/* --- ניהול פניות לקוחות (המלשינון) --- */}
+      {/* --- Customers & Requests View --- */}
       {activeView === 'customers' && (
-          <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in slide-in-from-left">
-            {requests.map(req => {
-                const client = customers.find(c => c.customer_id === req.customer_id);
-                return (
-                    <Card key={req.id} className="p-8 rounded-[3rem] bg-white ring-4 ring-green-400 animate-pulse-slow border-none shadow-2xl relative overflow-hidden">
-                        <div className="flex justify-between items-start mb-6">
-                            <div className="p-4 bg-green-500 text-white rounded-2xl shadow-lg shadow-green-200"><Activity size={24} className="animate-spin-slow"/></div>
-                            <Badge className="bg-green-100 text-green-700 border-none font-black italic uppercase">פנייה חיה מהאפליקציה</Badge>
-                        </div>
-                        <h3 className="text-2xl font-black text-slate-800 mb-1 italic">{client?.full_name || 'טוען...'}</h3>
-                        <p className="text-xs font-bold text-slate-400 mb-6 flex items-center gap-1"><MapPin size={12}/> {client?.address}</p>
-                        
-                        <div className="bg-green-50 p-6 rounded-[2rem] border border-green-100 space-y-4">
-                            <p className="text-xs font-black text-green-800 uppercase italic">בקשת {req.action_type === 'EXCHANGE' ? 'החלפה' : 'הצבה'}</p>
-                            <button onClick={() => approveRequest(req)} className="w-full bg-green-600 text-white p-4 rounded-2xl font-black shadow-lg shadow-green-100 flex items-center justify-center gap-2 hover:bg-green-700 transition-all active:scale-95">
-                                <CheckCircle2 size={18}/> אשר והפוך להזמנה חי
-                            </button>
-                        </div>
-                    </Card>
-                );
-            })}
-            {requests.length === 0 && (
-                <div className="col-span-full text-center py-20 opacity-20 font-black italic text-2xl">אין פניות ממתינות כרגע</div>
-            )}
+          <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-6 animate-in slide-in-from-left">
+              {requests.map(req => (
+                  <Card key={req.id} className="p-8 rounded-[3rem] bg-white ring-4 ring-green-400 animate-pulse border-none shadow-2xl relative">
+                      <div className="flex justify-between items-start mb-6">
+                          <div className="p-4 bg-green-500 text-white rounded-2xl shadow-lg"><Activity size={24}/></div>
+                          <Badge className="bg-green-100 text-green-700 font-black italic">פנייה מהאפליקציה</Badge>
+                      </div>
+                      <h3 className="text-2xl font-black text-slate-800 mb-1 italic tracking-tighter">
+                          {customers.find(c => c.customer_id === req.customer_id)?.full_name || 'לקוח'}
+                      </h3>
+                      <p className="text-xs font-bold text-slate-400 mb-6 flex items-center gap-1"><MapPin size={12}/> {req.details?.address}</p>
+                      
+                      <div className="flex gap-2 mt-4">
+                          <button onClick={() => { setForm({...form, customer_name: customers.find(c => c.customer_id === req.customer_id)?.full_name, customer_id: req.customer_id, address: req.details?.address, container_action: req.action_type === 'EXCHANGE' ? 'החלפה' : 'הצבה', driver_name: 'פינוי פסולת'}); setShowForm(true); }} className="flex-1 bg-green-600 text-white p-4 rounded-2xl font-black text-xs shadow-lg">אשר ופתח הזמנה</button>
+                      </div>
+                  </Card>
+              ))}
+              {customers.map(client => (
+                  <Card key={client.id} className="p-6 rounded-[2.5rem] bg-white/70 border-none shadow-sm flex justify-between items-center group">
+                      <div className="text-right">
+                          <p className="font-black text-slate-800">{client.full_name}</p>
+                          <p className="text-[10px] text-slate-400 font-bold">ID: {client.customer_id}</p>
+                      </div>
+                      <button className="p-3 bg-slate-100 text-slate-400 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition-all border-none"><ChevronRight size={18}/></button>
+                  </Card>
+              ))}
           </div>
       )}
 
-      {/* --- Form: יצירת הזמנה עם שליפה חכמה --- */}
+      {/* 🔥 Saban AI Brain Control - Desktop */}
+      <div className="hidden lg:block max-w-[1800px] mx-auto px-4 pb-12">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <Card className="lg:col-span-3 bg-[#0B2C63] rounded-[3rem] p-8 text-white relative overflow-hidden shadow-2xl flex flex-col justify-between min-h-[300px]">
+            <div className="flex items-center gap-6 mb-4">
+              <div className="bg-blue-500 p-4 rounded-[1.5rem] shadow-lg shadow-blue-500/30"><Brain size={32} className="text-white" /></div>
+              <div>
+                <h2 className="text-2xl font-black text-white italic uppercase italic">Saban AI Brain</h2>
+                <p className="text-blue-300 text-sm font-bold uppercase tracking-widest italic leading-none">Command Terminal</p>
+              </div>
+            </div>
+            <div className="flex gap-4">
+              <input value={aiInput} onChange={e => setAiInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAiCommand()} placeholder="ראמי, מה הפקודה?" className="flex-1 h-16 bg-white/10 border-none rounded-2xl px-6 text-white font-bold outline-none text-right placeholder:text-blue-400" />
+              <button onClick={handleAiCommand} className="w-20 bg-blue-500 hover:bg-blue-400 text-white rounded-2xl flex items-center justify-center border-none cursor-pointer">{isAiTyping ? <Loader2 className="animate-spin" /> : <Send />}</button>
+            </div>
+            {aiReport?.shareLink && (
+              <Button onClick={() => window.open(aiReport.shareLink, '_blank')} className="mt-4 w-full bg-green-600 rounded-2xl font-black h-12 border-none text-white shadow-xl flex gap-2 justify-center italic"><Share2 size={20}/> שלח סידור לקבוצה</Button>
+            )}
+          </Card>
+          <Card className="bg-slate-900 rounded-[3rem] p-8 text-white">
+            <div className="flex items-center gap-2 mb-4 text-green-400"><Terminal size={20}/><span className="text-[10px] font-black uppercase">Logs</span></div>
+            <div className="text-[11px] font-black text-blue-400 italic h-40 overflow-y-auto no-scrollbar leading-tight">
+                {aiReport?.executionResult || "> System Ready. Awaiting signal..."}
+            </div>
+          </Card>
+        </div>
+      </div>
+
+      {/* Form Overlay */}
       {showForm && (
-        <div className="fixed inset-0 bg-[#0B2C63]/90 backdrop-blur-md z-[200] flex items-center justify-center p-4">
-          <Card className="bg-white w-full max-w-lg rounded-[3.5rem] p-10 space-y-6 shadow-2xl border-none text-right">
+        <div className="fixed inset-0 bg-[#0B2C63]/95 backdrop-blur-md z-[200] flex items-center justify-center p-4">
+          <Card className="bg-white w-full max-w-lg rounded-[3.5rem] p-10 space-y-6 shadow-2xl border-none text-right overflow-y-auto max-h-[90vh]">
             <div className="flex justify-between items-center mb-2">
-                <h2 className="text-2xl font-black text-[#0B2C63] italic uppercase underline decoration-blue-100 underline-offset-8 tracking-tighter">ניהול משימה</h2>
-                <button onClick={() => setShowForm(false)} className="bg-slate-100 p-2 rounded-full border-none text-slate-400"><X size={24}/></button>
+              <h2 className="text-2xl font-black text-[#0B2C63] italic underline decoration-blue-200 underline-offset-8 uppercase">{editingOrder ? 'עריכת משימה' : 'הזמנה חדשה'}</h2>
+              <button onClick={() => { setShowForm(false); setEditingOrder(null); }} className="bg-slate-100 p-2 rounded-full border-none text-slate-400 hover:text-black transition-all"><X size={24}/></button>
             </div>
-
-            <div className="space-y-4">
-                {/* שדה חיפוש ושליפה */}
-                <div className="relative">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20}/>
-                    <input 
-                        placeholder="הקלד שם לקוח או מספר לקוח לשליפה..." 
-                        value={form.customer_name} 
-                        onChange={(e) => handleCustomerSearch(e.target.value)}
-                        className="w-full h-16 px-6 rounded-2xl border-2 border-blue-50 font-black text-lg text-right outline-none focus:border-blue-500 transition-all pr-12" 
-                    />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 text-right">
-                    <div className="space-y-1 px-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase italic">מספר קומקס</label>
-                        <input value={form.order_id_comax} onChange={e => setForm({...form, order_id_comax: e.target.value})} className="w-full h-12 px-4 rounded-xl border-2 border-slate-50 font-bold text-right" />
-                    </div>
-                    <div className="space-y-1 px-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase italic">כתובת</label>
-                        <input value={form.address} onChange={e => setForm({...form, address: e.target.value})} className="w-full h-12 px-4 rounded-xl border-2 border-slate-50 font-bold text-right" />
-                    </div>
-                </div>
-
-                <div className="space-y-1 px-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase italic underline decoration-blue-500 decoration-2 underline-offset-2">סטטוס הזמנה (דינמי)</label>
-                    <div className="grid grid-cols-4 gap-2 mt-2">
-                        {orderStatuses.map(s => (
-                            <button key={s.id} onClick={() => setForm({...form, status: s.id})} 
-                                className={`py-3 rounded-xl text-[9px] font-black border-none transition-all ${form.status === s.id ? `${s.color} text-white shadow-lg scale-105` : 'bg-slate-50 text-slate-400 opacity-50'}`}>
-                                {s.id}
-                            </button>
-                        ))}
-                    </div>
+            <div className="grid grid-cols-2 gap-4">
+                <input type="date" value={form.scheduled_date} onChange={e => setForm({...form, scheduled_date: e.target.value})} className="w-full h-12 px-4 rounded-xl border-2 border-slate-50 font-bold text-right outline-none" />
+                <select value={form.scheduled_time} onChange={e => setForm({...form, scheduled_time: e.target.value})} className="w-full h-12 px-4 rounded-xl border-2 border-slate-50 font-bold bg-white text-right outline-none">
+                    {timeSlots.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+            </div>
+            <input placeholder="שם הלקוח" value={form.customer_name} onChange={e => setForm({...form, customer_name: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-slate-50 font-black text-lg text-right outline-none focus:border-blue-600" />
+            <input placeholder="מספר קומקס" value={form.order_id_comax} onChange={e => setForm({...form, order_id_comax: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-slate-50 font-black text-lg text-right outline-none focus:border-blue-600" />
+            
+            <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 mr-2 italic">סטטוס נוכחי</label>
+                <div className="grid grid-cols-4 gap-2">
+                    {orderStatuses.map(s => (
+                        <button key={s.id} onClick={() => setForm({...form, status: s.id})} className={`py-3 rounded-xl text-[9px] font-black border-none transition-all ${form.status === s.id ? `${s.color} text-white shadow-lg` : 'bg-slate-50 text-slate-400'}`}>{s.id}</button>
+                    ))}
                 </div>
             </div>
 
-            <Button onClick={saveOrder} className="w-full h-20 bg-blue-700 hover:bg-blue-600 text-white rounded-[2.5rem] font-black text-xl shadow-2xl border-none cursor-pointer mt-4">שמור וסנכרן לוח 🚀</Button>
+            <Button onClick={saveOrder} className="w-full h-20 bg-green-600 hover:bg-green-500 text-white rounded-[2.5rem] font-black text-xl shadow-2xl border-none cursor-pointer">שמור ושלח ווטסאפ 🚀</Button>
           </Card>
         </div>
       )}
     </div>
   );
 }
+
+// קומפוננטת עזר
+const ChevronRight = ({ size }: { size: number }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>;
+const Hash = ({ size }: { size: number }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>;
