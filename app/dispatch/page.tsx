@@ -7,12 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Truck, Plus, Trash2, X, Send, Clock, Warehouse, MapPin, Share2, UserCheck, 
   Recycle, Menu, Edit2, Calendar, RefreshCw, Brain, Loader2, Terminal, Activity,
-  Users, Bell, CheckCircle2, Phone, ChevronDown, ChevronUp, Zap, Layout,
-  Hash // <--- האייקון שהיה חסר וגרם לשגיאה
+  Users, Bell, CheckCircle2, Phone, ChevronDown, ChevronUp, Zap, Layout, Hash,
+  MessageSquare // <--- האייקון שהיה חסר במאסטר וגרם לשגיאה
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 
-// --- הגדרות ליבה ---
+// --- הגדרות ליבה (חכמת, עלי, פינוי פסולת) ---
 const drivers = [
   { id: 'hakmat', name: 'חכמת', img: 'https://i.postimg.cc/d3S0NJJZ/Screenshot-20250623-200646-Facebook.jpg', color: '#0B2C63', defaultType: 'מנוף 🏗️' },
   { id: 'ali', name: 'עלי', img: 'https://i.postimg.cc/tCNbgXK3/Screenshot-20250623-200744-Tik-Tok.jpg', color: '#2563EB', defaultType: 'משאית 🚛' },
@@ -74,20 +74,20 @@ export default function SabanUnifiedMasterOS() {
 
   useEffect(() => {
     fetchData();
-    const sub = supabase.channel('unified_live')
+    const sub = supabase.channel('unified_master_live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'saban_master_dispatch' }, fetchData)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'saban_customer_requests' }, () => {
           new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3').play().catch(() => {});
           toast.success("פנייה חדשה מלקוח הגיעה לסידור!");
           fetchData();
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'saban_customer_requests' }, fetchData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'saban_customer_requests' }, fetchData)
       .subscribe();
     return () => { supabase.removeChannel(sub); };
   }, [fetchData, supabase]);
 
   const approveRequest = async (req: any) => {
-    toast.loading("מעבד בקשת לקוח...");
+    toast.loading("מאשר בקשה ומשבץ...");
     await supabase.from('saban_customer_requests').update({ status: 'approved' }).eq('id', req.id);
     const { error } = await supabase.from('saban_master_dispatch').insert([{
         customer_id: req.customer_id,
@@ -97,11 +97,12 @@ export default function SabanUnifiedMasterOS() {
         address: req.details?.address || 'עודכן מהנייד',
         scheduled_time: '08:00',
         driver_name: 'פינוי פסולת',
-        warehouse_source: 'כראדי (32)'
+        warehouse_source: 'כראדי (32)',
+        created_by: 'מערכת AI'
     }]);
     if (!error) {
         toast.dismiss();
-        toast.success("אושר! המכולה שובצה בסידור.");
+        toast.success("אושר! המשימה בלוח.");
         fetchData();
     }
   };
@@ -124,7 +125,7 @@ export default function SabanUnifiedMasterOS() {
         setAiMessages(prev => [...prev, { role: 'ai', content: data.aiResponse }]);
         if (data.executionResult?.includes('✅')) fetchData();
       }
-    } catch (e) { toast.error("נתק במוח"); } finally { setIsAiTyping(false); }
+    } catch (e) { toast.error("שגיאה במוח"); } finally { setIsAiTyping(false); }
   };
 
   const generateWAMessage = (order: any) => {
@@ -148,21 +149,21 @@ export default function SabanUnifiedMasterOS() {
     }
   };
 
-  if (loading) return <div className="h-screen flex items-center justify-center font-black animate-pulse text-[#0B2C63] italic text-2xl uppercase tracking-tighter">Saban Unified OS - Live...</div>;
+  if (loading) return <div className="h-screen flex items-center justify-center font-black animate-pulse text-[#0B2C63] italic text-2xl uppercase tracking-widest">Saban Unified OS - Live Console...</div>;
 
   return (
     <div className="min-h-screen bg-[#F4F7FA] pb-24 font-sans text-right" dir="rtl">
       <Toaster position="top-center" richColors />
 
       {/* --- Header --- */}
-      <div className="bg-[#0B2C63] text-white p-6 rounded-b-[2.5rem] shadow-2xl mb-8 flex justify-between items-center sticky top-0 z-[100]">
+      <div className="bg-[#0B2C63] text-white p-6 rounded-b-[3rem] shadow-2xl mb-8 flex justify-between items-center sticky top-0 z-[100] border-b border-blue-400/20">
         <div className="flex gap-3">
-          <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-3 bg-white/10 rounded-2xl text-white cursor-pointer hover:bg-white/20 transition-all border-none"><Menu size={28}/></button>
-          <button onClick={() => setShowAiMobile(true)} className="lg:hidden p-3 bg-blue-500/30 rounded-2xl text-white cursor-pointer border-none"><Brain size={28}/></button>
+          <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-3 bg-white/10 rounded-2xl text-white cursor-pointer hover:bg-white/20 transition-all border-none outline-none"><Menu size={28}/></button>
+          <button onClick={() => setShowAiMobile(true)} className="lg:hidden p-3 bg-blue-500/30 rounded-2xl text-white cursor-pointer border-none outline-none"><Brain size={28}/></button>
         </div>
         <div className="text-center">
-            <h1 className="text-2xl font-black italic uppercase tracking-tighter leading-none">ח.סבן</h1>
-            <p className="text-[9px] font-bold text-blue-300 uppercase tracking-[0.3em] mt-1">Unified Command</p>
+            <h1 className="text-3xl font-black italic uppercase tracking-tighter leading-none">ח.סבן</h1>
+            <p className="text-[10px] font-bold text-blue-300 uppercase tracking-[0.4em] mt-1">Unified Command Tower</p>
         </div>
         <div className="flex gap-2">
             <Button onClick={() => setActiveView(activeView === 'dispatch' ? 'customers' : 'dispatch')} className="bg-white/10 hover:bg-white/20 rounded-xl font-black h-12 border-none px-4 flex gap-2">
@@ -179,27 +180,27 @@ export default function SabanUnifiedMasterOS() {
               <aside className="w-80 bg-white h-full shadow-2xl p-8 animate-in slide-in-from-right duration-300">
                   <div className="flex justify-between items-center mb-10">
                       <h2 className="text-2xl font-black italic text-blue-900">SabanOS Menu</h2>
-                      <button onClick={() => setIsMenuOpen(false)} className="bg-slate-100 p-2 rounded-full border-none"><X size={20}/></button>
+                      <button onClick={() => setIsMenuOpen(false)} className="bg-slate-100 p-2 rounded-full border-none cursor-pointer"><X size={20}/></button>
                   </div>
                   <nav className="space-y-4 font-black">
-                      <button onClick={() => {setActiveView('dispatch'); setIsMenuOpen(false);}} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${activeView === 'dispatch' ? 'bg-blue-50 text-blue-700' : 'text-slate-400 hover:bg-slate-50'}`}><Layout size={20}/> לוח סידור נהגים</button>
-                      <button onClick={() => {setActiveView('customers'); setIsMenuOpen(false);}} className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all ${activeView === 'customers' ? 'bg-blue-50 text-blue-700' : 'text-slate-400 hover:bg-slate-50'}`}><Users size={20}/> ניטור לקוחות & פניות</button>
+                      <button onClick={() => {setActiveView('dispatch'); setIsMenuOpen(false);}} className={`w-full flex items-center gap-4 p-5 rounded-2xl transition-all border-none cursor-pointer ${activeView === 'dispatch' ? 'bg-blue-50 text-blue-700' : 'text-slate-400 hover:bg-slate-50'}`}><Layout size={20}/> לוח סידור נהגים</button>
+                      <button onClick={() => {setActiveView('customers'); setIsMenuOpen(false);}} className={`w-full flex items-center gap-4 p-5 rounded-2xl transition-all border-none cursor-pointer ${activeView === 'customers' ? 'bg-blue-50 text-blue-700' : 'text-slate-400 hover:bg-slate-50'}`}><Users size={20}/> ניטור פניות לקוחות</button>
                   </nav>
               </aside>
           </div>
       )}
 
-      {/* --- Dispatch View --- */}
+      {/* --- Dispatch Grid View --- */}
       {activeView === 'dispatch' && (
         <div className="max-w-[1800px] mx-auto px-4 grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12 animate-in fade-in">
             {drivers.map((driver) => (
-            <div key={driver.id} className="space-y-6 text-right">
+            <div key={driver.id} className="space-y-6">
                 <Card className="bg-white p-6 rounded-[2.5rem] shadow-xl border-none relative overflow-hidden">
                     <div className="flex items-center gap-4 mb-6">
                         <img src={driver.img} className="w-16 h-16 rounded-2xl object-cover shadow-lg border-2 border-white" />
-                        <div>
-                            <h2 className="text-2xl font-black text-slate-800">{driver.name}</h2>
-                            <Badge className="bg-slate-50 text-slate-500 border-none font-bold text-[10px] uppercase">{driver.defaultType}</Badge>
+                        <div className="text-right">
+                            <h2 className="text-2xl font-black text-slate-800 leading-none mb-1">{driver.name}</h2>
+                            <Badge className="bg-slate-50 text-slate-500 border-none font-bold text-[10px] uppercase tracking-widest">{driver.defaultType}</Badge>
                         </div>
                     </div>
                     <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
@@ -208,7 +209,7 @@ export default function SabanUnifiedMasterOS() {
                             return (
                                 <div key={time} onClick={() => { setForm({...form, driver_name: driver.name, scheduled_time: time}); setShowForm(true); }}
                                     className="flex flex-col items-center gap-2 cursor-pointer group">
-                                    <div className={`w-12 h-16 rounded-2xl border-2 flex items-center justify-center transition-all ${hasOrder ? 'bg-[#0B2C63] border-blue-400 shadow-md' : 'bg-slate-50 border-slate-100 group-hover:border-blue-200'}`}>
+                                    <div className={`w-12 h-16 rounded-2xl border-2 flex items-center justify-center transition-all ${hasOrder ? 'bg-[#0B2C63] border-blue-400 shadow-md scale-105' : 'bg-slate-50 border-slate-100 group-hover:border-blue-200'}`}>
                                         {hasOrder ? <Truck size={20} className="text-white animate-pulse" /> : <Plus size={16} className="text-slate-200" />}
                                     </div>
                                     <span className="text-[10px] font-black text-slate-400">{time}</span>
@@ -219,7 +220,7 @@ export default function SabanUnifiedMasterOS() {
                 </Card>
                 <div className="space-y-4">
                     {orders.filter(o => o.driver_name === driver.name).map((order) => (
-                        <Card key={order.id} className="p-6 rounded-[2.5rem] bg-white shadow-lg border-none relative group border-r-8 border-r-[#0B2C63] hover:translate-x-[-5px] transition-all">
+                        <Card key={order.id} className="p-6 rounded-[2.5rem] bg-white shadow-lg border-none relative group border-r-8 border-r-[#0B2C63] hover:translate-x-[-8px] transition-all">
                             <div className="flex justify-between items-start mb-4">
                                 <div className="flex items-center gap-4 text-right">
                                     <div className="bg-[#0B2C63] text-white px-3 py-2 rounded-xl text-xs font-black italic">{order.scheduled_time}</div>
@@ -229,9 +230,9 @@ export default function SabanUnifiedMasterOS() {
                                     </div>
                                 </div>
                                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                                    <button onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(generateWAMessage(order))}`, '_blank')} className="p-2 bg-green-50 text-green-600 rounded-xl border-none"><RefreshCw size={16}/></button>
-                                    <button onClick={() => { setEditingOrder(order); setForm(order); setShowForm(true); }} className="p-2 bg-blue-50 text-blue-600 rounded-xl border-none"><Edit2 size={16}/></button>
-                                    <button onClick={() => { if(confirm('למחוק?')) supabase.from('saban_master_dispatch').delete().eq('id', order.id).then(fetchData); }} className="p-2 bg-red-50 text-red-500 rounded-xl border-none"><Trash2 size={16}/></button>
+                                    <button onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(generateWAMessage(order))}`, '_blank')} className="p-2 bg-green-50 text-green-600 rounded-xl border-none cursor-pointer"><RefreshCw size={16}/></button>
+                                    <button onClick={() => { setEditingOrder(order); setForm(order); setShowForm(true); }} className="p-2 bg-blue-50 text-blue-600 rounded-xl border-none cursor-pointer"><Edit2 size={16}/></button>
+                                    <button onClick={() => { if(confirm('למחוק?')) supabase.from('saban_master_dispatch').delete().eq('id', order.id).then(fetchData); }} className="p-2 bg-red-50 text-red-500 rounded-xl border-none cursor-pointer"><Trash2 size={16}/></button>
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 gap-4 mt-2 pt-4 border-t border-slate-50 text-[11px] font-bold text-slate-400">
@@ -250,10 +251,10 @@ export default function SabanUnifiedMasterOS() {
       {activeView === 'customers' && (
           <div className="max-w-7xl mx-auto px-6 space-y-8 animate-in slide-in-from-left">
               <div className="flex items-center gap-4 mb-8">
-                  <div className="p-4 bg-white rounded-3xl shadow-sm border border-slate-100"><Users size={32} className="text-blue-700"/></div>
+                  <div className="p-4 bg-white rounded-3xl shadow-sm border border-slate-100 shadow-blue-100/50"><Users size={32} className="text-blue-700"/></div>
                   <div>
                       <h2 className="text-3xl font-black italic text-slate-800">ניטור פניות & לקוחות</h2>
-                      <p className="text-sm font-bold text-slate-400 uppercase tracking-widest italic leading-none">Live Client Radar</p>
+                      <p className="text-sm font-bold text-slate-400 uppercase tracking-widest italic leading-none">Live CRM Radar</p>
                   </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-20">
@@ -269,36 +270,36 @@ export default function SabanUnifiedMasterOS() {
                                     </div>
                                     <div className="text-left">
                                         <Badge className={`border-none font-black italic ${clientReq ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`}>{clientReq ? 'פנייה חיה!' : 'מחובר'}</Badge>
-                                        <p className="text-[9px] font-bold text-slate-300 block mt-1">ID: {client.customer_id}</p>
+                                        <p className="text-[9px] font-bold text-slate-300 block mt-1 tracking-widest uppercase">ID: {client.customer_id}</p>
                                     </div>
                                 </div>
-                                <h3 className="text-2xl font-black text-slate-800 mb-2 italic tracking-tight">{client.full_name}</h3>
+                                <h3 className="text-2xl font-black text-slate-800 mb-2 italic tracking-tight leading-none">{client.full_name}</h3>
                                 <p className="text-xs font-bold text-slate-400 mb-6 flex items-center justify-end gap-1"><MapPin size={12}/> {client.address}</p>
 
                                 {clientReq ? (
                                     <div className="bg-green-50 p-6 rounded-[2.5rem] border border-green-100 space-y-4 animate-in zoom-in">
                                         <div className="flex justify-between items-center text-[10px] font-black uppercase text-green-600">
                                             <span>מבקש:</span>
-                                            <span className="bg-green-600 text-white px-2 py-0.5 rounded italic">{clientReq.action_type}</span>
+                                            <span className="bg-green-600 text-white px-3 py-1 rounded-xl italic">{clientReq.action_type}</span>
                                         </div>
                                         <div className="flex gap-2">
-                                            <button onClick={() => approveRequest(clientReq)} className="flex-1 bg-green-600 text-white p-4 rounded-2xl font-black text-xs shadow-lg flex items-center justify-center gap-2"><CheckCircle2 size={16}/> אשר ושבץ</button>
-                                            <button className="bg-white text-red-400 p-4 rounded-2xl border border-red-50"><X size={18}/></button>
+                                            <button onClick={() => approveRequest(clientReq)} className="flex-1 bg-green-600 text-white p-4 rounded-2xl font-black text-xs shadow-lg hover:bg-green-700 transition-all flex items-center justify-center gap-2"><CheckCircle2 size={16}/> אשר ושבץ</button>
+                                            <button className="bg-white text-red-400 p-4 rounded-2xl border border-red-50 hover:bg-red-50 cursor-pointer"><X size={18}/></button>
                                         </div>
                                     </div>
                                 ) : (
                                     <div className="space-y-2">
-                                        <button onClick={() => setExpandedCustomer(isExpanded ? null : client.id)} className="w-full flex items-center justify-between bg-slate-50 p-4 rounded-2xl text-xs font-black text-slate-500 italic">
+                                        <button onClick={() => setExpandedCustomer(isExpanded ? null : client.id)} className="w-full flex items-center justify-between bg-slate-50 p-4 rounded-2xl text-xs font-black text-slate-500 italic border-none outline-none cursor-pointer">
                                             פרטי תיק והיסטוריה {isExpanded ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
                                         </button>
                                         {isExpanded && (
                                             <div className="pt-4 space-y-3 animate-in fade-in">
                                                 <div className="flex items-center justify-between p-3 bg-white rounded-xl text-[11px] font-bold shadow-sm">
-                                                    <span className="text-slate-400">נייד:</span><span className="text-slate-800">{client.phone}</span>
+                                                    <span className="text-slate-400 uppercase italic">נייד:</span><span className="text-slate-800">{client.phone}</span>
                                                 </div>
                                                 <div className="flex gap-2">
-                                                    <button className="flex-1 bg-blue-600 text-white p-3 rounded-xl font-black text-[10px] flex gap-2 justify-center"><MessageSquare size={14}/> AI</button>
-                                                    <button className="flex-1 bg-white border border-slate-100 text-slate-500 p-3 rounded-xl font-black text-[10px] flex gap-2 justify-center"><Phone size={14}/> חיוג</button>
+                                                    <button className="flex-1 bg-blue-600 text-white p-3 rounded-xl font-black text-[10px] flex gap-2 justify-center border-none cursor-pointer"><MessageSquare size={14}/> צאט AI</button>
+                                                    <button className="flex-1 bg-white border border-slate-100 text-slate-500 p-3 rounded-xl font-black text-[10px] flex gap-2 justify-center border-none cursor-pointer"><Phone size={14}/> חיוג</button>
                                                 </div>
                                             </div>
                                         )}
@@ -312,7 +313,7 @@ export default function SabanUnifiedMasterOS() {
           </div>
       )}
 
-      {/* --- AI Brain Panel --- */}
+      {/* --- AI Brain Control - Desktop --- */}
       <div className="hidden lg:block fixed bottom-8 left-8 right-8 z-[80]">
         <div className="max-w-[1800px] mx-auto grid grid-cols-4 gap-6 items-end">
           <Card className="col-span-3 bg-[#0B2C63]/95 backdrop-blur-xl rounded-[3rem] p-6 text-white shadow-2xl border border-blue-400/20">
@@ -322,22 +323,22 @@ export default function SabanUnifiedMasterOS() {
             </div>
             <div className="flex gap-4">
               <input value={aiInput} onChange={e => setAiInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAiCommand()} placeholder="ראמי, מה הפקודה?" className="flex-1 h-14 bg-white/10 border-none rounded-2xl px-6 text-white font-bold outline-none text-right placeholder:text-blue-300/30" />
-              <button onClick={handleAiCommand} className="w-16 h-14 bg-blue-500 hover:bg-blue-400 text-white rounded-2xl flex items-center justify-center border-none transition-all active:scale-95 shadow-xl">{isAiTyping ? <Loader2 className="animate-spin" /> : <Send size={20} />}</button>
+              <button onClick={handleAiCommand} className="w-16 h-14 bg-blue-500 hover:bg-blue-400 text-white rounded-2xl flex items-center justify-center border-none transition-all active:scale-95 shadow-xl cursor-pointer">{isAiTyping ? <Loader2 className="animate-spin" /> : <Send size={20} />}</button>
             </div>
-            {aiReport?.shareLink && <Button onClick={() => window.open(aiReport.shareLink, '_blank')} className="mt-4 w-full bg-green-600 rounded-2xl font-black h-12 border-none text-white shadow-xl flex gap-2 justify-center italic"><Share2 size={18}/> שלח סידור לקבוצת הווטסאפ</Button>}
+            {aiReport?.shareLink && <Button onClick={() => window.open(aiReport.shareLink, '_blank')} className="mt-4 w-full bg-green-600 hover:bg-green-500 rounded-2xl font-black h-12 border-none text-white shadow-xl flex gap-2 justify-center italic"><Share2 size={18}/> שלח סידור לקבוצה</Button>}
           </Card>
           <Card className="bg-slate-900/95 backdrop-blur-xl rounded-[3rem] p-6 text-white border border-white/5">
             <div className="flex items-center gap-2 mb-4 text-green-400"><Terminal size={18}/><span className="text-[10px] font-black uppercase tracking-widest">Logs</span></div>
-            <div className="bg-black/40 p-3 rounded-2xl text-[10px] font-black text-blue-400 italic leading-tight h-20 overflow-hidden">{aiReport?.executionResult || "> System Ready."}</div>
+            <div className="bg-black/40 p-3 rounded-2xl text-[10px] font-black text-blue-400 italic leading-tight h-20 overflow-hidden uppercase">{aiReport?.executionResult || "> Ready for command."}</div>
           </Card>
         </div>
       </div>
 
-      {/* --- AI Mobile --- */}
+      {/* --- AI Mobile Drawer --- */}
       {showAiMobile && (
         <div className="fixed inset-0 bg-[#0B2C63] z-[300] flex flex-col animate-in slide-in-from-bottom">
-          <div className="p-6 flex justify-between items-center border-b border-white/10 text-white">
-            <div className="flex items-center gap-3 font-black italic"><Brain className="text-blue-400" size={24}/>SABAN AI</div>
+          <div className="p-6 flex justify-between items-center border-b border-white/10 text-white font-black italic">
+            <div className="flex items-center gap-3"><Brain className="text-blue-400" size={24}/>SABAN AI</div>
             <button onClick={() => setShowAiMobile(false)} className="bg-white/10 p-2 rounded-full border-none text-white"><X/></button>
           </div>
           <div className="flex-1 p-6 space-y-4 text-right overflow-y-auto no-scrollbar">
@@ -346,33 +347,33 @@ export default function SabanUnifiedMasterOS() {
              ))}
           </div>
           <div className="p-6 bg-white/5 flex gap-2">
-              <input value={aiInput} onChange={e => setAiInput(e.target.value)} placeholder="פקודה..." className="flex-1 h-14 bg-white/10 border-none rounded-xl px-4 text-white font-bold text-right outline-none" />
+              <input value={aiInput} onChange={e => setAiInput(e.target.value)} placeholder="פקודה למוח..." className="flex-1 h-14 bg-white/10 border-none rounded-xl px-4 text-white font-bold text-right outline-none" />
               <button onClick={handleAiCommand} className="bg-blue-600 text-white w-14 h-14 rounded-xl flex items-center justify-center border-none shadow-xl"><Send size={20}/></button>
           </div>
         </div>
       )}
 
-      {/* --- Form --- */}
+      {/* --- Form Overlay --- */}
       {showForm && (
         <div className="fixed inset-0 bg-[#0B2C63]/95 backdrop-blur-md z-[200] flex items-center justify-center p-4">
           <Card className="bg-white w-full max-w-lg rounded-[3.5rem] p-10 space-y-6 shadow-2xl border-none text-right overflow-y-auto max-h-[90vh]">
             <div className="flex justify-between items-center mb-2">
               <h2 className="text-2xl font-black text-[#0B2C63] italic underline decoration-blue-200 underline-offset-8 uppercase">{editingOrder ? 'עריכת משימה' : 'הזמנה חדשה'}</h2>
-              <button onClick={() => { setShowForm(false); setEditingOrder(null); }} className="bg-slate-100 p-2 rounded-full border-none text-slate-400"><X size={24}/></button>
+              <button onClick={() => { setShowForm(false); setEditingOrder(null); }} className="bg-slate-100 p-2 rounded-full border-none text-slate-400 hover:text-black"><X size={24}/></button>
             </div>
             <div className="grid grid-cols-3 gap-2">
                 {teamMembers.map(m => (
-                    <button key={m} onClick={() => setForm({...form, created_by: m})} className={`py-4 rounded-2xl text-[11px] font-black border-none transition-all ${form.created_by === m ? 'bg-blue-600 text-white shadow-xl scale-105' : 'bg-slate-50 text-slate-400'}`}>{m}</button>
+                    <button key={m} onClick={() => setForm({...form, created_by: m})} className={`py-4 rounded-2xl text-[11px] font-black border-none transition-all cursor-pointer ${form.created_by === m ? 'bg-blue-600 text-white shadow-xl scale-105' : 'bg-slate-50 text-slate-400'}`}>{m}</button>
                 ))}
             </div>
             <div className="grid grid-cols-2 gap-4">
                 <input type="date" value={form.scheduled_date} onChange={e => setForm({...form, scheduled_date: e.target.value})} className="w-full h-12 px-4 rounded-xl border-2 border-slate-50 font-bold text-right outline-none" />
-                <select value={form.scheduled_time} onChange={e => setForm({...form, scheduled_time: e.target.value})} className="w-full h-12 px-4 rounded-xl border-2 border-slate-50 font-bold bg-white text-right outline-none">
+                <select value={form.scheduled_time} onChange={e => setForm({...form, scheduled_time: e.target.value})} className="w-full h-12 px-4 rounded-xl border-2 border-slate-50 font-bold bg-white text-right outline-none focus:border-blue-500">
                     {timeSlots.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
             </div>
-            <input placeholder="שם הלקוח" value={form.customer_name} onChange={e => setForm({...form, customer_name: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-slate-50 font-black text-lg text-right outline-none" />
-            <input placeholder="מספר קומקס" value={form.order_id_comax} onChange={e => setForm({...form, order_id_comax: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-slate-50 font-black text-lg text-right outline-none" />
+            <input placeholder="שם הלקוח" value={form.customer_name} onChange={e => setForm({...form, customer_name: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-slate-50 font-black text-lg text-right outline-none focus:border-blue-600" />
+            <input placeholder="מספר קומקס" value={form.order_id_comax} onChange={e => setForm({...form, order_id_comax: e.target.value})} className="w-full h-14 px-6 rounded-2xl border-2 border-slate-50 font-black text-lg text-right outline-none focus:border-blue-600" />
             <div className="grid grid-cols-2 gap-4">
               <select value={form.driver_name} onChange={e => setForm({...form, driver_name: e.target.value})} className="w-full h-14 px-4 rounded-xl border-2 border-slate-50 font-bold text-right bg-white">
                   {drivers.map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
