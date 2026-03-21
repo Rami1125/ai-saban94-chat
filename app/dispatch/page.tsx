@@ -7,10 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { 
   Truck, Plus, Trash2, X, Send, Clock, Warehouse, MapPin, Share2, UserCheck, 
   Recycle, Menu, Edit2, Calendar, RefreshCw, Brain, Loader2, Terminal, Activity,
-  Users, CheckCircle2, Package, Layout, Bell, Phone, Hash
+  Users, CheckCircle2, Package, Layout, Bell, Phone, Hash, ChevronRight 
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
-import { ..., Hash, ChevronRight, ... } from "lucide-react";
 
 // --- הגדרות ליבה ---
 const drivers = [
