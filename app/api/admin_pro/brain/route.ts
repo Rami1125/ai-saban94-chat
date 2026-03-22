@@ -1,113 +1,107 @@
-// app/api/pro_brain/route.ts
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = 'force-dynamic';
 
-// יצירת קליינט אדמין עם Service Role לעקיפת RLS
+// קליינט אדמין לעקיפת RLS - חובה להשתמש ב-SERVICE_ROLE_KEY
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
   process.env.SUPABASE_SERVICE_ROLE_KEY || ""
 );
 
-const API_KEYS = (process.env.GOOGLE_AI_KEY_POOL || process.env.GOOGLE_AI_KEY || "").split(',').map(k => k.trim());
-const STABLE_MODELS = ["gemini-1.5-flash", "gemini-3.1-flash-lite-preview"];
+// מפתח מוגדר ישירות - פשוט ונקי
+const GOOGLE_API_KEY = process.env.GOOGLE_AI_KEY || "";
+const genAI = new GoogleGenerativeAI(GOOGLE_API_KEY);
 
 export async function POST(req: Request) {
-  console.log("🚀 [PRO_BRAIN] מתחיל עיבוד בקשה חדשה...");
+  const timestamp = new Date().toLocaleTimeString();
+  console.log(`\n🚀 [${timestamp}] --- התחלת הרצת מוח סבן (v12.5) ---`);
+
   try {
     const { sessionId, query, userName, history } = await req.json();
+    console.log(`📝 שאילתה מ-${userName || 'אורח'}: "${query}"`);
 
-    if (!query) {
-      console.error("❌ [PRO_BRAIN] חסרה שאילתה (query)");
-      return NextResponse.json({ error: "Missing query" }, { status: 400 });
-    }
+    // 1. שליפת חוקי ה-DNA
+    console.log("📡 שולף חוקים (ai_rules)...");
+    const { data: rules, error: rulesError } = await supabaseAdmin
+      .from('ai_rules')
+      .select('instruction')
+      .eq('is_active', true);
 
-    // 1. שליפת DNA מחוקי המוח
-    console.log("📡 שולף חוקי DNA מ-Supabase...");
-    const { data: rules } = await supabaseAdmin.from('ai_rules').select('instruction').eq('is_active', true);
+    if (rulesError) console.error("❌ שגיאה בשליפת חוקים:", rulesError.message);
     const educatorDNA = rules?.map(r => r.instruction).join("\n\n") || "";
 
-    const historyContext = history?.map((m: any) => `${m.role === 'user' ? 'לקוח' : 'עוזר'}: ${m.content}`).join("\n") || "";
-
-    // 2. בניית System Prompt קשוח לביצוע
+    // 2. בניית System Prompt - אגרסיבי לביצוע
     const systemDNA = `
       זהות: המוח המבצע של ח. סבן. מנהל: ראמי.
-      חוק ברזל מבצעי:
-      בכל פעם שאתה מאשר הזמנה, אספקה או פינוי, חובה עליך לכלול בסוף התשובה את התג הבא בדיוק:
-      [CREATE_ORDER:שם_לקוח|סוג_פעולה|מחסן|שעה|פרטים_טכניים]
-      
+      חוק ברזל: ברגע שנסגרת הזמנה/אספקה, חובה לסיים את התשובה בתג המדויק:
+      [CREATE_ORDER:לקוח|סוג|מחסן|שעה|פרטים]
       דוגמה: [CREATE_ORDER:בר סטרומה 4|אספקה|ראשי|09:00|550 בלוק 20]
-      
-      חוק פחת: הוסף 10% פחת אוטומטית (40 מ"ר = 550 בלוקים).
-      ${educatorDNA}
-      היסטוריה קודמת: ${historyContext}
+      חוק פחת: תמיד 10% פחת (40 מ"ר = 550 בלוקים). אל תשאל - תקבע.
+      DNA נוסף: ${educatorDNA}
     `;
 
-    // 3. יצירת תוכן מול Gemini
-    console.log("🤖 פונה ל-Gemini...");
-    const genAI = new GoogleGenerativeAI(API_KEYS[0]);
+    // 3. פנייה ל-Gemini
+    console.log("🤖 פונה ל-Gemini 1.5 Flash...");
     const model = genAI.getGenerativeModel({ 
-      model: STABLE_MODELS[0], 
+      model: "gemini-1.5-flash",
       systemInstruction: systemDNA 
     });
-    
+
     const result = await model.generateContent(query);
     let aiText = result.response.text();
-    console.log("📝 תשובת ה-AI הגולמית:", aiText);
+    console.log(`📝 תשובת ה-AI התקבלה:\n"${aiText.substring(0, 100)}..."`);
 
-    // 4. המנוע המבצע: איתור תגים והזרקה לסידור
+    // 4. המלשינון הלוגיסטי - ניתוח פקודות
+    console.log("🔍 מחפש פקודת [CREATE_ORDER] בטקסט...");
     const createMatch = aiText.match(/\[CREATE_ORDER:(.*?)\]/);
 
     if (createMatch) {
-      console.log("✅ נמצא תג CREATE_ORDER! מתחיל חילוץ נתונים...");
+      console.log("✅ נמצאה פקודה! מפרק נתונים...");
       const parts = createMatch[1].split('|').map(s => s.trim());
       
-      const [customer, type, warehouse, time, details] = [
-        parts[0] || userName || "לקוח כללי",
-        parts[1] || "הובלה",
-        parts[2] || "ראשי",
-        parts[3] || "08:00",
-        parts[4] || "הזמנת AI"
-      ];
+      const orderData = {
+        customer_name: parts[0] || userName || "לקוח כללי",
+        container_action: parts[1] || "אספקה",
+        warehouse_source: parts[2] || "ראשי",
+        scheduled_time: parts[3] || "08:00",
+        order_id_comax: parts[4] || "הזמנת AI",
+        status: 'פתוח',
+        scheduled_date: new Date().toISOString().split('T')[0],
+        created_by: 'Saban AI Pro'
+      };
 
-      console.log(`📡 מזריק לטבלה: לקוח: ${customer}, שעה: ${time}, פרטים: ${details}`);
-
+      console.log("📡 מזריק ל-Database (saban_master_dispatch)...");
       const { data: inserted, error: dbError } = await supabaseAdmin
         .from('saban_master_dispatch')
-        .insert([{
-          customer_name: customer,
-          container_action: type,
-          warehouse_source: warehouse,
-          scheduled_time: time,
-          order_id_comax: details,
-          status: 'פתוח',
-          scheduled_date: new Date().toISOString().split('T')[0],
-          created_by: 'Saban AI Pro Brain'
-        }]).select();
+        .insert([orderData])
+        .select();
 
       if (dbError) {
-        console.error("❌ [שגיאת DB] ההזרקה נכשלה:", dbError.message);
-      } else if (inserted?.[0]) {
-        const realId = inserted[0].id;
-        console.log("🚀 [הצלחה] הזמנה נוצרה בסידור עם מזהה:", realId);
-        // החלפת TEMP_ID בטקסט אם קיים
-        aiText = aiText.replace("TEMP_ID", realId);
+        console.error("❌ כשל בהזרקה ל-DB:", dbError.message);
+        console.error("❌ פרטי השגיאה המלאים:", JSON.stringify(dbError));
+      } else {
+        const newId = inserted?.[0]?.id;
+        console.log(`🚀 הצלחה! הזמנה נוצרה בסידור. ID: ${newId}`);
+        aiText = aiText.replace("TEMP_ID", newId);
       }
     } else {
-      console.log("⚠️ [לוג] לא נמצא תג [CREATE_ORDER] בתשובה. לא תבוצע הזרקה ל-DB.");
+      console.log("⚠️ המוח לא הוציא תג [CREATE_ORDER]. לא בוצעה הזרקה לסידור.");
     }
 
-    // 5. שמירת תיעוד בצאט
+    // 5. שמירת היסטוריה
+    console.log("💾 שומר היסטוריית צאט...");
     await supabaseAdmin.from('chat_history').insert([
+      { session_id: sessionId, role: 'user', content: query },
       { session_id: sessionId, role: 'assistant', content: aiText }
     ]);
-    
+
+    console.log(`✨ [${timestamp}] סיום עיבוד מוצלח.`);
     return NextResponse.json({ answer: aiText });
 
   } catch (error: any) {
-    console.error("💥 [קריסה קריטית]:", error.message);
+    console.error("💥 קריסת API קריטית:", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
