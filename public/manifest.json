@@ -1,42 +1,22 @@
 {
-  "name": "ח.סבן חומרי בנין",
-  "short_name": "סידור",
-  "description": "מערכת ניהול ולוגיסטיקה כוללת - ח. סבן",
-  "start_url": "/admin/master",
-  "scope": "/",
+  "name": "ח.סבן Ai",
+  "short_name": "ח.סבן",
+  "description": "מערכת ניהול ולוגיסטיקה חכמה",
+  "start_url": "/ai-elite",
   "display": "standalone",
+  "background_color": "#0a332d",
+  "theme_color": "#075e54",
   "orientation": "portrait",
-  "background_color": "#050A18",
-  "theme_color": "#0B2C63",
   "icons": [
     {
-      "src": "/icon-192.png",
+      "src": "/ai.png",
       "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable"
+      "type": "image/png"
     },
     {
-      "src": "/icon-512.png",
+      "src": "/ai.png",
       "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    }
-  ],
-  "shortcuts": [
-    {
-      "name": "לוח פיקוד מאסטר",
-      "url": "/admin/master",
-      "description": "ניהול חוקים ומלשינון"
-    },
-    {
-      "name": "סידור עבודה",
-      "url": "/admin/dispatch",
-      "description": "ניהול נהגים והובלות"
-    },
-    {
-      "name": "מחירון ומוצרים",
-      "url": "/admin/inventory",
-      "description": "חיפוש מוצרים וסיקה"
+      "type": "image/png"
     }
   ]
 }
