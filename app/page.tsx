@@ -1,9 +1,9 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
 import { getSupabase } from "@/lib/supabase";
-import { User, Send, CheckCheck, ShoppingBag, Truck, MessageCircle, Search, Plus, Minus } from "lucide-react";
+import { Send, Truck, ShoppingBag, Search, Plus, Minus, MessageCircle, X, CheckCheck } from "lucide-react";
 
-export default function SabanWhatsAppUI() {
+export default function SabanElitePage() {
   const [activeTab, setActiveTab] = useState('chat');
   const [message, setMessage] = useState('');
   const [inventory, setInventory] = useState<any[]>([]);
@@ -13,150 +13,112 @@ export default function SabanWhatsAppUI() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const supabase = getSupabase();
 
-// --- 1. טעינת נתונים וסנכרון Realtime ---
+  // טעינת נתונים וסנכרון
   useEffect(() => {
     fetchInventory();
-    fetchActiveOrders();
+    fetchOrders();
 
-    // האזנה לשינויים בטבלת הסידור (להפעלת צלצול והתראות)
-    const dispatchChannel = supabase.channel('dispatch_realtime')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'saban_master_dispatch' 
-      }, (payload) => {
-        console.log("🔔 שינוי בסידור!", payload);
+    const channel = supabase.channel('realtime_saban')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'saban_master_dispatch' }, () => {
         if (window.playNotificationSound) window.playNotificationSound();
-        fetchActiveOrders(); // רענון רשימת המעקב
+        fetchOrders();
       })
       .subscribe();
 
-    // סנכרון מזהה משתמש קבוע
-    if (!localStorage.getItem('saban_user_id')) {
-      localStorage.setItem('saban_user_id', `user_${Math.random().toString(36).substring(2, 11)}`);
-    }
-
-    return () => {
-      supabase.removeChannel(dispatchChannel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // --- 2. שליפת מלאי מהטבלה inventory ---
+  // גלילה אוטומטית בצ'אט
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [activeTab]);
+
   const fetchInventory = async () => {
-    try {
-      console.log("📡 שואב מלאי מחי מטבלת inventory...");
-      const { data, error } = await supabase
-        .from('inventory')
-        .select('id, product_name, stock_qty, category, image_url, sku')
-        .order('product_name', { ascending: true });
+    // שליפה מהטבלה inventory לפי השדות ב-CSV שלך
+    const { data, error } = await supabase
+      .from('inventory')
+      .select('id, product_name, stock_qty, category, sku, image_url')
+      .order('product_name', { ascending: true });
 
-      if (error) throw error;
-
-      // מיפוי השדות מהטבלה שלך למבנה הממשק
-      const formattedInventory = data?.map(item => ({
-        id: item.id,
-        name: item.product_name || "מוצר ללא שם",
-        quantity: item.stock_qty || 0,
-        sku: item.sku,
-        category: item.category || "כללי",
-        image: item.image_url || "/ai.png"
-      }));
-
-      setInventory(formattedInventory || []);
-    } catch (err: any) {
-      console.error("❌ שגיאה בשליפת מלאי:", err.message);
-    }
+    if (error) console.error("שגיאת מלאי:", error.message);
+    else setInventory(data || []);
   };
 
-  // --- 3. שליפת הזמנות פעילות למעקב ---
-  const fetchActiveOrders = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('saban_master_dispatch')
-        .select('*')
-        .not('status', 'in', '("בוצע","מבוטל")') // מציג רק מה שבתהליך
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setActiveOrders(data || []);
-    } catch (err: any) {
-      console.error("❌ שגיאה בשליפת הזמנות:", err.message);
-    }
-  };
-  const addToCart = (id: string) => {
-    setCart(prev => ({ ...prev, [id]: (prev[id] || 0) + 1 }));
+  const fetchOrders = async () => {
+    const { data } = await supabase.from('saban_master_dispatch')
+      .select('*')
+      .neq('status', 'בוצע')
+      .order('created_at', { ascending: false });
+    setActiveOrders(data || []);
   };
 
-  const removeFromCart = (id: string) => {
-    if (cart[id] > 0) {
-      setCart(prev => ({ ...prev, [id]: prev[id] - 1 }));
-    }
-  };
-
-  // פונקציית שליחה למוח להתייעצות
   const consultAI = (productName: string) => {
-    setMessage(`אני רוצה להתייעץ לגבי ${productName}, כמה פחת כדאי לקחת?`);
+    setMessage(`אני רוצה להזמין ${productName}, תעזור לי עם כמויות ופחת.`);
     setActiveTab('chat');
   };
 
   return (
-    <div className="flex flex-col h-screen bg-[#ece5dd] max-w-full overflow-hidden" dir="rtl">
+    <div className="flex flex-col h-[100dvh] bg-[#ece5dd] overflow-hidden select-none font-sans" dir="rtl">
       
-      {/* Header - WhatsApp Style */}
-      <header className="bg-[#075e54] text-white p-3 pt-6 shadow-md flex justify-between items-center z-50 shrink-0">
+      {/* Header - Fixed */}
+      <header className="bg-[#075e54] text-white p-3 pt-10 shadow-lg flex justify-between items-center z-50 shrink-0">
         <div className="flex items-center gap-3">
-          <img src="/ai.png" className="w-10 h-10 rounded-full border border-white/20 bg-white shadow-sm" />
+          <img src="/ai.png" className="w-10 h-10 rounded-full border-2 border-white/20 bg-white" 
+               onError={(e) => { e.currentTarget.src = "https://ui-avatars.com/api/?name=Saban+AI&background=075e54&color=fff"; }} />
           <div>
             <h1 className="font-bold text-lg leading-tight">ח.סבן Ai</h1>
-            <span className="text-[10px] text-green-200">מחובר למלאי ולסידור</span>
+            <span className="text-[10px] text-green-200 block italic">מוח מבצע פעיל // מלאי חי</span>
           </div>
         </div>
         <div className="flex gap-4 opacity-90">
-          <Truck size={22} onClick={() => setActiveTab('track')} className={activeTab === 'track' ? 'text-white' : 'text-green-200'} />
-          <ShoppingBag size={22} onClick={() => setActiveTab('shop')} className={activeTab === 'shop' ? 'text-white' : 'text-green-200'} />
+          <Truck size={24} onClick={() => setActiveTab('track')} className={activeTab === 'track' ? 'text-white' : 'text-green-200'} />
+          <ShoppingBag size={24} onClick={() => setActiveTab('shop')} className={activeTab === 'shop' ? 'text-white' : 'text-green-200'} />
         </div>
       </header>
 
-      {/* Navigation */}
-      <nav className="bg-[#075e54] text-white flex shrink-0">
+      {/* Navigation Tabs */}
+      <nav className="bg-[#075e54] text-white flex shrink-0 shadow-md">
         <button onClick={() => setActiveTab('chat')} className={`flex-1 py-3 text-sm font-bold border-b-4 ${activeTab === 'chat' ? 'border-white' : 'border-transparent opacity-60'}`}>צ'אט</button>
         <button onClick={() => setActiveTab('shop')} className={`flex-1 py-3 text-sm font-bold border-b-4 ${activeTab === 'shop' ? 'border-white' : 'border-transparent opacity-60'}`}>מלאי</button>
         <button onClick={() => setActiveTab('track')} className={`flex-1 py-3 text-sm font-bold border-b-4 ${activeTab === 'track' ? 'border-white' : 'border-transparent opacity-60'}`}>מעקב ({activeOrders.length})</button>
       </nav>
 
-      {/* Scrollable Content */}
-      <main className="flex-1 overflow-y-auto p-4 space-y-4 touch-pan-y" style={{ background: "url('https://i.ibb.co/5G7999D/whatsapp-bg.png')" }}>
+      {/* Main Container - Scrollable */}
+      <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 touch-pan-y" 
+            style={{ backgroundColor: "#e5ddd5", backgroundImage: "url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')", backgroundSize: "600px" }}>
         
         {activeTab === 'chat' && (
           <div className="flex flex-col gap-3">
-            <div className="bg-white p-3 rounded-lg shadow-sm max-w-[85%] self-start border border-gray-200">
-              <p className="text-sm">אהלן ראמי, המוח של סבן מחובר למערכת ה-ERP. כל פקודה שלך כאן תזריק ישירות לסידור או לסל.</p>
+            <div className="bg-white p-3 rounded-lg shadow-sm max-w-[85%] self-start text-sm leading-relaxed border border-gray-200">
+              אהלן ראמי אחי! אני מחובר לטבלת ה-Inventory שלך. כל פקודה שתיתן כאן תזריק ישירות לסידור או לסל. 🦾
             </div>
           </div>
         )}
 
         {activeTab === 'shop' && (
           <div className="space-y-4">
-            <div className="relative">
-              <input 
-                type="text" placeholder="חפש מוצר במלאי..." 
-                className="w-full p-3 pr-10 rounded-full border-none shadow-sm text-sm"
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-              <Search className="absolute right-3 top-3 text-gray-400" size={18} />
+            <div className="sticky top-0 z-20 shadow-sm">
+              <div className="relative">
+                <input type="text" placeholder="חפש מוצר במלאי..." 
+                       className="w-full p-4 pr-12 rounded-2xl border-none text-sm outline-none bg-white shadow-md"
+                       value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                <Search className="absolute right-4 top-4 text-gray-400" size={20} />
+              </div>
             </div>
-            <div className="grid grid-cols-1 gap-3 pb-20">
-              {inventory.filter(i => i.name.includes(searchTerm)).map((item) => (
-                <div key={item.id} className="bg-white p-4 rounded-xl shadow-sm flex items-center justify-between border-b-2 border-green-500">
-                  <div className="flex-1">
-                    <h3 className="font-bold text-gray-800">{item.name}</h3>
-                    <p className="text-xs text-gray-500">מלאי זמין: {item.quantity}</p>
-                    <button onClick={() => consultAI(item.name)} className="text-[10px] text-blue-600 underline mt-1">התייעץ עם המוח</button>
+            <div className="grid grid-cols-1 gap-3 pb-24">
+              {inventory.filter(i => (i.product_name || "").includes(searchTerm)).map((item) => (
+                <div key={item.id} className="bg-white p-4 rounded-2xl shadow-sm flex items-center justify-between border-r-8 border-green-600 transition-transform active:scale-[0.98]">
+                  <div className="flex-1 pr-2">
+                    <h3 className="font-bold text-gray-800 text-sm line-clamp-1">{item.product_name}</h3>
+                    <p className="text-[10px] text-gray-500 italic">מק"ט: {item.sku} | מלאי: {item.stock_qty}</p>
+                    <button onClick={() => consultAI(item.product_name)} className="text-[10px] text-blue-600 mt-2 font-bold flex items-center gap-1 underline">
+                      <MessageCircle size={10} /> התייעץ עם המוח
+                    </button>
                   </div>
-                  <div className="flex items-center gap-3 bg-gray-50 p-2 rounded-lg">
-                    <button onClick={() => removeFromCart(item.id)} className="bg-red-100 text-red-600 p-1 rounded-full"><Minus size={16}/></button>
-                    <span className="font-bold w-4 text-center">{cart[item.id] || 0}</span>
-                    <button onClick={() => addToCart(item.id)} className="bg-green-100 text-green-600 p-1 rounded-full"><Plus size={16}/></button>
+                  <div className="flex items-center gap-3 bg-gray-50 p-2 rounded-xl border border-gray-100">
+                    <button onClick={() => { if(cart[item.id]>0) setCart({...cart, [item.id]: cart[item.id]-1})}} className="p-1 bg-white shadow-sm text-red-600 rounded-lg"><Minus size={20}/></button>
+                    <span className="font-bold w-5 text-center text-sm">{cart[item.id] || 0}</span>
+                    <button onClick={() => setCart({...cart, [item.id]: (cart[item.id]||0)+1})} className="p-1 bg-white shadow-sm text-green-600 rounded-lg"><Plus size={20}/></button>
                   </div>
                 </div>
               ))}
@@ -165,25 +127,20 @@ export default function SabanWhatsAppUI() {
         )}
 
         {activeTab === 'track' && (
-          <div className="space-y-4 pb-20">
+          <div className="space-y-4 pb-24">
             {activeOrders.length === 0 ? (
-              <div className="text-center py-20 opacity-40">
-                <Truck size={48} className="mx-auto mb-2" />
-                <p>אין הזמנות פעילות בסידור</p>
-              </div>
+              <div className="text-center py-24 opacity-30 italic">אין הזמנות בביצוע כרגע</div>
             ) : (
               activeOrders.map(order => (
-                <div key={order.id} className="bg-white p-4 rounded-xl shadow-md border-r-8 border-r-green-600 animate-in fade-in slide-in-from-right duration-500">
-                  <div className="flex justify-between items-start">
-                    <h3 className="font-bold text-gray-900">{order.customer_name}</h3>
-                    <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-1 rounded-full uppercase tracking-tighter">
-                      {order.status}
-                    </span>
+                <div key={order.id} className="bg-white p-4 rounded-2xl shadow-lg border-r-8 border-[#25d366] animate-in slide-in-from-right duration-300">
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="font-bold text-[#075e54]">{order.customer_name}</h3>
+                    <span className="text-[9px] font-black bg-green-100 text-green-800 px-3 py-1 rounded-full uppercase italic">{order.status}</span>
                   </div>
-                  <p className="text-xs text-gray-600 mt-2">{order.order_id_comax}</p>
-                  <div className="flex justify-between items-center mt-3 border-t pt-2">
-                    <span className="text-[10px] text-gray-400">שעה: {order.scheduled_time}</span>
-                    <span className="text-[10px] text-gray-400">נהג: {order.driver_name || 'טרם שובץ'}</span>
+                  <p className="text-[11px] text-gray-700 bg-gray-50 p-2 rounded-lg border border-gray-100">{order.order_id_comax}</p>
+                  <div className="flex justify-between items-center mt-3 pt-2 text-[10px] text-gray-400 font-bold border-t border-gray-50">
+                    <span>🕒 {order.scheduled_time}</span>
+                    <span>🚚 {order.driver_name || 'ממתין לשיבוץ'}</span>
                   </div>
                 </div>
               ))
@@ -192,19 +149,16 @@ export default function SabanWhatsAppUI() {
         )}
       </main>
 
-      {/* Footer Input */}
+      {/* Footer - WhatsApp Style */}
       {activeTab === 'chat' && (
-        <footer className="p-3 bg-[#f0f0f0] flex items-center gap-2 pb-8 shrink-0 z-50 shadow-2xl">
-          <div className="flex-1 bg-white rounded-full px-4 py-3 shadow-inner flex items-center">
-            <input 
-              type="text" placeholder="כתוב פקודה למוח..." 
-              className="flex-1 outline-none text-sm"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-            />
+        <footer className="p-3 bg-[#f0f0f0] flex items-center gap-2 pb-10 shrink-0 shadow-2xl z-50">
+          <div className="flex-1 bg-white rounded-full px-5 py-3 shadow-md border border-gray-200">
+            <input type="text" placeholder="כתוב פקודה למוח..." 
+                   className="w-full outline-none text-sm bg-transparent" value={message}
+                   onChange={(e) => setMessage(e.target.value)} />
           </div>
-          <button className="bg-[#075e54] text-white p-3 rounded-full shadow-lg active:scale-90 transition-all">
-            <Send size={24} />
+          <button className="bg-[#075e54] text-white p-4 rounded-full shadow-xl active:scale-90 transition-all">
+            <Send size={22} className="mr-1" />
           </button>
         </footer>
       )}
