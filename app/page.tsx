@@ -13,39 +13,76 @@ export default function SabanWhatsAppUI() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const supabase = getSupabase();
 
-  // טעינת נתונים בזמן אמת
+// --- 1. טעינת נתונים וסנכרון Realtime ---
   useEffect(() => {
     fetchInventory();
-    subscribeToDispatch();
-    
-    // סנכרון משתמש
+    fetchActiveOrders();
+
+    // האזנה לשינויים בטבלת הסידור (להפעלת צלצול והתראות)
+    const dispatchChannel = supabase.channel('dispatch_realtime')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'saban_master_dispatch' 
+      }, (payload) => {
+        console.log("🔔 שינוי בסידור!", payload);
+        if (window.playNotificationSound) window.playNotificationSound();
+        fetchActiveOrders(); // רענון רשימת המעקב
+      })
+      .subscribe();
+
+    // סנכרון מזהה משתמש קבוע
     if (!localStorage.getItem('saban_user_id')) {
-      localStorage.setItem('saban_user_id', `user_${Math.random().toString(36).substr(2, 9)}`);
+      localStorage.setItem('saban_user_id', `user_${Math.random().toString(36).substring(2, 11)}`);
     }
+
+    return () => {
+      supabase.removeChannel(dispatchChannel);
+    };
   }, []);
 
+  // --- 2. שליפת מלאי מהטבלה inventory ---
   const fetchInventory = async () => {
-    const { data } = await supabase.from('saban_inventory').select('*').order('name');
-    setInventory(data || []);
+    try {
+      console.log("📡 שואב מלאי מחי מטבלת inventory...");
+      const { data, error } = await supabase
+        .from('inventory')
+        .select('id, product_name, stock_qty, category, image_url, sku')
+        .order('product_name', { ascending: true });
+
+      if (error) throw error;
+
+      // מיפוי השדות מהטבלה שלך למבנה הממשק
+      const formattedInventory = data?.map(item => ({
+        id: item.id,
+        name: item.product_name || "מוצר ללא שם",
+        quantity: item.stock_qty || 0,
+        sku: item.sku,
+        category: item.category || "כללי",
+        image: item.image_url || "/ai.png"
+      }));
+
+      setInventory(formattedInventory || []);
+    } catch (err: any) {
+      console.error("❌ שגיאה בשליפת מלאי:", err.message);
+    }
   };
 
-  const subscribeToDispatch = async () => {
-    // משיכת הזמנות פעילות בלבד (סטטוס לא סגור)
-    const { data } = await supabase.from('saban_master_dispatch')
-      .select('*')
-      .not('status', 'eq', 'בוצע')
-      .order('created_at', { ascending: false });
-    setActiveOrders(data || []);
+  // --- 3. שליפת הזמנות פעילות למעקב ---
+  const fetchActiveOrders = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('saban_master_dispatch')
+        .select('*')
+        .not('status', 'in', '("בוצע","מבוטל")') // מציג רק מה שבתהליך
+        .order('created_at', { ascending: false });
 
-    // האזנה לשינויים בסידור
-    supabase.channel('dispatch_live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'saban_master_dispatch' }, () => {
-        // רענון אוטומטי כשמשתנה סטטוס בסידור
-        window.playNotificationSound?.();
-        fetchInventory(); // רענון מלאי במידה והשתנה
-      }).subscribe();
+      if (error) throw error;
+      setActiveOrders(data || []);
+    } catch (err: any) {
+      console.error("❌ שגיאה בשליפת הזמנות:", err.message);
+    }
   };
-
   const addToCart = (id: string) => {
     setCart(prev => ({ ...prev, [id]: (prev[id] || 0) + 1 }));
   };
