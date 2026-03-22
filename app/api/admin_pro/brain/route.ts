@@ -1,120 +1,67 @@
+// app/api/pro_brain/route.ts - גרסה מתוקנת עם הזרקה לסידור
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { getSupabase } from "@/lib/supabase";
 
-// חיבור מאובטח ל-Supabase עם Service Role
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+export const dynamic = 'force-dynamic';
+
+const API_KEYS = (process.env.GOOGLE_AI_KEY_POOL || process.env.GOOGLE_AI_KEY || "").split(',').map(k => k.trim());
+const STABLE_MODELS = ["gemini-1.5-flash", "gemini-3.1-flash-lite-preview"];
 
 export async function POST(req: Request) {
-  const startTime = Date.now();
-  
   try {
-    const { query, history = [] } = await req.json(); // חזרה למבנה המקורי שלך
-    const apiKey = process.env.GOOGLE_AI_KEY;
-    const MODEL_NAME = "gemini-3.1-flash-lite-preview"; // המודל המדויק שלך
+    const supabase = getSupabase();
+    const { sessionId, query, userName, history } = await req.json();
 
-    if (!apiKey) return NextResponse.json({ error: "Missing API Key" }, { status: 500 });
+    if (!query) return NextResponse.json({ error: "Missing query" }, { status: 400 });
 
-    // --- 1. שליפת ה-DNA של המוחות מה-DB ---
-    const { data: rawRules } = await supabaseAdmin
-      .from('saban_brain_rules')
-      .select('brain_type, rule_description')
-      .eq('is_active', true);
+    // 1. שליפת חוקי המוחות (Saban Master DNA)
+    const { data: rules } = await supabase.from('ai_rules').select('instruction').eq('is_active', true);
+    const educatorDNA = rules?.map(r => r.instruction).join("\n\n") || "";
 
-    const brainRules = rawRules?.map(r => {
-      return `[${r.brain_type} BRAIN]: ${JSON.stringify(r.rule_description)}`;
-    }).join('\n') || "עבוד לפי חוקי ח. סבן הכלליים.";
+    const historyContext = history?.map((m: any) => `${m.role === 'user' ? 'לקוח' : 'עוזר'}: ${m.content}`).join("\n") || "";
 
-    // --- 2. שליפת מלאי רלוונטי מה-CSV שהומר לטבלה ---
-    const { data: inventory } = await supabaseAdmin
-      .from('inventory')
-      .select('product_name, sku, stock_qty, unit_type, coverage_notes')
-      .limit(15);
-
-    const inventoryContext = inventory?.map(i => 
-      `${i.product_name} (SKU: ${i.sku}) | מלאי: ${i.stock_qty} | יחידה: ${i.unit_type} | כיסוי: ${i.coverage_notes}`
-    ).join('\n');
-
-    // --- 3. בניית ה-System Prompt המאוחד ---
-    const systemPrompt = `
-אתה המוח המשולב של ח. סבן (Multi-Brain System). אתה פועל כיחידה אחת המורכבת מ-3 זהויות:
-
-חוקי המוחות (DNA מה-Database):
-${brainRules}
-
-מלאי זמין (CSV Sync):
-${inventoryContext}
-
-⚠️ חוקי ברזל לביצוע (אל תסטה מהם):
-1. בכל פעם שיש בקשה לכמות, הפעל את ENGINEER: חשב נטו + 10% פחת בדיוק. אל תיתן מספרים נמוכים מהחישוב הזה.
-2. בכל הזמנה, הפעל את CUSTOMER: בצע Upsell אקטיבי. אל תשאל "האם אתה רוצה", כתוב "אני מוסיף לך לסל [מוצר משלים] כי זה הכרחי לעבודה".
-3. בכל פעם שנסגרת כמות וזמן, חובה להוציא פקודה בפורמט הבא בתוך הטקסט:
-   [CREATE_ORDER:שם_לקוח|סוג_פעולה|מחסן|שעה|פרטים_טכניים]
-   [ADD_TO_CART:SKU_או_שם_מוצר]
-
-הנחיות סגנון:
-- פנה בשמות: "ראמי", "בר", "אחי".
-- חתימה חובה: "הנה הלינק למעקב אישי עבור הלקוח: https://saban-os.vercel.app/track/TEMP_ID"
-- אם הלקוח שאל על חומר, תן לו את המק"ט המדויק מהמלאי לעיל.
+    // 2. בניית ה-System Prompt (חייב לכלול את הוראת התגים)
+    const systemDNA = `
+      זהות: המוח המשולב של ח. סבן. מנהל: ראמי.
+      חוקי ברזל:
+      - בכל הזמנה חובה להשתמש בתגים: [CREATE_ORDER:לקוח|סוג|מחסן|שעה|פרטים] ו-[ADD_TO_CART:SKU].
+      - הוסף 10% פחת אוטומטית לכל חישוב.
+      ${educatorDNA}
+      היסטוריה: ${historyContext}
     `;
-    // --- 4. שליחה ל-Gemini API ---
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [...history, { role: "user", parts: [{ text: query }] }],
-        systemInstruction: { parts: [{ text: systemPrompt }] }
-      }),
-    });
 
-    const aiData = await res.json();
-    let aiText = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "ראמי אחי, יש נתק קטן בכיול, נסה שוב... 🦾";
-    let executionResult = "NO_ACTION";
-    let shareLink = "";
-    
-     console.log("AI Raw Response:", aiText);
-     const createMatch = aiText.match(/\[CREATE_ORDER:(.*?)\]/);
-     console.log("Match Result:", createMatch);
-    
-    // --- 5. עיבוד פקודות (Create/Update) ---
+    let aiText = "";
+    // ... לוגיקת סבב מפתחות (כפי שקיימת אצלך) ...
+    const genAI = new GoogleGenerativeAI(API_KEYS[0]);
+    const model = genAI.getGenerativeModel({ model: STABLE_MODELS[0], systemInstruction: systemDNA });
+    const result = await model.generateContent(query);
+    aiText = result.response.text();
+
+    // --- 3. המנוע המבצע: הזרקה לסידור העבודה ---
     const createMatch = aiText.match(/\[CREATE_ORDER:(.*?)\]/);
     if (createMatch) {
       const [customer, type, warehouse, time, details] = createMatch[1].split('|').map(s => s.trim());
-      const { data: inserted, error: dbError } = await supabaseAdmin.from('saban_master_dispatch').insert([...]);
-      if (dbError) console.error("Supabase Injection Error:", dbError.message);
-          customer_name: customer,
-          container_action: type,
-          warehouse_source: warehouse,
-          scheduled_time: time,
-          order_id_comax: details,
-          status: 'פתוח',
-          scheduled_date: new Date().toISOString().split('T')[0]
-      }]).select();
+      
+      // הזרקה לטבלה שחקרנו (saban_master_dispatch)
+      const { error: dbError } = await supabase.from('saban_master_dispatch').insert([{
+        customer_name: customer,
+        container_action: type,
+        warehouse_source: warehouse,
+        scheduled_time: time,
+        order_id_comax: details,
+        status: 'פתוח',
+        scheduled_date: new Date().toISOString().split('T')[0],
+        created_by: 'Saban AI Pro'
+      }]);
 
-      if (inserted?.[0]) {
-        const realId = inserted[0].id;
-        aiText = aiText.replace("TEMP_ID", realId);
-        executionResult = `✅ הזמנה נוצרה: ${realId}`;
-        shareLink = `https://saban-os.vercel.app/track/${realId}`;
-      }
+      if (dbError) console.error("Injection Failed:", dbError.message);
     }
 
-    // שמירה להיסטוריה
-    await supabaseAdmin.from('saban_brain_history').insert([{
-      user_query: query,
-      ai_response: aiText,
-      execution_status: executionResult
-    }]);
-
-    return NextResponse.json({
-      aiResponse: aiText,
-      executionResult,
-      shareLink,
-      latency: `${Date.now() - startTime}ms`
-    });
-
+    // שמירת היסטוריה
+    await supabase.from('chat_history').insert([{ session_id: sessionId, role: 'assistant', content: aiText }]);
+    
+    return NextResponse.json({ answer: aiText });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
