@@ -10,33 +10,34 @@ import Script from "next/script";
 const heebo = Heebo({ subsets: ["hebrew"], variable: "--font-heebo" });
 
 export const metadata: Metadata = {
-  title: "סידור ח.סבן",
-  description: "מערכת ניהול ולוגיסטיקה חכמה",
+  title: "ח.סבן Ai | ניהול לוגיסטי",
+  description: "מערכת הבינה המלאכותית של ח.סבן - ניהול, סידור ואספקה",
+  manifest: "/manifest.json",
   icons: {
-    icon: 'data:image/x-icon;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEAIAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wD///8A////AP///wA=',
-    apple: "/icon-192.png",
+    icon: "/ai.png",
+    apple: "/ai.png",
   },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "סידור",
+    title: "ח.סבן Ai",
   },
-  manifest: "/manifest.json",
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0B2C63",
+  themeColor: "#075e54", // צבע הוואטסאפ המקצועי (Emerald)
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  viewportFit: "cover", // מבטיח ניצול מסך מלא במובייל (ללא פסים לבנים)
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="he" dir="rtl">
       <head>
-        {/* הגנה מוקדמת על IndexedDB למניעת שגיאת OneSignal בקונסול */}
+        {/* הגנה על IndexedDB ו-OneSignal */}
         <script dangerouslySetInnerHTML={{ __html: `
           (function() {
             window.OneSignalDeferred = window.OneSignalDeferred || [];
@@ -51,48 +52,48 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           })();
         `}} />
         
-<Script id="onesignal-init" strategy="afterInteractive">
-  {`
-    window.OneSignalDeferred = window.OneSignalDeferred || [];
-    window.OneSignalDeferred.push(async function(OneSignal) {
-      // בדיקה אם הדפדפן תומך ומאפשר
-      if (!window.indexedDB) {
-        console.warn("SabanOS: OneSignal disabled - No IndexedDB");
-        return;
-      }
-      
-      try {
-        await OneSignal.init({
-          appId: "acc8a2bc-d54e-4261-b3d2-cc5c5f7b39d3",
-          safari_web_id: "web.onesignal.auto.5f4f9ed9-fb2e-4d6a-935d-81aa46fccce0",
-          notifyButton: { enable: true },
-          allowLocalhostAsSecureOrigin: true,
-          serviceWorkerParam: { scope: "/" }, // מבטיח שהוורקר יירשם בנתיב הנכון
-          serviceWorkerPath: "OneSignalSDKWorker.js"
-        });
-
-        // וידוא שהוורקר מוכן לפני שליחת הודעות
-        const registration = await navigator.serviceWorker.ready;
-        console.log("SabanOS: OneSignal Service Worker is ready!", registration);
+        <Script 
+          src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" 
+          strategy="afterInteractive" 
+        />
         
-      } catch (err) {
-        console.error("SabanOS: OneSignal Init Error:", err);
-      }
-    });
-  `}
-</Script>
-      
+        <Script id="onesignal-init" strategy="afterInteractive">
+          {`
+            window.OneSignalDeferred = window.OneSignalDeferred || [];
+            window.OneSignalDeferred.push(async function(OneSignal) {
+              if (!window.indexedDB) return;
+              try {
+                await OneSignal.init({
+                  appId: "acc8a2bc-d54e-4261-b3d2-cc5c5f7b39d3",
+                  safari_web_id: "web.onesignal.auto.5f4f9ed9-fb2e-4d6a-935d-81aa46fccce0",
+                  notifyButton: { enable: true },
+                  allowLocalhostAsSecureOrigin: true,
+                  serviceWorkerParam: { scope: "/" },
+                  serviceWorkerPath: "OneSignalSDKWorker.js"
+                });
+              } catch (err) {
+                console.error("SabanOS OneSignal Error:", err);
+              }
+            });
+          `}
+        </Script>
       </head>
-      <body className={`${heebo.variable} font-sans antialiased bg-slate-50`}>
+      
+      {/* עיצוב ה-Body כרקע של וואטסאפ עם פונט היבו */}
+      <body className={`${heebo.variable} font-sans antialiased bg-[#ece5dd] text-[#075e54]`}>
         <BusinessConfigProvider>
           <ChatActionsProvider>
-            {children}
+            {/* קונטיינר מרכזי שמבטיח שכל דף ירגיש כמו אפליקציה */}
+            <div className="flex flex-col h-screen max-w-md mx-auto bg-white shadow-2xl relative overflow-hidden md:max-w-none md:shadow-none">
+              {children}
+            </div>
+            
             <Toaster />
             <ServiceWorkerRegistrar />
           </ChatActionsProvider>
         </BusinessConfigProvider>
 
-        {/* מערכת סאונד סבן */}
+        {/* מערכת צלצול התראות סבן */}
         <script dangerouslySetInnerHTML={{ __html: `
           window.playNotificationSound = () => {
             try {
