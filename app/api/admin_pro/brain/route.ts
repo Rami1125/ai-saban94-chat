@@ -73,12 +73,17 @@ ${inventoryContext}
     let aiText = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "ראמי אחי, יש נתק קטן בכיול, נסה שוב... 🦾";
     let executionResult = "NO_ACTION";
     let shareLink = "";
-
+    
+     console.log("AI Raw Response:", aiText);
+     const createMatch = aiText.match(/\[CREATE_ORDER:(.*?)\]/);
+     console.log("Match Result:", createMatch);
+    
     // --- 5. עיבוד פקודות (Create/Update) ---
     const createMatch = aiText.match(/\[CREATE_ORDER:(.*?)\]/);
     if (createMatch) {
       const [customer, type, warehouse, time, details] = createMatch[1].split('|').map(s => s.trim());
-      const { data: inserted } = await supabaseAdmin.from('saban_master_dispatch').insert([{
+      const { data: inserted, error: dbError } = await supabaseAdmin.from('saban_master_dispatch').insert([...]);
+      if (dbError) console.error("Supabase Injection Error:", dbError.message);
           customer_name: customer,
           container_action: type,
           warehouse_source: warehouse,
