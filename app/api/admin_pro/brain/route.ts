@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// חיבור מאובטח ל-Supabase עם Service Role לביצוע פעולות כתיבה
+// חיבור מאובטח ל-Supabase עם Service Role
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -11,26 +11,54 @@ export async function POST(req: Request) {
   const startTime = Date.now();
   
   try {
-    const { query, history = [] } = await req.json();
+    const { query, history = [] } = await req.json(); // חזרה למבנה המקורי שלך
     const apiKey = process.env.GOOGLE_AI_KEY;
-    const MODEL_NAME = "gemini-3.1-flash-lite-preview";
+    const MODEL_NAME = "gemini-3.1-flash-lite-preview"; // המודל המדויק שלך
 
     if (!apiKey) return NextResponse.json({ error: "Missing API Key" }, { status: 500 });
 
-    // --- ה-System Prompt המאוחד והחכם ---
-    const systemPrompt = `אתה המוח הלוגיסטי של ח. סבן. 
-    תפקידך: לנהל את סידור העבודה בשפה אנושית ("אחי", "ראמי") ולבצע פקודות SQL.
-    
-    חוקי פקודות:
-    1. יצירת הזמנה (מכולה/חומר): [CREATE_ORDER:לקוח|סוג|מחסן|שעה|פרטים].
-       - סוג: הצבה, החלפה, הוצאה, חומרי בניין.
-       - אם חסר נתון מהותי, שאל את המשתמש לפני הביצוע.
-    2. עדכון קיים: [UPDATE_ORDER:לקוח|שדה|ערך]. (שדות: status, driver_name, scheduled_time, order_id_comax).
-    
-    חוק לינק הקסם:
-    לאחר כל יצירה מוצלחת, עליך לחתום במשפט: "הנה הלינק למעקב אישי עבור הלקוח: https://saban-os.vercel.app/track/TEMP_ID".
-    ה-API יחליף את TEMP_ID ב-ID האמיתי אוטומטית.`;
+    // --- 1. שליפת ה-DNA של המוחות מה-DB ---
+    const { data: rawRules } = await supabaseAdmin
+      .from('saban_brain_rules')
+      .select('brain_type, rule_description')
+      .eq('is_active', true);
 
+    const brainRules = rawRules?.map(r => {
+      return `[${r.brain_type} BRAIN]: ${JSON.stringify(r.rule_description)}`;
+    }).join('\n') || "עבוד לפי חוקי ח. סבן הכלליים.";
+
+    // --- 2. שליפת מלאי רלוונטי מה-CSV שהומר לטבלה ---
+    const { data: inventory } = await supabaseAdmin
+      .from('inventory')
+      .select('product_name, sku, stock_qty, unit_type, coverage_notes')
+      .limit(15);
+
+    const inventoryContext = inventory?.map(i => 
+      `${i.product_name} (SKU: ${i.sku}) | מלאי: ${i.stock_qty} | יחידה: ${i.unit_type} | כיסוי: ${i.coverage_notes}`
+    ).join('\n');
+
+    // --- 3. בניית ה-System Prompt המאוחד ---
+    const systemPrompt = `
+אתה המוח המשולב של ח. סבן (Multi-Brain System). פעל לפי החוקים הבאים:
+
+חוקי המוחות (DNA):
+${brainRules}
+
+נתוני מלאי בזמן אמת:
+${inventoryContext}
+
+פקודות ביצוע (חובה להשתמש בפורמט זה):
+1. [CREATE_ORDER:לקוח|סוג|מחסן|שעה|פרטים]
+2. [UPDATE_ORDER:לקוח|שדה|ערך]
+3. [ADD_TO_CART:SKU_OR_NAME]
+
+הנחיות:
+- דבר בשפה אנושית ("אחי", "ראמי"), אך שמור על מקצועיות של מהנדס.
+- המהנדס מחשב (10% פחת), המוכר מבצע Upsell, והלוגיסטי בודק נהגים.
+- חתימה: "הנה הלינק למעקב אישי עבור הלקוח: https://saban-os.vercel.app/track/TEMP_ID"
+    `;
+
+    // --- 4. שליחה ל-Gemini API ---
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -41,60 +69,33 @@ export async function POST(req: Request) {
     });
 
     const aiData = await res.json();
-    let aiText = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    let aiText = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "ראמי אחי, יש נתק קטן בכיול, נסה שוב... 🦾";
     let executionResult = "NO_ACTION";
     let shareLink = "";
 
-    // --- לוגיקה 1: יצירת הזמנה חדשה עם ID Replacement ---
+    // --- 5. עיבוד פקודות (Create/Update) ---
     const createMatch = aiText.match(/\[CREATE_ORDER:(.*?)\]/);
     if (createMatch) {
       const [customer, type, warehouse, time, details] = createMatch[1].split('|').map(s => s.trim());
-      
-      const { data: inserted, error: insertError } = await supabaseAdmin
-        .from('saban_master_dispatch')
-        .insert([{
+      const { data: inserted } = await supabaseAdmin.from('saban_master_dispatch').insert([{
           customer_name: customer,
           container_action: type,
           warehouse_source: warehouse,
           scheduled_time: time,
           order_id_comax: details,
           status: 'פתוח',
-          created_by: 'Saban AI Brain',
           scheduled_date: new Date().toISOString().split('T')[0]
-        }])
-        .select();
+      }]).select();
 
-      if (!insertError && inserted && inserted.length > 0) {
+      if (inserted?.[0]) {
         const realId = inserted[0].id;
-        const trackingUrl = `https://saban-os.vercel.app/track/${realId}`;
-        
-        // החלפת ה-TEMP_ID בלינק האמיתי בתוך תשובת ה-AI
         aiText = aiText.replace("TEMP_ID", realId);
-        executionResult = `✅ הזמנה נוצרה בהצלחה. ID: ${realId}`;
-        shareLink = trackingUrl;
-      } else {
-        executionResult = `❌ שגיאה ביצירה: ${insertError?.message}`;
+        executionResult = `✅ הזמנה נוצרה: ${realId}`;
+        shareLink = `https://saban-os.vercel.app/track/${realId}`;
       }
     }
 
-    // --- לוגיקה 2: עדכון הזמנה קיימת ---
-    const updateMatch = aiText.match(/\[UPDATE_ORDER:(.*?)\]/);
-    if (updateMatch) {
-      const [customer, field, value] = updateMatch[1].split('|').map(s => s.trim());
-      const mapping: any = { 
-        'סטטוס': 'status', 'נהג': 'driver_name', 
-        'שעה': 'scheduled_time', 'פרטים': 'order_id_comax' 
-      };
-      
-      const { error: updateError } = await supabaseAdmin
-        .from('saban_master_dispatch')
-        .update({ [mapping[field] || field]: value })
-        .ilike('customer_name', `%${customer}%`);
-
-      executionResult = updateError ? `❌ שגיאה בעדכון: ${updateError.message}` : `✅ עודכן: ${customer}`;
-    }
-
-    // שמירת היסטוריית שיחה וביצועים
+    // שמירה להיסטוריה
     await supabaseAdmin.from('saban_brain_history').insert([{
       user_query: query,
       ai_response: aiText,
