@@ -1,149 +1,152 @@
 "use client";
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { getSupabase } from "@/lib/supabase";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { 
-  Truck, Plus, UserCheck, Clock, Bell, Share2, 
-  CheckCircle, UserPlus, Search, MessageSquare, AlertTriangle
+  Truck, Plus, Clock, Bell, Share2, 
+  CheckCircle, MapPin, User, Package, Calendar
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
+import { motion } from "framer-motion";
 
 export default function DispatchStudio() {
-    const [requests, setRequests] = useState<any[]>([]);
+    const [orders, setOrders] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
     const supabase = getSupabase();
 
     useEffect(() => {
-        fetchPendingRequests();
+        fetchDispatch();
 
-        // האזנה לבקשות חדשות (מלשינון)
+        // האזנה לשינויים בזמן אמת בסידור
         const channel = supabase
-            .channel('itizk_requests')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'saban_requests' }, payload => {
-                setRequests(prev => [payload.new, ...prev]);
-                // הפעלת צלצול מה-Layout
-                if (typeof window !== 'undefined' && (window as any).playNotificationSound) {
-                    (window as any).playNotificationSound();
-                }
-                toast.info(`בקשה חדשה מאיציק: ${payload.new.doc_number}`, {
-                    icon: <Bell className="text-orange-500" />
-                });
+            .channel('dispatch_updates')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'saban_master_dispatch' }, () => {
+                fetchDispatch();
             })
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
     }, []);
 
-    const fetchPendingRequests = async () => {
+    const fetchDispatch = async () => {
         const { data } = await supabase
-            .from('saban_requests')
+            .from('saban_master_dispatch')
             .select('*')
-            .eq('status', 'pending')
-            .order('created_at', { ascending: false });
-        setRequests(data || []);
+            .order('scheduled_time', { ascending: true });
+        setOrders(data || []);
+        setLoading(false);
     };
 
-    const approveAndNotify = async (req: any, driver: string) => {
+    const updateStatus = async (id: string, status: string) => {
         const { error } = await supabase
-            .from('saban_requests')
-            .update({ status: 'approved', handled_by: driver })
-            .eq('id', req.id);
+            .from('saban_master_dispatch')
+            .update({ status })
+            .eq('id', id);
 
-        if (!error) {
-            toast.success(`אושר ושויך ל${driver}`);
-            setRequests(prev => prev.filter(r => r.id !== req.id));
-            
-            // שליחת התראה דרך OneSignal (מתוך ה-Window)
-            if (typeof window !== 'undefined' && (window as any).OneSignal) {
-                // כאן אפשר להוסיף לוגיקה לשליחת התראה ל-External ID של איציק
-            }
-        }
+        if (!error) toast.success(`סטטוס עודכן ל-${status}`);
     };
 
     return (
-        <div className="flex flex-col h-screen bg-slate-50 p-4 gap-4" dir="rtl">
+        <div className="flex flex-col h-screen bg-[#f8fafc] p-6 gap-6 overflow-hidden" dir="rtl">
             <Toaster position="top-center" richColors />
             
-            <div className="flex justify-between items-center mb-2">
-                <h1 className="text-2xl font-black text-[#0B2C63] flex items-center gap-2">
-                    <Truck size={28}/> לוח בקשות וסידור
-                </h1>
-                <div className="flex gap-2">
-                    <Button variant="outline" className="rounded-xl border-slate-200 font-bold gap-2">
-                        <Share2 size={18}/> שיתוף סידור
+            {/* Header Studio */}
+            <div className="flex justify-between items-center bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+                <div className="flex items-center gap-4">
+                    <div className="bg-[#0B2C63] p-3 rounded-2xl shadow-lg">
+                        <Truck size={32} className="text-white"/>
+                    </div>
+                    <div>
+                        <h1 className="text-3xl font-black text-[#0B2C63] tracking-tighter">DISPATCH STUDIO</h1>
+                        <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">SabanOS Operations Center</p>
+                    </div>
+                </div>
+                <div className="flex gap-3">
+                    <Button variant="outline" className="rounded-2xl border-slate-200 font-bold gap-2 px-6 h-12 shadow-sm">
+                        <Calendar size={18}/> {new Date().toLocaleDateString('he-IL')}
+                    </Button>
+                    <Button className="bg-emerald-600 hover:bg-emerald-700 rounded-2xl font-bold gap-2 px-6 h-12 shadow-lg shadow-emerald-200">
+                        <Plus size={18}/> הזמנה ידנית
                     </Button>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 h-[calc(100vh-120px)]">
-                {/* לוח בקשות איציק - מלשינון */}
-                <Card className="md:col-span-1 p-4 flex flex-col gap-4 overflow-hidden border-2 border-orange-100 bg-orange-50/30 rounded-[2rem]">
-                    <div className="flex items-center justify-between border-b border-orange-100 pb-2">
-                        <h2 className="font-black text-orange-700 flex items-center gap-2">
-                            <Bell size={20} className="animate-bounce"/> בקשות מהשטח
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1 overflow-hidden">
+                {/* לוח בקשות מה-AI (המלשינון הלוגיסטי) */}
+                <Card className="lg:col-span-1 p-5 flex flex-col gap-4 border-none shadow-xl shadow-slate-200/50 bg-white rounded-[2.5rem] overflow-hidden">
+                    <div className="flex items-center justify-between border-b border-slate-50 pb-4">
+                        <h2 className="font-black text-slate-800 flex items-center gap-2 text-lg">
+                            <Bell size={20} className="text-orange-500 animate-pulse"/> הזמנות AI חדשות
                         </h2>
-                        <Badge className="bg-orange-500">{requests.length}</Badge>
+                        <Badge className="bg-[#0B2C63] rounded-lg px-3 py-1">{orders.filter(o => o.status === 'פתוח').length}</Badge>
                     </div>
                     
-                    <div className="flex-1 overflow-y-auto space-y-3 pl-2">
-                        {requests.length === 0 ? (
-                          <div className="h-full flex flex-col items-center justify-center text-slate-400 font-bold italic opacity-50">
-                             <Clock size={40} className="mb-2"/>
-                             אין בקשות ממתינות
-                          </div>
-                        ) : (
-                          requests.map(req => (
-                            <Card key={req.id} className="p-4 rounded-2xl border-none shadow-sm bg-white border-r-4 border-orange-500 animate-in fade-in slide-in-from-right-4">
-                                <div className="flex justify-between items-start mb-2">
-                                    <span className="font-black text-slate-800 text-sm">{req.customer_name || 'לקוח מזדמן'}</span>
-                                    <div className="text-[10px] font-bold text-orange-600 flex items-center gap-1">
-                                        <Clock size={12}/>
-                                        <Timer startTime={req.created_at} />
+                    <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
+                        {orders.filter(o => o.status === 'פתוח').map(order => (
+                            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} key={order.id}>
+                                <Card className="p-5 rounded-[1.8rem] border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-lg transition-all border-r-4 border-r-orange-500 cursor-pointer group">
+                                    <div className="flex justify-between items-start mb-3">
+                                        <span className="font-black text-[#0B2C63] text-base">{order.customer_name}</span>
+                                        <Badge variant="outline" className="text-[10px] border-slate-200 bg-white">{order.scheduled_time}</Badge>
                                     </div>
-                                </div>
-                                <div className="text-xs text-slate-500 font-medium mb-3">
-                                    {req.request_type} #{req.doc_number}
-                                    {req.notes && <div className="mt-1 bg-slate-50 p-2 rounded-lg italic">"{req.notes}"</div>}
-                                </div>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <Button onClick={() => approveAndNotify(req, 'חכמת')} size="sm" className="bg-blue-600 hover:bg-blue-700 rounded-xl text-[10px] font-bold h-8">שייך לחכמת</Button>
-                                    <Button onClick={() => approveAndNotify(req, 'עלי')} size="sm" className="bg-slate-800 hover:bg-slate-900 rounded-xl text-[10px] font-bold h-8">שייך לעלי</Button>
-                                </div>
-                            </Card>
-                          ))
-                        )}
+                                    <div className="space-y-2 mb-4 text-xs font-bold text-slate-500">
+                                        <div className="flex items-center gap-2"><MapPin size={14} className="text-slate-400"/> {order.warehouse_source}</div>
+                                        <div className="flex items-center gap-2"><Package size={14} className="text-slate-400"/> {order.container_action}</div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <Button onClick={() => updateStatus(order.id, 'בביצוע')} size="sm" className="flex-1 bg-[#0B2C63] rounded-xl font-bold h-9">שייך לנהג</Button>
+                                    </div>
+                                </Card>
+                            </motion.div>
+                        ))}
                     </div>
                 </Card>
 
-                {/* לוח הסידור המרכזי */}
-                <Card className="md:col-span-3 p-6 rounded-[2rem] border-none shadow-sm bg-white overflow-y-auto">
-                    <div className="space-y-1">
-                        {Array.from({ length: 15 }, (_, i) => i + 6).map(hour => (
-                            <div key={hour} className="flex gap-4 p-3 border-b border-slate-50 hover:bg-slate-50/80 rounded-xl group transition-all">
-                                <span className="font-black text-blue-600 w-12 text-lg">{hour}:00</span>
-                                <div className="flex-1 min-h-[50px] border-r-2 border-slate-100 pr-4 flex items-center gap-3">
-                                    <button className="opacity-0 group-hover:opacity-100 transition-opacity bg-blue-50 text-blue-500 p-2 rounded-lg">
-                                        <Plus size={16}/>
-                                    </button>
-                                </div>
+                {/* לוח הסידור המרכזי (Timeline) */}
+                <Card className="lg:col-span-3 p-8 rounded-[2.5rem] border-none shadow-xl shadow-slate-200/50 bg-white flex flex-col overflow-hidden">
+                    <div className="flex items-center justify-between mb-8">
+                        <h2 className="text-xl font-black text-slate-800">סידור עבודה יומי</h2>
+                        <div className="flex gap-4">
+                            <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
+                                <span className="w-3 h-3 bg-emerald-500 rounded-full"/> בוצע
                             </div>
-                        ))}
+                            <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
+                                <span className="w-3 h-3 bg-blue-500 rounded-full"/> בדרך
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                        {Array.from({ length: 13 }, (_, i) => i + 6).map(hour => {
+                            const hourStr = `${hour.toString().padStart(2, '0')}:00`;
+                            const ordersAtHour = orders.filter(o => o.scheduled_time.startsWith(hour.toString().padStart(2, '0')));
+                            
+                            return (
+                                <div key={hour} className="flex gap-6 p-4 rounded-[1.5rem] hover:bg-slate-50 transition-all border-b border-slate-50 group">
+                                    <div className="flex flex-col items-center justify-center w-16">
+                                        <span className="font-black text-xl text-slate-300 group-hover:text-[#0B2C63] transition-colors">{hourStr}</span>
+                                    </div>
+                                    <div className="flex-1 min-h-[60px] flex gap-4 items-center">
+                                        {ordersAtHour.map(o => (
+                                            <Badge key={o.id} className="bg-white border border-slate-200 text-[#0B2C63] p-3 rounded-xl shadow-sm flex items-center gap-3 animate-in zoom-in-95">
+                                                <div className="bg-blue-50 p-1.5 rounded-lg text-blue-600"><Truck size={16}/></div>
+                                                <span className="font-bold">{o.customer_name}</span>
+                                                <div className="h-4 w-px bg-slate-100 mx-1" />
+                                                <span className="text-[10px] opacity-60 uppercase">{o.container_action}</span>
+                                            </Badge>
+                                        ))}
+                                        {ordersAtHour.length === 0 && (
+                                            <div className="text-slate-200 text-xs font-bold italic opacity-0 group-hover:opacity-100 transition-opacity">חלון זמן פנוי לשיבוץ...</div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 </Card>
             </div>
         </div>
     );
-}
-
-function Timer({ startTime }: { startTime: string }) {
-    const [ms, setMs] = useState(0);
-    useEffect(() => {
-        const i = setInterval(() => setMs(Date.now() - new Date(startTime).getTime()), 1000);
-        return () => clearInterval(i);
-    }, [startTime]);
-    const mins = Math.floor(ms / 60000);
-    const secs = Math.floor((ms % 60000) / 1000);
-    return <span>{mins}:{secs.toString().padStart(2, '0')}</span>;
 }
