@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
 import { getSupabase } from "@/lib/supabase";
-import { Send, Truck, ShoppingBag, Search, Plus, Minus, MessageCircle, X } from "lucide-react";
+import { Send, Truck, ShoppingBag, Search, Plus, Minus, MessageCircle, X, CheckCheck } from "lucide-react";
 
 export default function SabanElitePage() {
   const [activeTab, setActiveTab] = useState('chat');
@@ -15,19 +15,29 @@ export default function SabanElitePage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const supabase = getSupabase();
 
+  // 1. טעינת נתונים וסנכרון Realtime
   useEffect(() => {
     fetchInventory();
     fetchOrders();
 
     const channel = supabase.channel('live_saban')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'saban_master_dispatch' }, () => {
-        if (window.playNotificationSound) window.playNotificationSound();
+        if (typeof window !== 'undefined' && (window as any).playNotificationSound) {
+          (window as any).playNotificationSound();
+        }
         fetchOrders();
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, []);
+
+  // גלילה אוטומטית בצ'אט
+  useEffect(() => {
+    if (scrollRef.current && activeTab === 'chat') {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [activeTab]);
 
   const fetchInventory = async () => {
     const { data, error } = await supabase
@@ -45,23 +55,147 @@ export default function SabanElitePage() {
     setActiveOrders(data || []);
   };
 
-  // פונקציית השליחה המרכזית - עכשיו מחוברת!
   const handleSendMessage = async () => {
     if (!message.trim() || isLoading) return;
-    
     setIsLoading(true);
-    console.log("🚀 שולח פקודה למוח:", message);
-
     try {
       const response = await fetch('/api/pro_brain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: message,
-          userName: "ראמי",
-          sessionId: "saban_session"
-        }),
+        body: JSON.stringify({ query: message, userName: "ראמי", sessionId: "saban_session" }),
       });
+      if (response.ok && (window as any).playNotificationSound) {
+        (window as any).playNotificationSound();
+      }
+      setMessage('');
+    } catch (error) {
+      console.error("Error:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const consultAI = (productName: string) => {
+    setMessage(`אחי, אני רוצה להזמין ${productName}, תעזור לי עם כמויות ופחת.`);
+    setActiveTab('chat');
+  };
+
+  return (
+    <div className="flex flex-col h-[100dvh] w-full bg-[#ece5dd] overflow-hidden font-sans" dir="rtl">
+      
+      {/* Header */}
+      <header className="bg-[#075e54] text-white p-3 pt-10 shadow-lg flex justify-between items-center z-[100] shrink-0">
+        <div className="flex items-center gap-3">
+          <img src="/ai.png" className="w-10 h-10 rounded-full border-2 border-white/20 bg-white" 
+               onError={(e) => { e.currentTarget.src = "https://ui-avatars.com/api/?name=Saban+AI&background=075e54&color=fff"; }} />
+          <div>
+            <h1 className="font-bold text-lg leading-tight">ח.סבן Ai</h1>
+            <span className="text-[10px] text-green-200 block italic leading-none">מוח מבצע פעיל</span>
+          </div>
+        </div>
+        <div className="flex gap-4">
+          <Truck size={24} onClick={() => setActiveTab('track')} className={activeTab === 'track' ? 'text-white' : 'text-green-200'} />
+          <ShoppingBag size={24} onClick={() => setActiveTab('shop')} className={activeTab === 'shop' ? 'text-white' : 'text-green-200'} />
+        </div>
+      </header>
+
+      {/* Nav Tabs */}
+      <nav className="bg-[#075e54] text-white flex shrink-0 z-[90] shadow-md">
+        {['chat', 'shop', 'track'].map((tab) => (
+          <button key={tab} onClick={() => setActiveTab(tab)} 
+            className={`flex-1 py-3 text-sm font-bold border-b-4 transition-all ${activeTab === tab ? 'border-white opacity-100' : 'border-transparent opacity-60'}`}>
+            {tab === 'chat' ? 'צ\'אט' : tab === 'shop' ? 'מלאי' : `מעקב (${activeOrders.length})`}
+          </button>
+        ))}
+      </nav>
+
+      {/* Main Body */}
+      <main ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 z-10" 
+            style={{ backgroundColor: "#e5ddd5", backgroundImage: "url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')", backgroundSize: "400px" }}>
+        
+        {activeTab === 'chat' && (
+          <div className="flex flex-col gap-3">
+            <div className="bg-white p-3 rounded-lg shadow-sm max-w-[85%] self-start text-sm border border-gray-200">
+              שלום ראמי אחי! המוח מוכן לביצוע. כל פקודה שתקליד כאן תעובד ותוזרק לסידור. 🦾
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'shop' && (
+          <div className="space-y-4 pb-20">
+            <div className="sticky top-0 z-20">
+              <div className="relative">
+                <input type="text" placeholder="חפש מוצר במלאי..." 
+                       className="w-full p-4 pr-12 rounded-2xl shadow-md border-none text-sm outline-none bg-white"
+                       value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                <Search className="absolute right-4 top-4 text-gray-400" size={20} />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-3">
+              {inventory.filter(i => (i.product_name || "").includes(searchTerm)).map((item) => (
+                <div key={item.id} className="bg-white p-4 rounded-2xl shadow-sm flex items-center justify-between border-r-8 border-green-600 active:scale-[0.98] transition-all">
+                  <div className="flex-1 pr-2">
+                    <h3 className="font-bold text-gray-800 text-sm">{item.product_name}</h3>
+                    <p className="text-[10px] text-gray-500 italic">מלאי: {item.stock_qty}</p>
+                    <button onClick={() => consultAI(item.product_name)} className="text-[10px] text-blue-600 mt-2 font-bold flex items-center gap-1 underline">
+                      <MessageCircle size={10} /> התייעץ
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-3 bg-gray-50 p-2 rounded-xl border border-gray-100">
+                    <button onClick={() => { if(cart[item.id]>0) setCart({...cart, [item.id]: cart[item.id]-1})}} className="p-1 bg-white shadow-sm text-red-600 rounded-lg"><Minus size={20}/></button>
+                    <span className="font-bold w-5 text-center text-sm">{cart[item.id] || 0}</span>
+                    <button onClick={() => setCart({...cart, [item.id]: (cart[item.id]||0)+1})} className="p-1 bg-white shadow-sm text-green-600 rounded-lg"><Plus size={20}/></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'track' && (
+          <div className="space-y-4 pb-20">
+            {activeOrders.length === 0 ? (
+              <div className="text-center py-24 opacity-30 italic">אין הזמנות פעילות</div>
+            ) : (
+              activeOrders.map(order => (
+                <div key={order.id} className="bg-white p-4 rounded-2xl shadow-lg border-r-8 border-[#25d366]">
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="font-bold text-[#075e54]">{order.customer_name}</h3>
+                    <span className="text-[9px] font-black bg-green-100 text-green-800 px-3 py-1 rounded-full uppercase">{order.status}</span>
+                  </div>
+                  <p className="text-xs text-gray-600 bg-gray-50 p-2 rounded-lg">{order.order_id_comax}</p>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </main>
+
+      {/* Footer */}
+      {activeTab === 'chat' && (
+        <footer className="p-3 bg-[#f0f0f0] flex items-center gap-2 pb-10 shrink-0 shadow-[0_-5px_15px_rgba(0,0,0,0.05)] z-[100]">
+          <div className="flex-1 bg-white rounded-full px-5 py-3 shadow-md border border-gray-200 flex items-center">
+            <input 
+              type="text" 
+              placeholder="כתוב פקודה למוח..." 
+              className="w-full outline-none text-sm bg-transparent" 
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+            />
+          </div>
+          <button 
+            onClick={handleSendMessage}
+            className="bg-[#075e54] text-white p-4 rounded-full shadow-xl active:scale-90 transition-all flex items-center justify-center disabled:bg-gray-400"
+            disabled={isLoading}
+          >
+            <Send size={22} className="mr-1" />
+          </button>
+        </footer>
+      )}
+    </div>
+  );
+}      });
 
       const data = await response.json();
       if (window.playNotificationSound) window.playNotificationSound();
