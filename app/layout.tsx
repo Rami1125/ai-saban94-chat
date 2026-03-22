@@ -57,26 +57,25 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           strategy="afterInteractive" 
         />
         
-        <Script id="onesignal-init" strategy="afterInteractive">
-          {`
-            window.OneSignalDeferred = window.OneSignalDeferred || [];
-            window.OneSignalDeferred.push(async function(OneSignal) {
-              if (!window.indexedDB) return;
-              try {
-                await OneSignal.init({
-                  appId: "acc8a2bc-d54e-4261-b3d2-cc5c5f7b39d3",
-                  safari_web_id: "web.onesignal.auto.5f4f9ed9-fb2e-4d6a-935d-81aa46fccce0",
-                  notifyButton: { enable: true },
-                  allowLocalhostAsSecureOrigin: true,
-                  serviceWorkerParam: { scope: "/" },
-                  serviceWorkerPath: "OneSignalSDKWorker.js"
-                });
-              } catch (err) {
-                console.error("SabanOS OneSignal Error:", err);
-              }
-            });
-          `}
-        </Script>
+<Script id="onesignal-init" strategy="afterInteractive">
+  {`
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    window.OneSignalDeferred.push(async function(OneSignal) {
+      try {
+        await OneSignal.init({
+          appId: "acc8a2bc-d54e-4261-b3d2-cc5c5f7b39d3",
+          safari_web_id: "web.onesignal.auto.5f4f9ed9-fb2e-4d6a-935d-81aa46fccce0",
+          notifyButton: { enable: false }, // נכבה זמנית כדי לבדוק יציבות
+          allowLocalhostAsSecureOrigin: true,
+          serviceWorkerPath: "OneSignalSDKWorker.js", // וודא שזה השם המדויק ב-public
+        });
+        console.log("SabanOS: OneSignal Initialized!");
+      } catch (err) {
+        console.error("SabanOS: OneSignal Error:", err);
+      }
+    });
+  `}
+</Script>
       </head>
       
       {/* עיצוב ה-Body כרקע של וואטסאפ עם פונט היבו */}
