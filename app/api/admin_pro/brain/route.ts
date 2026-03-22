@@ -38,25 +38,44 @@ export async function POST(req: Request) {
     const result = await model.generateContent(query);
     aiText = result.response.text();
 
-    // --- 3. המנוע המבצע: הזרקה לסידור העבודה ---
-    const createMatch = aiText.match(/\[CREATE_ORDER:(.*?)\]/);
-    if (createMatch) {
-      const [customer, type, warehouse, time, details] = createMatch[1].split('|').map(s => s.trim());
-      
-      // הזרקה לטבלה שחקרנו (saban_master_dispatch)
-      const { error: dbError } = await supabase.from('saban_master_dispatch').insert([{
-        customer_name: customer,
-        container_action: type,
-        warehouse_source: warehouse,
-        scheduled_time: time,
-        order_id_comax: details,
-        status: 'פתוח',
-        scheduled_date: new Date().toISOString().split('T')[0],
-        created_by: 'Saban AI Pro'
-      }]);
+// --- 5. עיבוד פקודות משופר ---
+// חיפוש גמיש יותר של הפקודה
+const createMatch = aiText.match(/\[CREATE_ORDER:(.*?)\]/);
 
-      if (dbError) console.error("Injection Failed:", dbError.message);
+if (createMatch) {
+    const parts = createMatch[1].split('|').map(s => s.trim());
+    // אם המוח שלח פחות מ-5 חלקים, נשלים ברירת מחדל כדי שהקוד לא יקרוס
+    const [customer, type, warehouse, time, details] = [
+        parts[0] || "לקוח כללי",
+        parts[1] || "הובלה",
+        parts[2] || "ראשי",
+        parts[3] || "08:00",
+        parts[4] || "הזמנת AI"
+    ];
+
+    const { data: inserted, error: dbError } = await supabaseAdmin
+        .from('saban_master_dispatch')
+        .insert([{
+            customer_name: customer,
+            container_action: type,
+            warehouse_source: warehouse,
+            scheduled_time: time,
+            order_id_comax: details,
+            status: 'פתוח',
+            scheduled_date: new Date().toISOString().split('T')[0],
+            created_by: 'Saban AI Brain'
+        }]).select();
+
+    if (dbError) {
+        console.error("❌ שגיאת הזרקה:", dbError.message);
+    } else if (inserted?.[0]) {
+        const realId = inserted[0].id;
+        aiText = aiText.replace("TEMP_ID", realId);
+        console.log("✅ הזמנה הוזרקה בהצלחה! ID:", realId);
     }
+} else {
+    console.log("⚠️ המוח לא פלט תג [CREATE_ORDER], לכן לא בוצעה הזרקה.");
+}
 
     // שמירת היסטוריה
     await supabase.from('chat_history').insert([{ session_id: sessionId, role: 'assistant', content: aiText }]);
