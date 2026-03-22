@@ -1,19 +1,20 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
 import { getSupabase } from "@/lib/supabase";
-import { SabanBrain } from "@/lib/saban-brain";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { 
-  Bot, Send, X, MessageSquare, Sparkles, 
-  Loader2, Menu, Truck, ArrowLeftRight 
+  Bot, Send, X, Sparkles, Loader2, Truck, 
+  ArrowLeftRight, Calculator, ShoppingCart 
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 
 export default function SabanAIChat() {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<{role: 'user' | 'ai', content: string, type?: string}[]>([]);
+  const [messages, setMessages] = useState<{role: 'user' | 'ai', content: string, type?: string, metadata?: any}[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -32,115 +33,143 @@ export default function SabanAIChat() {
     setIsTyping(true);
 
     try {
-      // 1. שליפת ספר החוקים העדכני
-      const { data: rules } = await supabase.from('saban_brain_rules').select('*').eq('is_active', true);
-      const rulesText = rules?.map(r => r.rule_description).join("\n") || "";
+      // פנייה ל-API המאוחד של המולטי-בריין (v12.3)
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: userMessage, history: messages }),
+      });
 
-      // 2. ניתוח הבקשה ע"י המוח (כאן מחוברת לוגיקת ה-AI)
-      // לצורך ההדגמה, נבצע לוגיקה חכמה שמזהה פקודות:
-      setTimeout(async () => {
-        let responseContent = "";
-        let actionType = "chat";
-
-        if (userMessage.includes("הזמנה") || userMessage.includes("הובלה")) {
-          responseContent = "אח שלי, מנתח את הבקשה להזמנה... לפי ספר החוקים אני פותח הזמנה חדשה בסידור ומשייך לעלי.";
-          actionType = "order";
-          // ביצוע פעולה ב-DB
-          await supabase.from('saban_orders').insert([{
-            customer_name: "ממתין לזיהוי",
-            delivery_time: "08:00",
-            status: 'pending_ai'
-          }]);
-        } else if (userMessage.includes("העברה")) {
-          responseContent = "הבנתי, מבצע העברה בין סניפים. מעדכן את חכמת שצריך לאסוף מהחרש.";
-          actionType = "transfer";
-        } else {
-          responseContent = "שלום! אני מנהל הסידור של SabanOS. איך אני יכול לעזור בשיבוץ או במלאי היום?";
-        }
-
-        setMessages(prev => [...prev, { role: 'ai', content: responseContent, type: actionType }]);
-        setIsTyping(false);
-        (window as any).playNotificationSound?.();
-      }, 1500);
+      const data = await response.json();
+      
+      setMessages(prev => [...prev, { 
+        role: 'ai', 
+        content: data.aiResponse, 
+        type: data.executionResult?.includes('הזמנה') ? 'order' : 'chat',
+        metadata: data.shareLink
+      }]);
+      
+      setIsTyping(false);
+      if (typeof window !== 'undefined' && (window as any).playNotificationSound) {
+        (window as any).playNotificationSound();
+      }
 
     } catch (error) {
-      toast.error("משהו השתבש במוח של הסדרן...");
+      toast.error("משהו השתבש במוח של סבן...");
       setIsTyping(false);
     }
   };
 
   return (
     <>
-      {/* כפתור המבורגר צף */}
-      <Button 
-        onClick={() => setIsOpen(!isOpen)}
-        className={`fixed bottom-6 right-6 w-16 h-16 rounded-full shadow-2xl z-50 transition-all transform hover:scale-110 ${isOpen ? 'bg-red-500 rotate-90' : 'bg-[#0B2C63]'}`}
+      {/* כפתור הפעלה יוקרתי */}
+      <motion.div 
+        initial={{ scale: 0 }} animate={{ scale: 1 }}
+        className="fixed bottom-6 right-6 z-50"
       >
-        {isOpen ? <X size={30} /> : <Bot size={30} />}
-      </Button>
+        <Button 
+          onClick={() => setIsOpen(!isOpen)}
+          className={`w-16 h-16 rounded-full shadow-[0_0_20px_rgba(11,44,99,0.4)] transition-all duration-500 ${isOpen ? 'bg-red-500 rotate-90' : 'bg-[#0B2C63] hover:bg-[#153a7a]'}`}
+        >
+          {isOpen ? <X size={28} /> : <Bot size={28} className="animate-pulse" />}
+        </Button>
+      </motion.div>
 
-      {/* חלון הצ'אט */}
-      {isOpen && (
-        <Card className="fixed bottom-24 right-6 w-[380px] h-[550px] bg-white shadow-2xl rounded-[2rem] border-none flex flex-col z-50 animate-in slide-in-from-bottom-10 overflow-hidden" dir="rtl">
-          {/* Header */}
-          <div className="bg-[#0B2C63] p-6 text-white flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="bg-white/20 p-2 rounded-xl">
-                <Sparkles size={20} className="text-blue-300" />
-              </div>
-              <div>
-                <h3 className="font-black text-lg leading-none">AI סידור</h3>
-                <span className="text-[10px] text-blue-200 font-bold uppercase tracking-widest">SabanOS Operations</span>
-              </div>
-            </div>
-            <Badge className="bg-green-500 text-[10px]">מחובר ל-DB</Badge>
-          </div>
-
-          {/* Messages Area */}
-          <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50">
-            {messages.length === 0 && (
-              <div className="text-center py-10">
-                <Bot size={40} className="mx-auto text-slate-300 mb-2" />
-                <p className="text-slate-400 text-sm font-bold italic">אהלן! אני מנהל הסידור החכם.<br/>מה לבצע עכשיו?</p>
-              </div>
-            )}
-            {messages.map((msg, i) => (
-              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-start' : 'justify-end'}`}>
-                <div className={`max-w-[85%] p-4 rounded-2xl text-sm font-bold shadow-sm ${
-                  msg.role === 'user' 
-                  ? 'bg-white text-slate-800 rounded-tr-none' 
-                  : 'bg-blue-600 text-white rounded-tl-none'
-                }`}>
-                  {msg.type === 'order' && <Truck size={14} className="mb-1 text-blue-200" />}
-                  {msg.type === 'transfer' && <ArrowLeftRight size={14} className="mb-1 text-blue-200" />}
-                  {msg.content}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: 100, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 100, scale: 0.9 }}
+            className="fixed bottom-24 right-6 w-[400px] h-[600px] z-50"
+          >
+            <Card className="w-full h-full bg-white/95 backdrop-blur-md shadow-2xl rounded-[2.5rem] border border-slate-200 flex flex-col overflow-hidden" dir="rtl">
+              {/* Header Luxury */}
+              <div className="bg-[#0B2C63] p-6 text-white relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.1),transparent)]" />
+                <div className="flex items-center justify-between relative z-10">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-gradient-to-br from-blue-400 to-blue-600 p-2.5 rounded-2xl shadow-lg">
+                      <Sparkles size={22} className="text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-black text-xl leading-none tracking-tight">SABAN AI</h3>
+                      <span className="text-[10px] text-blue-200 font-bold uppercase tracking-[0.2em]">Multi-Brain Intelligence</span>
+                    </div>
+                  </div>
+                  <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px] px-3">LIVE SYNC</Badge>
                 </div>
               </div>
-            ))}
-            {isTyping && (
-              <div className="flex justify-end">
-                <div className="bg-blue-100 p-3 rounded-2xl rounded-tl-none">
-                  <Loader2 size={18} className="animate-spin text-blue-600" />
+
+              {/* Messages Area */}
+              <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 space-y-4 bg-slate-50/30 custom-scrollbar">
+                {messages.length === 0 && (
+                  <div className="text-center py-16">
+                    <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100">
+                      <Bot size={40} className="text-[#0B2C63] opacity-40" />
+                    </div>
+                    <p className="text-slate-500 text-sm font-bold leading-relaxed">אהלן ראמי אחי!<br/><span className="text-slate-400 font-medium">המוחות מסונכרנים. מה נבצע היום?</span></p>
+                  </div>
+                )}
+                
+                {messages.map((msg, i) => (
+                  <motion.div 
+                    initial={{ opacity: 0, x: msg.role === 'user' ? 20 : -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    key={i} 
+                    className={`flex ${msg.role === 'user' ? 'justify-start' : 'justify-end'}`}
+                  >
+                    <div className={`max-w-[85%] p-4 rounded-3xl text-sm font-bold shadow-sm leading-relaxed ${
+                      msg.role === 'user' 
+                      ? 'bg-white text-slate-800 rounded-tr-none border border-slate-100' 
+                      : 'bg-[#0B2C63] text-white rounded-tl-none'
+                    }`}>
+                      {msg.type === 'order' && <Truck size={16} className="mb-2 text-blue-300" />}
+                      <div className="whitespace-pre-wrap">{msg.content}</div>
+                      {msg.metadata && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="mt-3 w-full rounded-xl bg-white/10 border-white/20 text-[11px] hover:bg-white/20"
+                          onClick={() => window.open(msg.metadata, '_blank')}
+                        >
+                          מעקב הזמנה בלייב 🚀
+                        </Button>
+                      )}
+                    </div>
+                  </motion.div>
+                ))}
+                {isTyping && (
+                  <div className="flex justify-end">
+                    <div className="bg-blue-50 p-4 rounded-3xl rounded-tl-none border border-blue-100">
+                      <Loader2 size={20} className="animate-spin text-[#0B2C63]" />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Input Area */}
+              <div className="p-5 bg-white border-t border-slate-100">
+                <div className="flex gap-2 items-center bg-slate-100 p-1.5 rounded-[1.5rem] focus-within:ring-2 ring-[#0B2C63]/10 transition-all">
+                  <Input 
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                    placeholder="דבר עם המוח של סבן..."
+                    className="flex-1 h-12 border-none bg-transparent font-bold placeholder:text-slate-400 focus-visible:ring-0"
+                  />
+                  <Button 
+                    onClick={handleSendMessage} 
+                    className="h-11 w-11 bg-[#0B2C63] hover:bg-[#153a7a] rounded-2xl p-0 shadow-lg flex-shrink-0"
+                  >
+                    <Send size={18} />
+                  </Button>
                 </div>
               </div>
-            )}
-          </div>
-
-          {/* Input Area */}
-          <div className="p-4 bg-white border-t border-slate-100 flex gap-2 items-center">
-            <Input 
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-              placeholder="כתוב הודעה לסידור..."
-              className="flex-1 h-12 rounded-xl border-none bg-slate-100 font-bold focus:ring-2 ring-blue-500"
-            />
-            <Button onClick={handleSendMessage} className="h-12 w-12 bg-[#0B2C63] rounded-xl p-0 shadow-lg">
-              <Send size={20} />
-            </Button>
-          </div>
-        </Card>
-      )}
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
