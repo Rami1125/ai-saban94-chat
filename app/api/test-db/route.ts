@@ -1,50 +1,60 @@
-import { createClient } from "@supabase/supabase-js"
-import { NextResponse } from "next/server"
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
-export const dynamic = 'force-dynamic';
+// שימוש במפתחות הניהול (Service Role)
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export async function GET() {
-  const config = {
-    url: process.env.NEXT_PUBLIC_SUPABASE_URL,
-    hasServiceRole: !!process.env.SUPABASE_SERVICE_ROLE,
-    hasGeminiKey: !!(process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GEMINI_API_KEY),
-  };
-
-  // 1. בדיקת קיום משתנים (בלי לחשוף את המפתחות עצמם)
-  if (!config.url || !config.hasServiceRole) {
-    return NextResponse.json({
-      status: "❌ Error",
-      message: "Missing Environment Variables in Vercel",
-      config: config
-    }, { status: 500 });
-  }
-
   try {
-    const supabase = createClient(config.url, process.env.SUPABASE_SERVICE_ROLE!);
-    
-    // 2. ניסיון לבצע שאילתה פשוטה מאוד
-    const { data, error } = await supabase.from('answers_cache').select('count').limit(1);
+    // 1. בדיקת קריאה - האם אנחנו בכלל מחוברים?
+    const { data: readData, error: readError } = await supabaseAdmin
+      .from('saban_master_dispatch')
+      .select('id')
+      .limit(1);
 
-    if (error) {
-      return NextResponse.json({
-        status: "⚠️ Supabase Connected, but Table Error",
-        error: error.message,
-        hint: "Check if 'answers_cache' table exists in your Supabase Dashboard",
-        config
-      }, { status: 400 });
+    if (readError) {
+      return NextResponse.json({ 
+        status: "Error", 
+        message: "נכשל בקריאה מהטבלה. בדוק URL ומפתחות.",
+        error: readError 
+      }, { status: 500 });
     }
 
-    return NextResponse.json({
-      status: "✅ Success!",
-      message: "Vercel can talk to Supabase perfectly.",
-      config
+    // 2. בדיקת כתיבה (הזרקת ניסיון) - האם ה-Service Role עוקף RLS?
+    const { data: insertData, error: insertError } = await supabaseAdmin
+      .from('saban_master_dispatch')
+      .insert([{
+        customer_name: "בדיקת מערכת סבן",
+        status: "בדיקה",
+        order_id_comax: "TEST_AUTH_LOG",
+        scheduled_date: new Date().toISOString().split('T')[0],
+        scheduled_time: "00:00"
+      }])
+      .select();
+
+    if (insertError) {
+      return NextResponse.json({ 
+        status: "Permission Denied", 
+        message: "קריאה הצליחה אך כתיבה נכשלה. כנראה בעיית הרשאות ב-Service Role.",
+        error: insertError 
+      }, { status: 403 });
+    }
+
+    // 3. מחיקת שורת הבדיקה כדי להישאר נקיים
+    if (insertData?.[0]?.id) {
+      await supabaseAdmin.from('saban_master_dispatch').delete().eq('id', insertData[0].id);
+    }
+
+    return NextResponse.json({ 
+      status: "Success", 
+      message: "המערכת חמושה ומוכנה! ל-Service Role יש הרשאות כתיבה מלאות.",
+      data: insertData 
     });
 
   } catch (err: any) {
-    return NextResponse.json({
-      status: "❌ Crash",
-      message: err.message,
-      config
-    }, { status: 500 });
+    return NextResponse.json({ status: "Crash", error: err.message }, { status: 500 });
   }
 }
