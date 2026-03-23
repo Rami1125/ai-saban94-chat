@@ -1,7 +1,19 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { Activity, Send, MessageSquare, CheckCircle, AlertCircle } from "lucide-react";
+// app/rami/page.tsx
+import { adminDb } from "@/lib/firebaseAdmin";
 
+export default async function RamiPage() {
+  if (!adminDb) return <div>חסרים משתני סביבה ב-Vercel! ❌</div>;
+
+  const snapshot = await adminDb.ref('status').once('value');
+  const status = snapshot.val();
+
+  return (
+    <div className="p-10 bg-[#0b141a] text-white">
+      <h1 className="text-2xl font-bold">מצב הצינור: {status}</h1>
+    </div>
 export default function SabanStreamMonitor() {
   const [incoming, setIncoming] = useState<any[]>([]);
   const [outgoing, setOutgoing] = useState<any[]>([]);
