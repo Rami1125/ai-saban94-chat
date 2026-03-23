@@ -25,32 +25,61 @@ export default function SabanWhatsAppFinal() {
     const time = new Date().toLocaleTimeString('he-IL', { hour12: false });
     setLogs(prev => [{msg, type, time}, ...prev].slice(0, 10));
   };
-
-  const handleSendMessage = async () => {
-    if (!message.trim() || isLoading) return;
-    const currentMsg = message;
+const handleSendMessage = async () => {
+    const msg = message.trim();
+    if (!msg) return;
+    
+    // בדיקה אם המערכת כבר בטעינה
+    if (isLoading) {
+      report("⚠️ ניסיון שליחה כפול נחסם - המוח עדיין מעבד", "info");
+      return;
+    }
+    
+    console.log("🚀 [SEND] התחלת שליחת הודעה:", msg);
     setIsLoading(true);
-    setMessage('');
-    report(`שיגור פקודה: ${currentMsg.substring(0, 15)}...`, "info");
+    setMessage(''); // ניקוי השדה - כאן ההודעה "נעלמת" ויזואלית
+    report(`שולח פקודה: ${msg.substring(0, 20)}...`, "info");
 
     try {
+      console.log("📡 [FETCH] פונה לכתובת: /api/pro_brain");
       const res = await fetch('/api/pro_brain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: currentMsg, userName: "ראמי" }),
+        body: JSON.stringify({ 
+          query: msg, 
+          userName: "ראמי", 
+          sessionId: "saban_session",
+          history: [] // וודא שאתה שולח מערך ריק אם אין היסטוריה
+        }),
       });
-      if (res.ok) report("הזרקה לסידור בוצעה", "success");
-      else report(`כשל בשרת: ${res.status}`, "error");
+
+      console.log("📥 [RES] סטטוס תגובה:", res.status);
+
+      if (res.ok) {
+        const data = await res.json();
+        console.log("✅ [SUCCESS] נתונים שהתקבלו:", data);
+        
+        if (data.answer) {
+          report("המוח ענה בהצלחה", "success");
+          // כאן אתה צריך להוסיף את התשובה למערך ההודעות שלך (אם יש כזה)
+        } else {
+          report("התקבלה תגובה ריקה מהשרת", "error");
+        }
+      } else {
+        const errorText = await res.text();
+        console.error("❌ [API_ERROR] שגיאת שרת:", errorText);
+        report(`קריסת API: ${res.status}`, "error");
+        setMessage(msg); // מחזיר את הטקסט לשדה אם נכשל
+      }
     } catch (e: any) {
-      report(`נתק בצינור: ${e.message}`, "error");
+      console.error("💥 [FATAL] כשל תקשורת מוחלט:", e.message);
+      report(`כשל תקשורת: ${e.message}`, "error");
+      setMessage(msg); // מחזיר את הטקסט לשדה אם נכשל
     } finally {
+      console.log("🏁 [END] סיום תהליך שליחה");
       setIsLoading(false);
     }
   };
-
-  // אם הדף עוד לא "נחת" בדפדפן, אל תציג כלום (מונע שגיאה 418)
-  if (!isMounted) return null;
-
   return (
     <div className="flex flex-col h-screen w-full bg-[#efeae2] overflow-hidden relative" dir="rtl">
       
