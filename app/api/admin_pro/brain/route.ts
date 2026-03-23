@@ -20,22 +20,68 @@ export async function POST(req: Request) {
   };
 
   try {
-    const body = await req.json();
-    await report("01_REQ_RECEIVED", { query: body.query });
+    const { query, userName, history } = await req.json();
+    await report("01_REQ_RECEIVED", { query, userName });
+
+    // --- הזרקת הקשר (Context Injection) מכל הטבלאות ---
+    
+    // 1. שליפת DNA וחוקים
+    const { data: dna } = await supabaseAdmin.from('ai_rules').select('instruction').eq('is_active', true);
+    
+    // 2. שליפת זיכרון לקוח (לפי שם)
+    const { data: memory } = await supabaseAdmin.from('customer_memory').select('*').eq('name', userName || 'ראמי').single();
+
+    // 3. שליפת ידע טכני רלוונטי (חיפוש בסיסי ב-KB)
+    const { data: kb } = await supabaseAdmin.from('ai_knowledge_base').select('question, answer').limit(3);
+
+    // 4. בדיקת מלאי מהירה (אם השאילתה קשורה למוצרים)
+    let inventoryContext = "";
+    if (query.includes("מלאי") || query.includes("כמה") || query.includes("יש")) {
+        const { data: inv } = await supabaseAdmin.from('inventory').select('product_name, stock_qty, sku').limit(10);
+        inventoryContext = `מלאי נוכחי: ${JSON.stringify(inv)}`;
+    }
 
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY || "");
-    
-    // שינוי שם המודל לגרסה המעודכנת ביותר כדי למנוע 404
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-3.1-flash-lite-preview", 
-      systemInstruction: "אתה המוח של סבן. פלוט תמיד בסוף: [CREATE_ORDER:לקוח|סוג|מחסן|שעה|פרטים]"
+      model: "gemini-3.1-flash-lite-preview", // המודל היציב והמהיר ביותר
+      systemInstruction: `
+        אתה המוח המבצע של ח. סבן. תפקידך: יועץ טכני, מנהל לוגיסטי ושותף של ראמי.
+        
+        חוקי ברזל לביצוע:
+        - יצירת הזמנה לסידור: [CREATE_ORDER:לקוח|פעולה|מחסן|שעה|פירוט]
+        - הצגת כרטיס מוצר פרימיום: [SHOW_PRODUCT:SKU]
+        - חישוב כמויות: הוסף תמיד 10% פחת בייעוץ טכני.
+        
+        הקשר נוכחי:
+        - DNA של העסק: ${dna?.map(r => r.instruction).join(" | ")}
+        - ידע על הלקוח: ${memory?.accumulated_knowledge || "לקוח חדש"}
+        - ידע טכני מה-KB: ${kb?.map(k => k.question + ": " + k.answer).join(" | ")}
+        - ${inventoryContext}
+
+        ענה בעברית פשוטה, מקצועית, כמו אח ושותף.
+      `
     });
 
-    console.log("🤖 Asking Gemini 1.5 Flash Latest...");
-    const result = await model.generateContent(body.query);
+    const result = await model.generateContent(query);
     const aiText = result.response.text();
     await report("02_AI_GENERATED", { aiText });
 
+    // --- לוגיקת עיבוד פקודות (Command Processor) ---
+    
+    let productData = null;
+
+    // 1. זיהוי פקודת הצגת מוצר (ל-ProductCard)
+    const productMatch = aiText.match(/\[SHOW_PRODUCT:(.*?)\]/);
+    if (productMatch) {
+      const sku = productMatch[1].trim();
+      const { data: product } = await supabaseAdmin.from('inventory').select('*').eq('sku', sku).single();
+      if (product) {
+        productData = product;
+        await report("03_PRODUCT_SENT", { sku });
+      }
+    }
+
+    // 2. זיהוי פקודת יצירת הזמנה (Dispatch)
     const createMatch = aiText.match(/\[CREATE_ORDER:(.*?)\]/);
     if (createMatch) {
       await report("03_ORDER_FOUND", { raw: createMatch[1] });
@@ -55,7 +101,12 @@ export async function POST(req: Request) {
       else await report("04_DB_SUCCESS", { customer: p[0] });
     }
 
-    return NextResponse.json({ answer: aiText });
+    // החזרת תשובה מלאה הכוללת את הטקסט ואת הנתונים המובנים
+    return NextResponse.json({ 
+      answer: aiText,
+      product: productData // נתון זה ישמש את ה-Frontend להצגת ה-ProductCard
+    });
+
   } catch (err: any) {
     console.error("Critical Error:", err.message);
     await report("ERROR_FATAL", { msg: err.message });
