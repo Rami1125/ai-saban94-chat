@@ -53,28 +53,29 @@ export async function POST(req: Request) {
 
     // --- הזרקת הקשר (Context Injection) מכל הטבלאות ---
     
-    // 1. שליפת DNA וחוקים
-    const { data: dna } = await supabaseAdmin.from('ai_rules').select('instruction').eq('is_active', true);
+// 1. זיהוי אם המשתמש שאל על נהגים
+let driversContext = "";
+if (query.includes("נהג") || query.includes("נהגים")) {
+    const { data: drivers, error: driverErr } = await supabaseAdmin
+        .from('drivers')
+        .select('full_name, vehicle_type, status');
     
-    // 2. שליפת זיכרון לקוח (לפי שם)
-    const { data: memory } = await supabaseAdmin.from('customer_memory').select('*').eq('name', userName || 'ראמי').single();
-
-    // 3. שליפת ידע טכני רלוונטי (חיפוש בסיסי ב-KB)
-    const { data: kb } = await supabaseAdmin.from('ai_knowledge_base').select('question, answer').limit(3);
-
-    // 4. בדיקת מלאי מהירה (אם השאילתה קשורה למוצרים)
-    let inventoryContext = "";
-    if (query.includes("מלאי") || query.includes("כמה") || query.includes("יש")) {
-        const { data: inv } = await supabaseAdmin.from('inventory').select('product_name, stock_qty, sku').limit(10);
-        inventoryContext = `מלאי נוכחי: ${JSON.stringify(inv)}`;
+    if (driverErr) {
+        await report("DB_ERROR_DRIVERS", { msg: driverErr.message });
+        driversContext = "שגיאה בשליפת נהגים מה-DB.";
+    } else {
+        driversContext = `נהגים אמיתיים מה-DB: ${JSON.stringify(drivers)}`;
+        await report("DB_SUCCESS_DRIVERS", { count: drivers?.length });
     }
+}
 
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY || "");
     const model = genAI.getGenerativeModel({ 
       model: "gemini-3.1-flash-lite-preview", // המודל היציב והמהיר ביותר
       systemInstruction: `
         אתה המוח המבצע של ח. סבן. תפקידך: יועץ טכני, מנהל לוגיסטי ושותף של ראמי.
-        
+        חוק בל יעבור: אל תמציא שמות של נהגים או לקוחות! 
+         השתמש אך ורק בנתונים הבאים שהגיעו מה-Database:
         חוקי ברזל לביצוע:
         - יצירת הזמנה לסידור: [CREATE_ORDER:לקוח|פעולה|מחסן|שעה|פירוט]
         - הצגת כרטיס מוצר פרימיום: [SHOW_PRODUCT:SKU]
@@ -85,7 +86,7 @@ export async function POST(req: Request) {
         - ידע על הלקוח: ${memory?.accumulated_knowledge || "לקוח חדש"}
         - ידע טכני מה-KB: ${kb?.map(k => k.question + ": " + k.answer).join(" | ")}
         - ${inventoryContext}
-
+          אם הנתונים למעלה ריקים, תגיד: 'ראמי אחי, הטבלה ב-DB ריקה, אין נהגים רשומים'.
         ענה בעברית פשוטה, מקצועית, כמו אח ושותף.
       `
     });
