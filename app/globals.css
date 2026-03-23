@@ -2,6 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --primary: 165 100% 33%; /* ירוק סבן */
+    --primary-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 165 100% 33%;
+    --radius: 0.75rem;
+  }
+}
+
 /* כאן אתה יכול להוסיף עיצובים אישיים אם תרצה, אבל אל תוסיף אימפורטים של ספריות חסרות */
 
 @custom-variant dark (&:is(.dark *));
