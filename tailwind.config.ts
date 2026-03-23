@@ -3,12 +3,12 @@ import type { Config } from "tailwindcss";
 
 const config: Config = {
   // הוספת סריקה רחבה כדי לתפוס את הנתיבים של GitHub
-  content: [
+content: [
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/**/*.{js,ts,jsx,tsx,mdx}",
-    "./rami1125/**/*.{js,ts,jsx,tsx,mdx}", // הנתיב הספציפי שנוצר אצלך
-    "./**/*.{js,ts,jsx,tsx,mdx}",        // ליתר ביטחון סורק הכל
+    "./rami1125/**/*.{js,ts,jsx,tsx,mdx}", // זה הנתיב שבו נמצא כל הקוד שלך באמת!
+    "./**/*.{js,ts,jsx,tsx,mdx}",          // ליתר ביטחון סורק כל קובץ בפרויקט
   ],
   theme: {
     extend: {
