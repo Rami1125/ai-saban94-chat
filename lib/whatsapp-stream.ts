@@ -1,36 +1,65 @@
-// קוד המאזין לצינור ה-Firebase
 import { adminDb } from "@/lib/firebaseAdmin";
+import { NextResponse } from "next/server";
 
-const incomingRef = adminDb.ref('incoming');
+/**
+ * המלשינון של סבן: מאזין לצינור ומפעיל את ה-AI
+ */
 
-// פונקציה שמתעוררת בכל פעם שנכנסת הודעה ל-Firebase
-incomingRef.on('child_added', async (snapshot) => {
-  const data = snapshot.val();
-  
-  // מניעת כפילויות
-  if (!data || data.ai_processed) return;
+export async function GET() {
+  if (!adminDb) {
+    return NextResponse.json({ error: "חיבור ל-Firebase נכשל" }, { status: 500 });
+  }
 
-  console.log(`📩 הודעה חדשה בצינור מ-${data.from}: ${data.body}`);
+  console.log("🦾 המלשינון של סבן OS התחיל לעבוד...");
 
-  // 1. שליחת השאלה למוח (Pro Brain)
-  const response = await fetch('https://your-saban-os.vercel.app/api/pro_brain', {
-    method: 'POST',
-    body: JSON.stringify({ 
-      query: data.body, 
-      userName: data.pushName || "לקוח",
-      senderId: data.from 
-    })
+  // האזנה להודעות חדשות בנתיב המדויק של JONI
+  adminDb.ref('rami/incoming').on('child_added', async (snapshot) => {
+    const data = snapshot.val();
+    
+    // בדיקה שההודעה לא עובדה כבר (המלשינון לא עובד פעמיים)
+    if (!data || data.ai_processed) return;
+
+    const messageId = snapshot.key;
+    const userMessage = data.body;
+    const senderNumber = data.from;
+
+    console.log(`📩 הודעה חדשה מ-${senderNumber}: ${userMessage}`);
+
+    try {
+      // 1. קריאה למוח המרכזי (Pro Brain) לקבלת תשובה מה-AI
+      // וודא שכתובת ה-URL תואמת לסביבת העבודה שלך (Vercel או Local)
+      const brainResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/pro_brain`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          query: userMessage, 
+          userName: data.pushName || "לקוח",
+          senderId: senderNumber 
+        })
+      });
+
+      const { answer } = await brainResponse.json();
+
+      // 2. הזרקה לצינור ה-Outgoing (המבנה ש-JONI אוהב)
+      const outgoingRef = adminDb.ref('rami/outgoing').push();
+      await outgoingRef.set({
+        body: answer,
+        to: senderNumber,
+        status: "pending", // JONI מחפש את הסטטוס הזה כדי לשלוח
+        timestamp: Date.now()
+      });
+
+      // 3. עדכון ה"מלשינון" שההודעה טופלה בהצלחה
+      await adminDb.ref(`rami/incoming/${messageId}`).update({
+        ai_processed: true
+      });
+
+      console.log(`✅ תשובה נשלחה ל-${senderNumber}`);
+
+    } catch (error) {
+      console.error("❌ תקלה בתהליך המלשינון:", error);
+    }
   });
 
-  const result = await response.json();
-
-  // 2. הזרקת התשובה לתיקיית outgoing (JONI ימשוך וישלח לווצאפ)
-  await adminDb.ref('outgoing').push({
-    to: data.from,
-    body: result.answer,
-    timestamp: Date.now()
-  });
-
-  // 3. סימון שההודעה טופלה
-  await snapshot.ref.update({ ai_processed: true });
-});
+  return NextResponse.json({ status: "Saban Listener is ONLINE" });
+}
