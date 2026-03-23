@@ -1,48 +1,65 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Menu, Search, MoreVertical, Send, Paperclip, Mic, Phone, Video,
+  Check, CheckCheck, Bot, Cpu, Database, Globe, Zap, Settings,
+  Users, Package, MapPin, ChevronLeft, History, Brain, Sparkles, Languages
+} from "lucide-react";
 import { initializeApp, getApps } from 'firebase/app';
-import { getDatabase, ref, onValue, limitToLast, query, set, push } from 'firebase/database';
+import { getDatabase, ref, onValue, limitToLast, query } from 'firebase/database';
+import { Switch } from "@/components/ui/switch";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 
-// קונפיגורציה
+// Firebase Config
 const firebaseConfig = { databaseURL: "https://whatsapp-8ffd1-default-rtdb.europe-west1.firebasedatabase.app" };
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 const db = getDatabase(app);
 
-export default function SabanCommandCenter() {
-  const [incoming, setIncoming] = useState<any[]>([]);
-  const [outgoing, setOutgoing] = useState<any[]>([]);
-  const [isAiActive, setIsAiActive] = useState(true);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [selectedChat, setSelectedChat] = useState<string | null>("ח. סבן הזמנות");
+// Types
+interface Message {
+  id: string;
+  content: string;
+  time: string;
+  type: "incoming" | "outgoing";
+  status?: "sent" | "delivered" | "read";
+  from?: string;
+}
+
+// Main Component
+export default function SabanOSCommandCenter() {
+  const [incoming, setIncoming] = useState<Message[]>([]);
+  const [outgoing, setOutgoing] = useState<Message[]>([]);
+  const [inputValue, setInputValue] = useState("");
+  const [aiEnabled, setAiEnabled] = useState(true);
+  const [mobileView, setMobileView] = useState<"list" | "chat">("list");
+  const [language, setLanguage] = useState("אוטומטי");
+  const [showCommandCenter, setShowCommandCenter] = useState(false);
   
-  // לינק תמונה שביקשת (ניתן להחליף ב-State אם תרצה להדביק דינמית)
-  const userImageUrl = "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"; 
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // אודיו להתראות
-  const playNotification = () => {
-    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
-    audio.play().catch(() => {});
-  };
-
+  // חיבור לצינור Firebase בזמן אמת
   useEffect(() => {
-    // חיבור ל-OneSignal (בהנחה שהגדרת ב-Layout/Head)
-    if (typeof window !== 'undefined' && (window as any).OneSignal) {
-      (window as any).OneSignal.push(() => {
-        (window as any).OneSignal.init({ appId: "YOUR_ONESIGNAL_APP_ID" });
-      });
-    }
-
-    // מאזין להודעות נכנסות
-    const inRef = query(ref(db, 'rami/incoming'), limitToLast(20));
+    // מאזין להודעות נכנסות (המלשינון)
+    const inRef = query(ref(db, 'rami/incoming'), limitToLast(15));
     const unsubIn = onValue(inRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
         const list = Object.entries(data)
-          .map(([id, val]: any) => ({ id, ...val }))
+          .map(([id, val]: any) => ({
+            id,
+            content: typeof val.body === 'object' ? Object.values(val.body).join('') : (val.body || "הודעה התקבלה"),
+            time: val.timestamp ? new Date(val.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'עכשיו',
+            type: "incoming" as const,
+            from: val.from || "לקוח"
+          }))
           .filter(i => i.id !== '__listener');
-        setIncoming(list.reverse());
-        playNotification();
+        setIncoming(list);
       }
     });
 
@@ -51,109 +68,190 @@ export default function SabanCommandCenter() {
     const unsubOut = onValue(outRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        const list = Object.entries(data).map(([id, val]: any) => ({ id, ...val }));
-        setOutgoing(list.reverse());
+        const list = Object.entries(data).map(([id, val]: any) => ({
+          id,
+          content: val.body,
+          time: val.timestamp ? new Date(val.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '',
+          type: "outgoing" as const,
+          status: "read" as const
+        }));
+        setOutgoing(list);
       }
     });
 
     return () => { unsubIn(); unsubOut(); };
   }, []);
 
-  const getCleanText = (msg: any) => {
-    if (typeof msg.body === 'string') return msg.body;
-    if (typeof msg.body === 'object') return Object.values(msg.body).join('');
-    return "הודעה התקבלה 📋";
-  };
+  // שילוב כל ההודעות לציר זמן אחד
+  const allMessages = [...incoming, ...outgoing].sort((a, b) => a.id.localeCompare(b.id));
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [allMessages]);
 
   return (
-    <div className="min-h-screen bg-[#F0F2F5] text-[#111b21] font-sans overflow-hidden flex flex-col" dir="rtl">
-      
-      {/* Navbar Mobile עם המבורגר */}
-      <nav className="bg-[#00a884] p-4 text-white shadow-md flex justify-between items-center z-50">
-        <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 outline-none">
-          <div className="w-6 h-0.5 bg-white mb-1.5 transition-all"></div>
-          <div className="w-6 h-0.5 bg-white mb-1.5"></div>
-          <div className="w-6 h-0.5 bg-white"></div>
-        </button>
-        <h1 className="text-xl font-bold tracking-tight italic">SABAN COMMAND</h1>
-        <div className="flex items-center gap-3">
-          <div className={`w-3 h-3 rounded-full ${isAiActive ? 'bg-emerald-300 animate-pulse' : 'bg-red-400'}`}></div>
-          <img src={userImageUrl} className="w-9 h-9 rounded-full border-2 border-white shadow-sm" alt="User" />
-        </div>
-      </nav>
+    <div className="h-screen w-full bg-[#ece5dd] flex flex-col font-sans" dir="rtl">
+      {/* רקע ירוק של ווצאף במחשב */}
+      <div className="hidden md:block h-[110px] bg-[#00a884] shrink-0" />
 
-      {/* תפריט צד (Layered Menu) */}
-      <div className={`fixed inset-0 bg-black/50 z-[60] transition-opacity duration-300 ${isMenuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={() => setIsMenuOpen(false)}>
-        <aside className={`absolute right-0 top-0 h-full bg-white w-72 shadow-2xl transition-transform duration-300 transform ${isMenuOpen ? 'translate-x-0' : 'translate-x-full'}`} onClick={e => e.stopPropagation()}>
-          <div className="p-6 bg-[#00a884] text-white">
-            <h3 className="font-black text-2xl mb-1">Saban OS</h3>
-            <p className="text-xs opacity-80 italic underline">מחובר לקבוצת ח. סבן</p>
-          </div>
-          <div className="p-4 space-y-4">
-            <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl border border-gray-100">
-              <span className="font-bold text-sm">מענה AI אוטומטי</span>
-              <button onClick={() => setIsAiActive(!isAiActive)} className={`w-12 h-6 rounded-full transition-colors relative ${isAiActive ? 'bg-emerald-500' : 'bg-gray-300'}`}>
-                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${isAiActive ? 'left-1' : 'left-7'}`}></div>
-              </button>
+      <div className="flex-1 flex md:px-[3%] md:-mt-[90px] relative overflow-hidden">
+        <div className="w-full flex bg-white md:shadow-2xl md:rounded-lg overflow-hidden border border-gray-200">
+          
+          {/* Sidebar - רשימת שיחות ופקודות */}
+          <aside className={cn(
+            "w-full md:w-[400px] flex flex-col border-l border-[#e9edef] bg-white transition-all",
+            mobileView === "chat" && "hidden md:flex"
+          )}>
+            <header className="h-16 px-4 flex items-center justify-between bg-[#f0f2f5] shrink-0">
+              <div className="flex items-center gap-3">
+                <Avatar className="w-10 h-10 border-2 border-[#00a884]">
+                  <AvatarImage src="https://github.com/shadcn.png" />
+                  <AvatarFallback className="bg-[#00a884] text-white">RS</AvatarFallback>
+                </Avatar>
+                <div className="leading-tight">
+                  <p className="font-bold text-[#111b21] text-sm">SABAN OS</p>
+                  <p className="text-[10px] text-[#00a884] font-bold animate-pulse">צינור פעיל 🚀</p>
+                </div>
+              </div>
+              <div className="flex gap-1">
+                <button onClick={() => setShowCommandCenter(true)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
+                  <Menu className="w-5 h-5 text-[#54656f]" />
+                </button>
+              </div>
+            </header>
+
+            <div className="p-3 bg-white border-b border-gray-100">
+              <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-[#f0f2f5]">
+                <Search className="w-4 h-4 text-gray-500" />
+                <input placeholder="חפש בהיסטוריית ח. סבן" className="bg-transparent border-none outline-none text-sm w-full" />
+              </div>
             </div>
-            <button className="w-full text-right p-3 hover:bg-gray-100 rounded-lg font-bold text-blue-600">📂 גוגל דרייב - מסמכים</button>
-            <button className="w-full text-right p-3 hover:bg-gray-100 rounded-lg font-bold text-emerald-600">📊 טבלת הזמנות ח. סבן</button>
-            <button className="w-full text-right p-3 hover:bg-gray-100 rounded-lg font-bold text-red-500">🧹 ניקוי צינור JONI</button>
-          </div>
-        </aside>
+
+            <ScrollArea className="flex-1">
+              <div onClick={() => setMobileView("chat")} className="p-4 flex items-center gap-4 cursor-pointer bg-[#f0f2f5] border-r-4 border-[#00a884]">
+                <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 font-bold">ח.ס</div>
+                <div className="flex-1 overflow-hidden">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-sm">קבוצת הזמנות ח. סבן</span>
+                    <span className="text-[10px] text-gray-400">LIVE</span>
+                  </div>
+                  <p className="text-xs text-gray-500 truncate italic">ה-AI מאזין לקבוצה זו 24/7</p>
+                </div>
+              </div>
+            </ScrollArea>
+          </aside>
+
+          {/* Chat Window - חלון השיחה המרכזי */}
+          <main className={cn(
+            "flex-1 flex flex-col bg-[#efeae2] relative",
+            mobileView === "list" && "hidden md:flex"
+          )}>
+             {/* דפוס רקע ווצאף */}
+            <div className="absolute inset-0 opacity-[0.05] pointer-events-none" style={{ backgroundImage: `url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')` }} />
+
+            <header className="h-16 px-4 flex items-center justify-between bg-[#f0f2f5] border-b border-gray-200 z-10">
+              <div className="flex items-center gap-3">
+                <button onClick={() => setMobileView("list")} className="md:hidden"><ChevronLeft className="w-6 h-6 text-gray-600" /></button>
+                <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold">ח.ס</div>
+                <div>
+                  <h3 className="font-bold text-sm text-gray-800">הזמנות לקוחות ח. סבן</h3>
+                  <p className="text-[10px] text-emerald-600 font-bold">AI Autopilot פעיל</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Badge variant="outline" className="bg-white text-emerald-600 border-emerald-200">24/7 Monitoring</Badge>
+              </div>
+            </header>
+
+            <ScrollArea className="flex-1 p-4 relative z-10">
+              <div className="space-y-4 max-w-3xl mx-auto">
+                {allMessages.map((msg) => (
+                  <motion.div key={msg.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={cn("flex", msg.type === "outgoing" ? "justify-start" : "justify-end")}>
+                    <div className={cn(
+                      "max-w-[85%] p-3 rounded-xl shadow-sm relative",
+                      msg.type === "outgoing" ? "bg-[#dcf8c6] rounded-tl-none border-r-4 border-emerald-500" : "bg-white rounded-tr-none border-l-4 border-blue-400"
+                    )}>
+                      {msg.from && <p className="text-[10px] font-black text-emerald-600 mb-1 uppercase tracking-tighter">{msg.from}</p>}
+                      <p className="text-sm md:text-base font-medium leading-relaxed">{msg.content}</p>
+                      <div className="flex justify-end items-center gap-1 mt-1">
+                        <span className="text-[9px] text-gray-400 font-bold">{msg.time}</span>
+                        {msg.type === "outgoing" && <CheckCheck className="w-3 h-3 text-blue-400" />}
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+            </ScrollArea>
+
+            {/* Input Area */}
+            <footer className="p-3 bg-[#f0f2f5] flex items-center gap-2 z-10">
+              <div className="flex-1 bg-white rounded-full px-4 py-2 shadow-sm border border-gray-100 flex items-center">
+                <input 
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  placeholder="כתוב הודעה כמנהל..." 
+                  className="bg-transparent border-none outline-none text-sm w-full py-1"
+                />
+              </div>
+              <button className="w-11 h-11 bg-[#00a884] rounded-full flex items-center justify-center text-white shadow-lg active:scale-90 transition-transform">
+                <Send className="w-5 h-5 mr-1" />
+              </button>
+            </footer>
+          </main>
+        </div>
       </div>
 
-      {/* תוכן ראשי - בסגנון צ'אט */}
-      <main className="flex-1 overflow-y-auto p-4 space-y-4 max-w-2xl mx-auto w-full pb-24">
-        
-        {/* הודעות נכנסות (המלשינון) */}
-        <div className="space-y-3">
-          <div className="text-center my-4"><span className="bg-white/80 px-4 py-1 rounded-lg text-[10px] font-bold text-gray-400 shadow-sm uppercase tracking-widest">Live Updates</span></div>
-          
-          {incoming.map((msg) => (
-            <div key={msg.id} className="flex flex-col items-start animate-in fade-in slide-in-from-right-4 duration-300">
-              <div className="bg-white p-4 rounded-2xl rounded-tr-none shadow-sm border border-gray-100 max-w-[90%] relative">
-                <div className="flex justify-between items-center gap-8 mb-1">
-                  <span className="text-[10px] font-black text-[#00a884] uppercase tracking-wide">
-                    {msg.pushName || msg.from || "לקוח"}
-                  </span>
-                  <span className="text-[9px] text-gray-300 font-bold uppercase">
-                    {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'LIVE'}
-                  </span>
-                </div>
-                <p className="text-lg font-medium leading-tight text-[#111b21]">{getCleanText(msg)}</p>
-                {msg.id === 'body' && <div className="mt-2 pt-2 border-t border-gray-50 text-[10px] text-emerald-500 font-bold italic">📦 הזמנה נקלטה במאגר</div>}
+      {/* Command Center - תפריט ניהול המוח */}
+      <Sheet open={showCommandCenter} onOpenChange={setShowCommandCenter}>
+        <SheetContent side="right" className="w-[320px] p-0 border-none bg-white">
+          <div className="h-full flex flex-col">
+            <header className="p-6 bg-[#00a884] text-white">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-white/20 rounded-xl"><Brain className="w-6 h-6" /></div>
+                <h2 className="font-bold text-xl tracking-tighter">SABAN BRAIN</h2>
               </div>
-            </div>
-          ))}
-        </div>
+              <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest">ניהול אימון וזיהוי הזמנות</p>
+            </header>
 
-        {/* הודעות יוצאות (תשובות סבן) */}
-        <div className="space-y-3">
-          {outgoing.map((msg) => (
-            <div key={msg.id} className="flex flex-col items-end animate-in fade-in slide-in-from-left-4 duration-300">
-              <div className="bg-[#dcf8c6] p-4 rounded-2xl rounded-tl-none shadow-sm max-w-[90%]">
-                <div className="flex justify-between items-center gap-8 mb-1">
-                  <span className="text-[10px] font-black text-emerald-700 uppercase">Saban AI (מגיב ל- {msg.to})</span>
-                  <span className="text-[9px] text-emerald-500">✔✔</span>
+            <ScrollArea className="flex-1 p-6">
+              <div className="space-y-8">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-emerald-100 rounded-lg text-emerald-600"><Bot className="w-5 h-5" /></div>
+                      <span className="font-bold text-sm">מענה אוטומטי</span>
+                    </div>
+                    <Switch checked={aiEnabled} onCheckedChange={setAiEnabled} />
+                  </div>
+
+                  <button className="w-full flex items-center gap-4 p-4 hover:bg-gray-50 rounded-2xl border border-gray-100 transition-colors text-right group">
+                    <div className="p-2 bg-blue-50 rounded-lg text-blue-500 group-hover:bg-blue-500 group-hover:text-white transition-all"><History className="w-5 h-5" /></div>
+                    <div>
+                      <p className="font-bold text-sm">ייבוא היסטוריה</p>
+                      <p className="text-[10px] text-gray-400">אימון על שיחות עבר</p>
+                    </div>
+                  </button>
+
+                  <button className="w-full flex items-center gap-4 p-4 hover:bg-gray-50 rounded-2xl border border-gray-100 transition-colors text-right group">
+                    <div className="p-2 bg-purple-50 rounded-lg text-purple-500 group-hover:bg-purple-500 group-hover:text-white transition-all"><Languages className="w-5 h-5" /></div>
+                    <div>
+                      <p className="font-bold text-sm">שפת AI</p>
+                      <p className="text-[10px] text-gray-400">נוכחי: {language}</p>
+                    </div>
+                  </button>
                 </div>
-                <p className="text-lg font-bold leading-tight text-[#111b21] italic">{msg.body}</p>
+
+                <div className="p-5 bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-3xl text-white shadow-xl relative overflow-hidden">
+                   <div className="absolute -right-4 -bottom-4 opacity-20"><Zap className="w-24 h-24" /></div>
+                   <h3 className="font-black text-lg mb-1 italic tracking-tighter">SABAN OS v3.0</h3>
+                   <p className="text-[11px] opacity-80 leading-tight">המערכת מנטרת את קבוצת "ח. סבן" בשידור חי מהצינור של JONI.</p>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      </main>
-
-      {/* Floating Action Button - אימון המוח */}
-      <button className="fixed bottom-6 right-6 w-16 h-16 bg-[#00a884] text-white rounded-full shadow-2xl flex items-center justify-center text-3xl hover:scale-110 active:scale-95 transition-all z-40 border-4 border-white">
-        🧠
-      </button>
-
-      <style jsx global>{`
-        body { background: #E5DDD5; }
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-thumb { background: #00a884; border-radius: 10px; }
-      `}</style>
+            </ScrollArea>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
