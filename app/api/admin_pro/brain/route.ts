@@ -8,7 +8,35 @@ const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
   process.env.SUPABASE_SERVICE_ROLE_KEY || ""
 );
+// פונקציית בדיקת תקינות צנרת (Database Diagnostics)
+async function testAllTables() {
+  const tables = [
+    'ai_rules', 
+    'inventory', 
+    'saban_master_dispatch', 
+    'customer_memory', 
+    'ai_knowledge_base', 
+    'drivers', 
+    'color_fans'
+  ];
 
+  const results = [];
+
+  for (const table of tables) {
+    const start = Date.now();
+    const { data, error } = await supabaseAdmin.from(table).select('*').limit(1);
+    
+    results.push({
+      table,
+      status: error ? '❌ ERROR' : '✅ OK',
+      duration: `${Date.now() - start}ms`,
+      error: error ? error.message : null,
+      hasData: data && data.length > 0 ? 'Yes' : 'Empty Table'
+    });
+  }
+
+  return results;
+}
 export async function POST(req: Request) {
   const logId = crypto.randomUUID();
   const start = Date.now();
