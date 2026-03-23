@@ -1,6 +1,5 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { adminDb } from "@/lib/firebaseAdmin"; // חיבור ה-SDK של פיירבייס
 import { Activity, Send, MessageSquare, CheckCircle, AlertCircle } from "lucide-react";
 
 export default function SabanStreamMonitor() {
