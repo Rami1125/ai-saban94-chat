@@ -2,13 +2,13 @@ import type { Config } from "tailwindcss";
 import tailwindAnimate from "tailwindcss-animate";
 
 const config: Config = {
-  darkMode: ["class"], // חשוב ל-Shadcn UI
+  darkMode: ["class"],
   content: [
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/**/*.{js,ts,jsx,tsx,mdx}",
-    "./rami1125/**/*.{js,ts,jsx,tsx,mdx}", 
-    "./**/*.{js,ts,jsx,tsx,mdx}",          
+    "./rami1125/**/*.{js,ts,jsx,tsx,mdx}", // 👈 קריטי! סורק את התיקייה העמוקה
+    "./**/*.{js,ts,jsx,tsx,mdx}",          // 👈 ביטוח! סורק כל קובץ אפשרי
   ],
   theme: {
     extend: {
@@ -22,32 +22,14 @@ const config: Config = {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
         },
-        secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
-        },
-        muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
-        },
-        accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
-        },
         whatsapp: {
           DEFAULT: "#00a884",
           light: "#dcf8c6",
           dark: "#128c7e",
         }
       },
-      borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
-      },
     },
   },
-  plugins: [tailwindAnimate], // שימוש ב-Import במקום require
+  plugins: [tailwindAnimate],
 };
-
 export default config;
