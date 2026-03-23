@@ -1,5 +1,8 @@
-@import "tailwindcss";
-@import "tw-animate-css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* כאן אתה יכול להוסיף עיצובים אישיים אם תרצה, אבל אל תוסיף אימפורטים של ספריות חסרות */
 
 @custom-variant dark (&:is(.dark *));
 @keyframes orb-hue-rotate {
