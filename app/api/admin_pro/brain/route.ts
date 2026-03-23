@@ -24,11 +24,14 @@ export async function POST(req: Request) {
     await report("01_REQ_RECEIVED", { query: body.query });
 
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY || "");
+    
+    // שינוי שם המודל לגרסה המעודכנת ביותר כדי למנוע 404
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash",
-      systemInstruction: "אתה המוח של סבן. פלוט תמיד: [CREATE_ORDER:לקוח|סוג|מחסן|שעה|פרטים]"
+      model: "gemini-3.1-flash-lite-preview", 
+      systemInstruction: "אתה המוח של סבן. פלוט תמיד בסוף: [CREATE_ORDER:לקוח|סוג|מחסן|שעה|פרטים]"
     });
 
+    console.log("🤖 Asking Gemini 1.5 Flash Latest...");
     const result = await model.generateContent(body.query);
     const aiText = result.response.text();
     await report("02_AI_GENERATED", { aiText });
@@ -39,8 +42,12 @@ export async function POST(req: Request) {
       const p = createMatch[1].split('|').map(s => s.trim());
       
       const { error: dbErr } = await supabaseAdmin.from('saban_master_dispatch').insert([{
-        customer_name: p[0], container_action: p[1], warehouse_source: p[2],
-        scheduled_time: p[3], order_id_comax: p[4], status: 'פתוח',
+        customer_name: p[0], 
+        container_action: p[1] || "אספקה", 
+        warehouse_source: p[2] || "ראשי",
+        scheduled_time: p[3] || "09:00", 
+        order_id_comax: p[4] || "הזמנת AI", 
+        status: 'פתוח',
         scheduled_date: new Date().toISOString().split('T')[0]
       }]);
 
@@ -50,6 +57,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ answer: aiText });
   } catch (err: any) {
+    console.error("Critical Error:", err.message);
     await report("ERROR_FATAL", { msg: err.message });
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
