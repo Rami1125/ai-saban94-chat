@@ -1,5 +1,5 @@
+import 'server-only'; // <--- תוסיף את זה (צריך להתקין npm install server-only)
 import admin from 'firebase-admin';
-
 /**
  * Saban-OS: Firebase Admin Connection Module
  * אחראי על חיבור מאובטח ל-Realtime Database עבור הצינור של JONI
