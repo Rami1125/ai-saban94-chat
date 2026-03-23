@@ -25,7 +25,6 @@ export default function SabanAppMonitor() {
       if (data) {
         const list = Object.entries(data)
           .map(([id, val]: any) => ({ id, ...val }))
-          // מסננים את ה-__listener כדי שלא יפריע בעיניים
           .filter(item => item.id !== '__listener');
         setIncoming(list.reverse());
       }
@@ -43,88 +42,105 @@ export default function SabanAppMonitor() {
     return () => { unsubIn(); unsubOut(); };
   }, []);
 
-  // פונקציית הקסם: מחברת אותיות למילים אם JONI שולח "סלט"
-  const parseJoniMessage = (msg: any) => {
-    // אם זה כבר טקסט רגיל
-    if (typeof msg.body === 'string') return msg.body;
-    
-    // אם זה אובייקט של אותיות (כמו שראינו ב-Log שלך)
-    if (typeof msg.body === 'object' && msg.body !== null) {
-      return Object.values(msg.body).join('');
+  // מפענח הודעות אוניברסלי - מוצא טקסט בכל מקום ב-JSON
+  const smartParse = (msg: any) => {
+    if (!msg) return "הודעה ריקה";
+
+    // 1. אם יש שדה body/text/message ישיר
+    const simpleText = msg.body || msg.text || msg.message || msg.content;
+    if (typeof simpleText === 'string') return simpleText;
+    if (typeof simpleText === 'object' && simpleText !== null) return Object.values(simpleText).join('');
+
+    // 2. סריקה עמוקה של כל השדות באובייקט
+    const allValues = Object.values(msg);
+    for (let val of allValues) {
+      if (typeof val === 'string' && val.length > 1 && !val.includes('http') && val !== msg.id) {
+        return val;
+      }
+      if (typeof val === 'object' && val !== null) {
+        const joined = Object.values(val).join('');
+        if (joined.length > 0 && joined !== msg.id) return joined;
+      }
     }
 
-    // ניסיון לשדות אחרים
-    const text = msg.text || msg.message || msg.content;
-    if (typeof text === 'string') return text;
-    if (typeof text === 'object' && text !== null) return Object.values(text).join('');
-
-    return "הודעה ללא תוכן";
+    return "ממתין לתוכן...";
   };
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 font-sans pb-10" dir="rtl">
-      <header className="bg-white border-b sticky top-0 z-10 p-4 shadow-sm">
+      {/* Header סגנון אפליקציית ניהול */}
+      <header className="bg-white border-b sticky top-0 z-10 p-5 shadow-sm">
         <div className="max-w-md mx-auto flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-black text-blue-600 tracking-tight italic">Saban OS</h1>
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{status}</p>
+          <div className="flex flex-col">
+            <span className="text-2xl font-black text-blue-600 tracking-tighter italic">SABAN OS</span>
+            <span className="text-[10px] font-bold text-emerald-500 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+              {status}
+            </span>
           </div>
-          <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold shadow-lg">RS</div>
+          <div className="w-11 h-11 bg-gradient-to-tr from-blue-600 to-blue-400 rounded-2xl flex items-center justify-center text-white font-bold shadow-lg transform rotate-3">
+            RS
+          </div>
         </div>
       </header>
 
-      <main className="max-w-md mx-auto p-4 space-y-6">
+      <main className="max-w-md mx-auto p-4 space-y-8 mt-4">
+        
+        {/* הודעות נכנסות */}
         <section>
-          <div className="flex items-center justify-between mb-3 px-1">
-            <h2 className="text-lg font-bold flex items-center gap-2 text-gray-700">
-              <span className="w-2 h-6 bg-blue-500 rounded-full"></span>
-              הודעות נכנסות
-            </h2>
-            <span className="text-[10px] font-bold text-blue-500 bg-blue-50 px-2 py-1 rounded-lg border border-blue-100 uppercase">Live</span>
+          <div className="flex items-center justify-between mb-4 px-2">
+            <h2 className="text-xl font-black text-gray-800 tracking-tight">נכנסות</h2>
+            <div className="h-px flex-1 bg-gray-200 mx-4"></div>
+            <span className="text-[9px] font-black bg-blue-100 text-blue-600 px-2 py-1 rounded-md uppercase">Live Stream</span>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-4">
             {incoming.length > 0 ? incoming.map((msg) => (
-              <div key={msg.id} className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
-                <div className="flex justify-between items-start mb-3">
-                  <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
-                    {msg.from || "לקוח"}
+              <div key={msg.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100 hover:border-blue-200 transition-all">
+                <div className="flex justify-between items-center mb-4">
+                  <span className="text-xs font-black text-blue-500 px-3 py-1 bg-blue-50 rounded-full">
+                    {msg.from || msg.sender || "לקוח"}
                   </span>
-                  <span className="text-[10px] text-gray-400">
+                  <span className="text-[10px] font-bold text-gray-400">
                     {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'עכשיו'}
                   </span>
                 </div>
-                <p className="text-xl text-gray-800 leading-tight font-bold">
-                  {parseJoniMessage(msg)}
+                <p className="text-xl font-bold text-gray-800 leading-[1.2]">
+                  {smartParse(msg)}
                 </p>
               </div>
             )) : (
-              <div className="text-center py-20 text-gray-300 italic font-medium">הצינור שקט כרגע...</div>
+              <div className="text-center py-20 opacity-20 font-black text-2xl italic">NO DATA</div>
             )}
           </div>
         </section>
 
+        {/* הודעות יוצאות */}
         <section>
-          <div className="flex items-center mb-3 px-1 font-bold text-gray-700">
-            <span className="w-2 h-6 bg-emerald-500 rounded-full ml-2"></span>
-            תשובות סבן AI
+          <div className="flex items-center justify-between mb-4 px-2">
+            <h2 className="text-xl font-black text-gray-800 tracking-tight text-opacity-50">תשובות AI</h2>
+            <div className="h-px flex-1 bg-gray-100 mx-4"></div>
           </div>
-          <div className="space-y-3">
+
+          <div className="space-y-4 opacity-90">
             {outgoing.length > 0 ? outgoing.map((msg) => (
-              <div key={msg.id} className="bg-emerald-600 p-5 rounded-3xl shadow-lg">
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-[10px] font-bold text-emerald-100">אל: {msg.to}</span>
-                  <span className="text-[10px] text-emerald-200">
+              <div key={msg.id} className="bg-emerald-600 p-6 rounded-[2rem] shadow-xl shadow-emerald-100">
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-[10px] font-black text-emerald-100 uppercase tracking-widest">AL: {msg.to}</span>
+                  <span className="text-[10px] font-bold text-emerald-200">
                     {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
                   </span>
                 </div>
-                <p className="text-lg text-white leading-tight font-bold">{msg.body}</p>
+                <p className="text-lg font-bold text-white leading-tight italic">
+                  {msg.body}
+                </p>
               </div>
             )) : (
-              <div className="text-center py-10 text-gray-300 italic">ממתין לתשובה ראשונה...</div>
+              <div className="text-center py-10 opacity-20 font-bold italic">WAITING...</div>
             )}
           </div>
         </section>
+
       </main>
     </div>
   );
