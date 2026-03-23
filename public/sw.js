@@ -1,4 +1,14 @@
-const CACHE_NAME = 'saban-full-v3';
+// --- 1. מאזין הודעות (חובה בשורה הראשונה למניעת שגיאת evaluation) ---
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    (self as any).skipWaiting();
+  }
+  // לוג פנימי למלשינון הקונסולה
+  console.log("📩 [SW] Message Received:", event.data);
+});
+
+// --- 2. הגדרות Cache ונתיבים ---
+const CACHE_NAME = 'saban-full-v4'; // שדרוג גרסה לניקוי כפילויות
 const APP_ROUTES = [
   '/',
   '/admin/master',
@@ -8,18 +18,19 @@ const APP_ROUTES = [
   '/placeholder.svg'
 ];
 
-// התקנה - שמירת נכסי הליבה ב-Cache
-self.addEventListener('install', (event) => {
+// --- 3. התקנה - שמירת נכסי הליבה ---
+self.addEventListener('install', (event: any) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
+      console.log("📥 [SW] Caching Core Routes...");
       return cache.addAll(APP_ROUTES);
     })
   );
-  self.skipWaiting();
+  (self as any).skipWaiting();
 });
 
-// אקטיבציה - ניקוי גרסאות Cache ישנות
-self.addEventListener('activate', (event) => {
+// --- 4. אקטיבציה - ניקוי גרסאות ישנות ---
+self.addEventListener('activate', (event: any) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
@@ -27,43 +38,53 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
-  self.clients.claim();
+  (self as any).clients.claim();
+  console.log("✅ [SW] Activated and Ready.");
 });
 
-// ניהול בקשות (Fetch)
-self.addEventListener('fetch', (event) => {
-  // התעלמות מבקשות שאינן GET או בקשות של תוספי דפדפן
-  if (event.request.method !== 'GET' || event.request.url.startsWith('chrome-extension')) {
+// --- 5. ניהול בקשות (Fetch) - אסטרטגיית Network First ---
+self.addEventListener('fetch', (event: any) => {
+  // התעלמות מבקשות שאינן GET או בקשות חיצוניות/תוספים
+  if (
+    event.request.method !== 'GET' || 
+    event.request.url.startsWith('chrome-extension') ||
+    event.request.url.includes('onesignal') // תן ל-OneSignal לנהל את עצמו
+  ) {
     return;
   }
 
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // אם התגובה תקינה, נחזיר אותה כפי שהיא
+        // אם הצלחנו להביא מהרשת, נחזיר
         return response;
       })
       .catch(async () => {
-        // במידה ואין חיבור רשת (Offline)
+        // אם אין רשת (Offline) - נחפש ב-Cache
         const cachedResponse = await caches.match(event.request);
         if (cachedResponse) return cachedResponse;
 
-        // טיפול בנתיבי ניווט (דפי HTML) - החזרת עמוד הניהול כ-Fallback
+        // Fallback לנתיבי ניווט (דפי HTML)
         if (event.request.mode === 'navigate') {
           return (await caches.match('/admin/master')) || (await caches.match('/'));
         }
 
-        // טיפול בתמונות שנכשלו - החזרת פלייסחולדר במקום שגיאה
+        // Fallback לתמונות
         if (event.request.destination === 'image') {
           return (await caches.match('/placeholder.svg')) || new Response('', { status: 404 });
         }
 
-        // במקרה של שגיאה גנרית, נחזיר Response ריק עם סטטוס שגיאה תקין
-        return new Response('Network Error', { 
+        // שגיאת רשת גנרית
+        return new Response('Network Offline - SabanOS', { 
           status: 408, 
-          statusText: 'Network Error',
           headers: { 'Content-Type': 'text/plain' }
         });
       })
   );
 });
+
+// --- 6. תמיכה ב-OneSignal (אופציונלי - אם הקובץ משמש כ-Root SW) ---
+// @ts-ignore
+if (typeof importScripts === 'function') {
+    // importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
+}
