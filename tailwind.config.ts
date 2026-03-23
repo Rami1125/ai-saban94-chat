@@ -1,14 +1,14 @@
 import type { Config } from "tailwindcss";
-
+import tailwindAnimate from "tailwindcss-animate";
 
 const config: Config = {
-  // הוספת סריקה רחבה כדי לתפוס את הנתיבים של GitHub
-content: [
+  darkMode: ["class"], // חשוב ל-Shadcn UI
+  content: [
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/**/*.{js,ts,jsx,tsx,mdx}",
-    "./rami1125/**/*.{js,ts,jsx,tsx,mdx}", // זה הנתיב שבו נמצא כל הקוד שלך באמת!
-    "./**/*.{js,ts,jsx,tsx,mdx}",          // ליתר ביטחון סורק כל קובץ בפרויקט
+    "./rami1125/**/*.{js,ts,jsx,tsx,mdx}", 
+    "./**/*.{js,ts,jsx,tsx,mdx}",          
   ],
   theme: {
     extend: {
@@ -21,6 +21,18 @@ content: [
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
+        },
+        secondary: {
+          DEFAULT: "hsl(var(--secondary))",
+          foreground: "hsl(var(--secondary-foreground))",
+        },
+        muted: {
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))",
+        },
+        accent: {
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))",
         },
         whatsapp: {
           DEFAULT: "#00a884",
@@ -35,6 +47,7 @@ content: [
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [tailwindAnimate], // שימוש ב-Import במקום require
 };
+
 export default config;
