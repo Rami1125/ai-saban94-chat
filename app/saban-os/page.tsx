@@ -1,5 +1,16 @@
 "use client";
 
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription, // זה חסר כדי למנוע את שגיאת ה-Console
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import OneSignal from 'react-onesignal';
+import { initializeApp, getApps } from 'firebase/app';
+import { getDatabase, ref, onValue, push, set, query, limitToLast } from 'firebase/database';
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
