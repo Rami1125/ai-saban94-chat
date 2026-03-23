@@ -5,7 +5,7 @@ import {
   SheetContent,
   SheetHeader,
   SheetTitle,
-  SheetDescription, // זה חסר כדי למנוע את שגיאת ה-Console
+  SheetDescription, // הוספנו את זה בשביל הנגישות
   SheetTrigger,
 } from "@/components/ui/sheet";
 import OneSignal from 'react-onesignal';
