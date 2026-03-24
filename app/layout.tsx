@@ -6,7 +6,6 @@ import { BusinessConfigProvider } from "@/context/BusinessConfigContext";
 import { Toaster } from "@/components/ui/toaster";
 import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
 import Script from "next/script";
-import "./globals.css";
 const heebo = Heebo({ subsets: ["hebrew"], variable: "--font-heebo" });
 
 export const metadata: Metadata = {
