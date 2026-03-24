@@ -6,8 +6,12 @@ import { BusinessConfigProvider } from "@/context/BusinessConfigContext";
 import { Toaster } from "@/components/ui/toaster";
 import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
 import Script from "next/script";
-import "./globals.css";
-const heebo = Heebo({ subsets: ["hebrew"], variable: "--font-heebo" });
+
+const heebo = Heebo({ 
+  subsets: ["hebrew", "latin"], 
+  variable: "--font-heebo",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "ח.סבן Ai | ניהול לוגיסטי",
@@ -78,8 +82,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 </Script>
       </head>
       
-      {/* עיצוב ה-Body כרקע של וואטסאפ עם פונט היבו */}
-      <body className={`${heebo.variable} font-sans antialiased bg-[#ece5dd] text-[#075e54]`}>
+      {/* WhatsApp-style body with Heebo font */}
+      <body className={`${heebo.variable} font-sans antialiased bg-[#ece5dd] text-[#075e54]`} suppressHydrationWarning>
         <BusinessConfigProvider>
           <ChatActionsProvider>
             {/* קונטיינר מרכזי שמבטיח שכל דף ירגיש כמו אפליקציה */}
