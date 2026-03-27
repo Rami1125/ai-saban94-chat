@@ -1,4 +1,3 @@
-// tailwind.config.ts
 import type { Config } from "tailwindcss";
 
 const config: Config = {
@@ -11,17 +10,21 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // כאן אנחנו מוסיפים את הצבעים שגרמו לשגיאה
+        border: "hsl(var(--border))",
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
         emerald: {
           500: "#10b981",
           600: "#059669",
         },
-        slate: {
-          900: "#0f172a",
-        }
       },
-      backgroundImage: {
-        "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
-        "gradient-conic": "conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))",
+      borderRadius: {
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
       },
     },
   },
