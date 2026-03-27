@@ -23,7 +23,7 @@
     --border: 240 5.9% 90%;
     --input: 240 5.9% 90%;
     --ring: 161 84% 39%;
-    --radius: 0.75rem;
+    --radius: 0.5rem;
   }
 
   .dark {
@@ -54,15 +54,6 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground antialiased font-sans;
+    @apply bg-background text-foreground antialiased;
   }
-}
-
-/* Custom Premium Utilities */
-.glass-panel {
-  @apply bg-white/70 backdrop-blur-md border border-white/20 shadow-xl;
-}
-
-.dark .glass-panel {
-  @apply bg-black/40 backdrop-blur-md border border-white/5 shadow-2xl;
 }
