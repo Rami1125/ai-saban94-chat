@@ -10,16 +10,18 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // כאן אנחנו מוסיפים את הצבעים שגרמו לשגיאה
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        primary: {
+          DEFAULT: "hsl(var(--primary))",
+          foreground: "hsl(var(--primary-foreground))",
+        },
         emerald: {
           500: "#10b981",
-          600: "#059669",
-        },
+        }
       },
       borderRadius: {
         lg: "var(--radius)",
