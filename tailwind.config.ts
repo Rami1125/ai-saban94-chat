@@ -1,35 +1,30 @@
+// tailwind.config.ts
 import type { Config } from "tailwindcss";
-import tailwindAnimate from "tailwindcss-animate";
 
 const config: Config = {
-  darkMode: ["class"],
   content: [
-    "./app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
+    "./app/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/**/*.{js,ts,jsx,tsx,mdx}",
-    "./rami1125/**/*.{js,ts,jsx,tsx,mdx}", // הנתיב הקריטי
-    "./**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
     extend: {
       colors: {
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
-        primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
+        emerald: {
+          500: "#10b981",
+          600: "#059669",
         },
-        whatsapp: {
-          DEFAULT: "#00a884",
-          light: "#dcf8c6",
-          dark: "#128c7e",
+        slate: {
+          900: "#0f172a",
         }
+      },
+      backgroundImage: {
+        "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
+        "gradient-conic": "conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))",
       },
     },
   },
-  plugins: [tailwindAnimate],
+  plugins: [require("tailwindcss-animate")],
 };
 export default config;
